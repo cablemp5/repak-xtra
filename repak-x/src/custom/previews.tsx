@@ -15,12 +15,13 @@ import { revealOnLoad } from './motion'
 import { EGG_MS, stepEgg, stepText } from './previewStages'
 import { ordinal, plural } from './modName'
 import { animatedUrls, coverStills, isIdle } from './idlePause'
-import { smallCopyAway } from './thumbWorker'
+import { smallClipAway, smallCopyAway } from './thumbWorker'
 import { koPreview } from './ko/koPreview'
 import { verdictOf } from './brokenMods'
+import { APP_NAME } from './edition'
 import { fixInVfxWindow } from './vfx/handoff'
 import { KO_BEAT } from './ko/render'
-import { Rotate3DButton, Viewer3D, shows3d, use3dPossible } from './viewer3d/Rotate3D'
+import { Rotate3DButton, Viewer3D, shows3d, use3dPossible, usePrepare3d } from './viewer3d/Rotate3D'
 
 const NOTHING = 'Nothing to show for this mod: previews cover skins, meshes, textures, animations, UI icons, VFX colors, and sounds.'
 const FAILED = 'The last render failed. The full error is in Logs.'
@@ -69,7 +70,7 @@ const dropCached = (key: string) => {
   const s = u && coverStills.get(u.url)
   if (s) { URL.revokeObjectURL(s); coverStills.delete(u.url) }
   const t = thumbs.get(key)
-  if (t && t.url !== u?.url) URL.revokeObjectURL(t.url)
+  if (t && t.url !== u?.url) { URL.revokeObjectURL(t.url); videoUrls.delete(t.url); loopClips.delete(t.url); boosted.delete(t.url) }
   thumbs.delete(key)
   thumbLoads.delete(key)
   urls.delete(key)
@@ -110,17 +111,20 @@ let run = { id: '', total: 0, made: 0, none: 0, failed: 0, stopping: false, summ
 let runPaths = new Map<string, string>() // the run's mods by preview key, for the failure toast
 let version = 0
 const listeners = new Set<() => void>()
-const notify = () => { version++; listeners.forEach(l => l()) }
+const notify = () => { version++; listeners.forEach(l => l()); saveLeft() }
 const subscribe = (l: () => void) => { listeners.add(l); return () => listeners.delete(l) }
 
 /** Reads which previews exist. After a run it also drops the other-form images (<key>@2) the generator deleted, since
  *  nothing else reports those as gone. */
+let listed = false // the saved previews are known: until then a card with none shows a skeleton, not "No preview yet"
+export const previewsListed = () => listed
 const syncPreviewList = () => invoke<string[]>('list_mod_previews').then(keys => {
+  listed = true
   const now = new Set(keys)
   for (const k of [...revs.keys()]) if (k.includes('@') && !now.has(k)) { revs.delete(k); dropCached(k) }
   keys.forEach(k => { if (!revs.has(k)) revs.set(k, 0) })
   notify()
-}).catch(() => undefined)
+}).catch(() => { listed = true; notify() })
 syncPreviewList()
 /** A character's other forms (Magik's Darkchylde, Hulk's other two), or an animation mod's other emotes: <key>@2, <key>@3 beside <key>. */
 export const formKeys = (key: string) => [2, 3, 4, 5, 6, 7, 8].map(n => `${key}@${n}`).filter(k => revs.has(k))
@@ -181,17 +185,28 @@ const warnListeners = new Set<(key: string) => void>()
 listen<string>('mod-preview-warn', e => { if (active && !run.quiet) warnListeners.forEach(l => l(e.payload)) }).catch(() => undefined)
 listen('mod-previews-busy', () => { // the generator refused: another one holds its lock. Nothing starts until done
   if (!active) return
+  leftPending = unfinished()
+  if (resuming) { active = false; launched = false; pending.clear(); queue.length = 0; retryLater(); return } // the last session's generator, still ending
   run.busy = BUSY
   for (const k of [...pending, ...(run.set ? [run.set] : []), ...queue.flatMap(keysOf)]) outcome.set(k, BUSY)
   pending.clear()
   queue.length = 0
   notify()
 }).catch(() => undefined)
-listen<boolean>('mod-previews-done', e => finish(e.payload)).catch(() => undefined)
+// only for a run the backend took from us (launched): the done of a run that was going before ours (the last session's,
+// stopped by a pickup) came while ours read its KO mods, and ended ours as failed
+let launched = false
+// a done that arrives while this window's start is still being answered (a run with nothing to render ends that fast) is
+// kept and taken once the backend's yes comes, or the run stayed active and the queue stuck
+let asking = false
+let earlyDone: boolean | null = null
+listen<boolean>('mod-previews-done', e => { if (launched) finish(e.payload); else if (asking) earlyDone = e.payload }).catch(() => undefined)
 /** A run's end: the kit's done event, or the KO renderer's when the kit had nothing to do (ok: it ran through). */
 function finish(ok: boolean) {
   if (!active) return // a window that did not start this run (Asset Explorer, VFX Updater) stays quiet
   active = false
+  launched = false
+  if (!run.busy) resuming = false // a picked-up batch is under way: later refusals are ordinary ones again
   const left = pending.size
   pending.forEach(k => outcome.set(k, run.stopping ? 'Stopped before this mod.' : FAILED))
   pending.clear()
@@ -214,7 +229,7 @@ function finish(ok: boolean) {
     failureListeners.forEach(f => f({ name: run.name, failed, setFailed: run.setResult === 'failed', stale }))
   }
   play(run.busy ? 'warning' : stoppedEarly ? 'close' : run.made && !failed && run.setResult !== 'failed' ? 'ready' : run.made ? 'warning' : 'error')
-  batchDone++
+  if (!run.busy) batchDone++
   notify()
   syncPreviewList()
   startNext()
@@ -283,12 +298,26 @@ const fileOf = async (key: string, rev: number) => {
   return f ? { url: `${convertFileSrc(list.dir + '\\' + f[0])}?t=${f[1]}`, name: f[0] } : null
 }
 const videoUrls = new Set<string>()
+// A card's own copies (loadThumb). loopClips: an animated preview as a looping video. boosted: the preview boost is
+// drawn into the copy, so its card draws it with no CSS filter (theme.css pv-kit), one less surface per card each frame
+const loopClips = new Set<string>()
+const boosted = new Set<string>()
+/** theme.css .pv-kit's --pv-boost: keep the two the same. */
+const BOOST = 'contrast(1.05) saturate(1.1)'
+/** This preview URL is a card's looping video of an animated preview: it plays in a plain looping video. */
+export const isLoopClip = (url: string | null | undefined) => Boolean(url && loopClips.has(url))
+const clipStills = new Map<string, string>()
+/** The still of a card's looping video (its first frame, card-sized): drawn under it, and alone while the video is
+ *  out of rendering (idlePause.ts). Undefined when none was made. */
+export const clipStill = (url: string | null | undefined) => (url ? clipStills.get(url) : undefined)
+/** This preview URL already has the preview boost drawn in: its picture takes no pv-kit class. */
+export const isBoosted = (url: string | null | undefined) => Boolean(url && boosted.has(url))
 /** The preview at this URL is a video (a KO prompt mod's): it plays in a BeatVideo, not an img. */
 export const isVideoPreview = (url: string | null | undefined) => Boolean(url && videoUrls.has(url))
 
 /** A KO prompt video (a loadout card's, or a KO mod's preview): each play starts on the next beat of one shared clock, so every such card plays the same frame
  *  at the same time. The recording is shorter than the beat: it rests on its last frame (the empty grid) until then. */
-export function BeatVideo({ src, beat }: { src: string; beat: number }) {
+export function BeatVideo({ src, beat, card }: { src: string; beat: number; card?: boolean }) {
   const ref = useRef<HTMLVideoElement>(null)
   useEffect(() => {
     const v = ref.current
@@ -304,7 +333,8 @@ export function BeatVideo({ src, beat }: { src: string; beat: number }) {
     const join = () => {
       clearTimeout(t)
       if (!active()) { v.pause(); return }
-      if (v.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) return
+      // a card's video is not rendered, and paused it holds no frame (it stays at HAVE_METADATA): its length is enough to join
+      if (v.readyState < (card ? HTMLMediaElement.HAVE_METADATA : HTMLMediaElement.HAVE_CURRENT_DATA)) return
       const at = (Date.now() % (beat * 1000)) / 1000
       if (at < v.duration - 0.1) { v.currentTime = at; v.play().catch(() => undefined) } else next()
     }
@@ -312,15 +342,17 @@ export function BeatVideo({ src, beat }: { src: string; beat: number }) {
       const nextVisible = entries.some(e => e.isIntersecting)
       if (nextVisible !== visible) { visible = nextVisible; join() }
     })
-    observer.observe(v)
+    observer.observe(card ? v.previousElementSibling ?? v : v) // a card's video is never rendered and has no box: its canvas
     v.addEventListener('ended', next)
-    v.addEventListener('loadeddata', join)
+    v.addEventListener(card ? 'loadedmetadata' : 'loadeddata', join)
     document.addEventListener('visibilitychange', join)
     window.addEventListener('blur', join)
     window.addEventListener('focus', join)
-    return () => { clearTimeout(t); observer.disconnect(); v.pause(); v.removeEventListener('ended', next); v.removeEventListener('loadeddata', join); document.removeEventListener('visibilitychange', join); window.removeEventListener('blur', join); window.removeEventListener('focus', join) }
-  }, [src, beat])
-  return <video ref={ref} src={src} muted playsInline preload="auto" crossOrigin="anonymous" />
+    return () => { clearTimeout(t); observer.disconnect(); v.pause(); v.removeEventListener('ended', next); v.removeEventListener(card ? 'loadedmetadata' : 'loadeddata', join); document.removeEventListener('visibilitychange', join); window.removeEventListener('blur', join); window.removeEventListener('focus', join) }
+  }, [src, beat, card])
+  // `card`: on a loadout card the frames are drawn onto a canvas and the video is not rendered (idlePause.ts, as LoopClip)
+  const video = <video ref={ref} src={src} muted playsInline preload="auto" crossOrigin="anonymous" data-poster={card ? '' : undefined} />
+  return card ? <span className="lo-clip-box"><canvas className="lo-clip" aria-hidden="true" />{video}</span> : video
 }
 
 
@@ -363,6 +395,30 @@ function loadUrl(key: string, rev: number): Promise<string | null | undefined> {
   urlLoads.set(key, { rev, p })
   return p
 }
+/** A card's looping clip of this animated picture: the one kept from an earlier launch, else made now (thumbWorker.ts
+ *  smallClip) and kept. Kept in the browser's Cache storage under the picture's own SHA-1, the width and the boost, so
+ *  a preview made again never gets an old clip. Any trouble with the storage: made as before, not kept. */
+const CLIPS = 'repakxtra-clips-2' // 2: the color in BT.601 video range (thumbWorker.ts toI420), clips kept before are made again
+const CLIPS_MOST = 300 // past this many, the 50 kept longest ago go
+async function keptClip(blob: Blob, boost: string): Promise<Blob | null> {
+  let cache: Cache | undefined, name = ''
+  try {
+    const sha = new Uint8Array(await crypto.subtle.digest('SHA-1', await blob.arrayBuffer()))
+    name = `/clip/${[...sha].map(x => x.toString(16).padStart(2, '0')).join('')}-${THUMB_W}-${encodeURIComponent(boost)}`
+    cache = await caches.open(CLIPS)
+    const hit = await cache.match(name)
+    if (hit) return await hit.blob()
+  } catch { cache = undefined }
+  const clip = await smallClipAway(blob, THUMB_W, boost)
+  if (clip && cache) {
+    const c = cache
+    void c.put(name, new Response(clip, { headers: { 'content-type': clip.type || 'video/webm' } }))
+      .then(() => c.keys()).then(keys => { if (keys.length > CLIPS_MOST) return Promise.all(keys.slice(0, 50).map(k => c.delete(k))) })
+      .catch(() => undefined)
+  }
+  return clip
+}
+
 /** Width of the copy loadout cards draw (THUMB_W px, WebP, same transparency): a card shows a 640 px render at under
  *  200 px, and the browser keeps every drawn picture decoded at its full size, so a grid of 40 held 86 MB of them. */
 const THUMB_W = 400
@@ -383,16 +439,29 @@ function loadThumb(key: string, rev: number): Promise<string | null | undefined>
       // an animated WebP (an emote's animation preview) would freeze on one frame: the full one plays, and its first
       // frame's copy is what the card shows while the grid scrolls hard (idlePause.ts holdCovers)
       const animated = new TextDecoder().decode(head.subarray(12, 16)) === 'VP8X' && (head[20] & 0x02) !== 0
-      const small = await smallCopyAway(blob, THUMB_W, animated) // in a worker: thumbWorker.ts
+      const boost = isKoPreview(key) ? '' : BOOST // a kit render: the boost its picture gets is drawn into the copy
+      const small = await smallCopyAway(blob, THUMB_W, animated, animated ? '' : boost) // in a worker: thumbWorker.ts
       if (small) {
         const copy = URL.createObjectURL(small)
-        if (!animated) url = copy
+        if (!animated) { url = copy; if (boost) boosted.add(copy) }
         else if (urls.get(key)?.url === full) { coverStills.set(full, copy); void decode(copy) } // ready before a scroll asks
         else URL.revokeObjectURL(copy) // the preview changed meanwhile
       }
+      // An animated one also gets a card-sized looping video, which takes the animated picture's place on the cards
+      // once it is made (a second or two in the worker) and plays on through a hard scroll. Kept between launches
+      // (keptClip): making 29 of them took the first 15 s of every launch, and a scroll meanwhile dropped frames
+      if (animated) void keptClip(blob, boost).then(clip => {
+        if (!clip || thumbs.get(key)?.url !== full || revs.get(key) !== rev) return // changed meanwhile, or no encoder
+        const u = URL.createObjectURL(clip)
+        videoUrls.add(u); loopClips.add(u); if (boost) boosted.add(u)
+        const still = coverStills.get(full)
+        if (still) clipStills.set(u, still)
+        thumbs.set(key, { rev, url: u })
+        notify()
+      }, () => undefined)
     } catch { /* the full picture then */ }
     if (again) await decode(url)
-    if (thumbLoads.get(key)?.p !== p || revs.get(key) !== rev) { if (url !== full) URL.revokeObjectURL(url); return undefined }
+    if (thumbLoads.get(key)?.p !== p || revs.get(key) !== rev) { if (url !== full) { URL.revokeObjectURL(url); boosted.delete(url) } return undefined }
     thumbLoads.delete(key)
     thumbs.set(key, { rev, url })
     return url
@@ -434,6 +503,59 @@ export function usePreviewUrl(key: string | undefined, thumb = false) {
   return cached ?? (shown.key === key && rev !== undefined ? shown.url : null)
 }
 
+// Only the main window owns the journal. An interrupted job repeats, but finished jobs stay finished.
+const LEFT_KEY = 'repakxtra.previewQueue'
+type Left = { jobs: Job[]; done: number }
+let current: QueuedJob | null = null
+let leftArmed = false
+let leftSaved: string | undefined
+let leftPending: Left | null = null
+// A batch picked up at start meets the generator the closed session left running (a crash or a forced close does not end
+// it, and it holds the generator's lock, so every start is refused). It is told to stop (the job it was on starts again
+// here anyway), and the batch tries again every few seconds until it starts, without failure toasts. Starting again on
+// every refusal, with nothing to wait on, ran the batch through as failures in seconds (2026-11-13).
+let resuming = false
+let retryAt = 0
+let tries = 0
+const RETRY_MS = 4000
+const TRIES = 30 // two minutes, then it waits for the next start of the app
+let gaveUp = false // the last try was refused: the batch stays saved for the next start of the app, nothing tries this session
+function retryLater() {
+  if (++tries >= TRIES) { resuming = false; gaveUp = true; return }
+  retryAt = Date.now() + RETRY_MS
+  setTimeout(notify, RETRY_MS + 50)
+  notify()
+}
+function readLeft(text: string | null): Left | null {
+  try {
+    const value = JSON.parse(text ?? 'null')
+    if (!value || !Number.isSafeInteger(value.done) || value.done < 0 || !Array.isArray(value.jobs) || !value.jobs.length) return null
+    if (!value.jobs.every((j: Job) => j && Array.isArray(j.paths) && j.paths.length > 0 && j.paths.every(p => typeof p === 'string' && p.length > 0)
+      && typeof j.name === 'string' && (j.set === undefined || typeof j.set === 'string')
+      && [j.force, j.show, j.quiet].every(v => v === undefined || typeof v === 'boolean'))) return null
+    return value
+  } catch { return null }
+}
+function unfinished(): Left {
+  return { jobs: (active && current && !run.stopping ? [current, ...queue] : [...queue])
+    .filter(j => !j.quiet).map(({ paths, set, name, force, show }) => ({ paths, set, name, force, show })), done: batchDone }
+}
+function saveLeft() {
+  if (!leftArmed) return
+  const left = leftPending ?? unfinished()
+  const text = left.jobs.length ? JSON.stringify(left) : ''
+  if (text === leftSaved) return
+  try {
+    if (text) localStorage.setItem(LEFT_KEY, text); else localStorage.removeItem(LEFT_KEY)
+    leftSaved = text
+  } catch { /* Retry on the next progress event if storage is temporarily unavailable. */ }
+}
+function armLeft() {
+  if (leftArmed) return
+  try { leftPending = readLeft(localStorage.getItem(LEFT_KEY)) } catch { /* storage unavailable */ }
+  leftArmed = true
+}
+
 const running = () => active
 /** The run going now: done of total counts its mods (a loadout's combined render is not one of them). */
 const doneOf = () => Math.min(run.total - pending.size + 1, run.total)
@@ -442,6 +564,16 @@ const doneOf = () => Math.min(run.total - pending.size + 1, run.total)
  *  or null (started or queued; a queued job that later fails to start reports through the summary and its keys). */
 export const generatePreviews = (job: Job): Promise<string | null> => {
   const q: QueuedJob = { ...job, id: jobId(job) }
+  if (leftPending && !running()) {
+    batchDone = leftPending.done
+    for (const j of leftPending.jobs) {
+      const id = jobId(j)
+      if (!queue.some(x => x.id === id)) queue.push({ ...j, id })
+    }
+    leftPending = null
+    if (!queue.some(x => x.id === q.id)) queue.push(q)
+    return start(queue.shift()!)
+  }
   if (!running()) return start(q)
   if (!queue.some(x => x.id === q.id)) { queue.push(q); notify() }
   return Promise.resolve(null)
@@ -449,7 +581,9 @@ export const generatePreviews = (job: Job): Promise<string | null> => {
 
 /** A start that was refused or threw: this job and everything queued behind it get the reason; nothing else starts. */
 const refuse = (job: Job, reason: string) => {
+  leftPending = unfinished()
   active = false
+  if (resuming) { pending.clear(); queue.length = 0; retryLater(); return reason } // the batch waits and tries again, quietly
   pending.clear()
   for (const j of [job, ...queue]) keysOf(j).forEach(k => outcome.set(k, reason))
   queue.length = 0
@@ -464,6 +598,8 @@ const start = async (job: QueuedJob): Promise<string | null> => {
   const jobs = [...new Map(job.paths.map(p => [nameKey(p), [p.replace(/[/\\][^/\\]+$/, ''), nameKey(p)] as [string, string]])).values()]
   if (jobs.length === 0) return null
   active = true
+  launched = false
+  current = job
   jobs.forEach(([, k]) => { pending.add(k); outcome.delete(k) })
   if (job.set) outcome.delete(job.set)
   runPaths = new Map(job.paths.map(p => [nameKey(p), p]))
@@ -496,7 +632,14 @@ const start = async (job: QueuedJob): Promise<string | null> => {
   }
   run.step = undefined
   try {
-    if (await invoke<boolean>('generate_mod_previews', { jobs: kit, set: job.set ?? null, force: Boolean(job.force) })) return null
+    asking = true
+    earlyDone = null
+    const took = await invoke<boolean>('generate_mod_previews', { jobs: kit, set: job.set ?? null, force: Boolean(job.force) }).finally(() => { asking = false })
+    if (took) {
+      launched = true
+      if (earlyDone !== null) finish(earlyDone)
+      return null
+    }
     return refuse(job, 'Another preview run is still going.')
   } catch (e) {
     return refuse(job, String(e))
@@ -575,7 +718,7 @@ export async function generateAllLoadouts(loadouts: { id: string; name: string; 
 
 /** Stops the run now (the generator is ended mid-render) and drops everything queued behind it. */
 export const stopPreviews = () => stop()
-const stop = () => { queue.length = 0; run.stopping = true; notify(); invoke('cancel_mod_previews').catch(() => undefined) }
+const stop = () => { leftPending = null; queue.length = 0; run.stopping = true; notify(); invoke('cancel_mod_previews').catch(() => undefined) }
 const unqueue = (id: string) => {
   const i = queue.findIndex(q => q.id === id)
   if (i >= 0) { queue.splice(i, 1); notify() }
@@ -602,12 +745,37 @@ export function usePreviewFailureToast(alert: ReturnType<typeof useAlert>) {
         action: { label: 'Open logs', onClick: () => { alert.dismissAlert(id); window.dispatchEvent(new Event('repakxtra-open-logs')) } },
       })
     }
+    armLeft()
+    let told = false // one toast for the whole pickup, however many tries it takes
+    const resume = () => {
+      if (!leftPending || !available || running() || gaveUp || Date.now() < retryAt) return
+      if (!resuming && (run.busy || run.summary)) return // a batch this session started and ended is not picked up again
+      if (!resuming) { resuming = true; tries = 0; void invoke('cancel_mod_previews').catch(() => undefined) }
+      const left = leftPending
+      leftPending = null
+      batchDone = left.done
+      // Stage the whole batch before starting, so the first save cannot drop the remaining jobs.
+      for (const j of left.jobs) {
+        const id = jobId(j)
+        if (!queue.some(q => q.id === id)) queue.push({ ...j, id })
+      }
+      startNext()
+      if (told) return
+      told = true
+      const n = left.jobs.length
+      const id = alert.info('Previews resumed', `${left.done ? `${plural(left.done, 'preview job')} finished before ${APP_NAME} closed. ` : ''}Resuming ${plural(n, 'remaining job')}. The one that was running starts again.`, {
+        duration: 10000, action: { label: 'Stop them', onClick: () => { alert.dismissAlert(id); stop() } },
+      })
+    }
+    const unsubscribeResume = subscribe(resume)
+    resume()
+    saveLeft()
     const warn = (key: string) => alert.warning('Preview may not match the game', key.startsWith(previewSetKey(''))
       ? `A mod in ${run.name} is encrypted with a key other than the game's, so the loadout's preview was made without it.`
       : `${key} is encrypted with a key other than the game's, so its files could not be read for a preview.`, { duration: 15000 })
     failureListeners.add(show)
     warnListeners.add(warn)
-    return () => { failureListeners.delete(show); warnListeners.delete(warn) }
+    return () => { unsubscribeResume(); failureListeners.delete(show); warnListeners.delete(warn) }
   }, [alert])
 }
 
@@ -647,6 +815,7 @@ export function ModPreview({ path, categories = [] }: { path: string; categories
   const [threeD, setThreeD] = useState(false) // Rotate in 3D: the model in this frame instead of the image
   useEffect(() => setThreeD(false), [key])
   const can3d = use3dPossible(key, usePreviewVersion()) && shows3d(categories) // a mesh, retexture, or material mod
+  usePrepare3d(can3d, key, [path], null)
   return (
     <div className="detail-section mod-preview">
       {threeD && <div className="mod-preview-frame is-3d"><Viewer3D viewKey={key} paths={[path]} name={path.split(/[\\/]/).pop()!.replace(/(_\d+_P)?\.(pak|bak_repak|utoc|ucas)$/i, '')} /></div>}

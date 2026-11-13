@@ -13,7 +13,8 @@ const REST_MS = 1500 // how long the grid rests after a scroll before the cards 
 const KEEP = 150 // a list of up to this many cards ends up with every card mounted
 const STEP = 2 // new cards put in per scrolled frame: those beyond the view, and those in view too while it scrolls hard
 const HARD = 3 // px per ms: a scroll this fast is a hard one (a wheel notch at a time runs near 1)
-const HOLD_MS = 250 // how long after the last scroll event they stay still
+const HOLD_MS = 250 // how long after the last hard frame a scroll still counts as hard (new cards wait their turn)
+const COVER_MS = 80 // how long after the last hard frame the held covers play again
 
 /** Pure: the ids of the cards whose box comes within `margin` px of the viewport [top, bottom). */
 export function nearIds(boxes: { id: string; top: number; bottom: number }[], top: number, bottom: number, margin: number) {
@@ -95,9 +96,10 @@ export function useNearCards(root: HTMLElement | null, ids: string[], pins: (str
     }
     const pick = () => { const was = lastHeight; measure(); choose(was) }
     pick()
+    let full = false // every card is in and stays in (keepAll): a scroll has nothing left to pick
     const fill = () => {
       idle = 0
-      if (ids.every(id => mountedNow.current.has(id))) return // all in: done
+      if (ids.every(id => mountedNow.current.has(id))) { full = true; return } // all in: done
       setNear(prev => {
         if (!prev) return prev
         const next = new Set(prev)
@@ -108,6 +110,7 @@ export function useNearCards(root: HTMLElement | null, ids: string[], pins: (str
     }
     if (keepAll) idle = requestIdleCallback(fill, { timeout: 1000 })
     const later = () => {
+      if (full) return
       clearTimeout(rest)
       rest = window.setTimeout(() => { rest = 0; choose(lastHeight) }, REST_MS)
       if (!queued) queued = requestAnimationFrame(() => { queued = 0; choose(lastHeight, true) })
@@ -132,11 +135,11 @@ export function useNearCards(root: HTMLElement | null, ids: string[], pins: (str
       queued = 0
       const y = root.scrollTop, speed = Math.abs(y - top) / Math.min(Math.max(now - at, 1), 50) // 50: the first frame after a rest
       top = y; at = now
-      if (!holding && speed < HARD) return
+      if (speed < HARD) return // a slow frame never extends the hold: the covers play again COVER_MS after the last hard one
       if (!holding || now - swept > 100) { swept = now; holdCovers(root) } // again now and then, for cards put in since
       holding = true
       clearTimeout(release)
-      release = window.setTimeout(() => { holding = false; releaseCovers() }, HOLD_MS)
+      release = window.setTimeout(() => { holding = false; releaseCovers() }, COVER_MS)
     }
     const onScroll = () => { if (!queued) queued = requestAnimationFrame(check) }
     root.addEventListener('scroll', onScroll, { passive: true })

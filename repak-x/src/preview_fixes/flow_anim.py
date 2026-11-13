@@ -1,4 +1,6 @@
-FLOW_FRAMES = 72   # frames in one loop of crawling lines, played at FLOW_FPS (flow_compose.py): one tile of noise in 4 s
+FLOW_FRAMES = 24   # renders of one loop of crawling lines (flow_compose.py blends the frames between, to FLOW_FPS). 72 before:
+                   # a frame rebuilt from two renders three apart is within the renders' own frame to frame noise of the real
+                   # one (mean 0.14 of 255, measured on all 72 of AllBlackMCUskin), and the 72 took 15.8 s of a 33 s preview
 FLOW_SCALE = 63    # the frames' render size, percent of the still's: about the saved card size, so 72 passes stay quick
 FLOW_SAMPLES = 8   # EEVEE samples per frame: 4 shimmered on the thin lines from frame to frame (the still takes 16)
 
@@ -60,8 +62,10 @@ def flow_frames(job, glowing):
             nodes[f["mapping2"]].inputs["Location"].default_value = starts[f["material"]]
     stage("glow")
     sc.render.resolution_percentage = FLOW_SCALE
+    sc.render.image_settings.file_format = "TARGA_RAW"   # read once by the compose, then deleted: no PNG to build
     sc.eevee.taa_render_samples = FLOW_SAMPLES
-    for i in range(FLOW_FRAMES):
+    def at(i, key=False):
+        """The noise where render i has it. key: written as a keyframe at frame i, for the one-call render."""
         t = i / FLOW_FRAMES
         for f in FLOW:
             nodes, _ = flow_nodes(f)
@@ -71,8 +75,32 @@ def flow_frames(job, glowing):
             # from one to two: the last frame meets the first
             x0, y0, z0 = starts[f["material"]]
             (dx, dy) = f["travel"]
-            nodes[f["mapping"]].inputs["Location"].default_value = (x0 + dx * t, y0 + dy * t, z0)
-            nodes[f["mapping2"]].inputs["Location"].default_value = (x0 + dx * (t - 1), y0 + dy * (t - 1), z0)
-            nodes[f["blend"]].outputs[0].default_value = t
-        sc.render.filepath = f"{prefix}_flow_{i:02d}.png"
+            sockets = (nodes[f["mapping"]].inputs["Location"], nodes[f["mapping2"]].inputs["Location"], nodes[f["blend"]].outputs[0])
+            values = ((x0 + dx * t, y0 + dy * t, z0), (x0 + dx * (t - 1), y0 + dy * (t - 1), z0), t)
+            for sock, value in zip(sockets, values):
+                sock.default_value = value
+                if key:
+                    sock.keyframe_insert("default_value", frame=i)
+
+    if os.environ.get("REPAKXTRA_FLOW_CALLS") != "each":
+        # One animation render over the keyed values instead of a render call per frame (as the dances render): the
+        # same values at each frame, without each call's own set-up. Anything that stops it renders call by call
+        try:
+            for i in range(FLOW_FRAMES):
+                at(i, key=True)
+            sc.frame_start, sc.frame_end = 0, FLOW_FRAMES - 1
+            sc.render.filepath = f"{prefix}_flow_##"
+            bpy.ops.render.render(animation=True)
+            if all(os.path.exists(f"{prefix}_flow_{i:02d}.tga") for i in range(FLOW_FRAMES)):
+                return
+        except Exception as e:
+            print("FLOW_ANIMATION_SKIPPED", e)
+        # its keys go first: a keyed value is read from its key at the scene's frame, not from what at() sets below
+        for f in FLOW:
+            _, m = flow_nodes(f)
+            if m is not None and m.node_tree.animation_data:
+                m.node_tree.animation_data_clear()
+    for i in range(FLOW_FRAMES):
+        at(i)
+        sc.render.filepath = f"{prefix}_flow_{i:02d}.tga"
         bpy.ops.render.render(write_still=True)

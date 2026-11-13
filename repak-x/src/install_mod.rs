@@ -578,3 +578,21 @@ pub fn map_dropped_file_to_mods(_dropped_files: &[PathBuf]) -> Vec<InstallableMo
     // Original egui version uses egui::DroppedFile
     unimplemented!("This function is only available in the egui version")
 }
+
+#[cfg(test)]
+mod bench {
+    /// Times reading what a dropped file holds, then installing it into a temp folder (nothing touches ~mods):
+    ///   REPAKXTRA_BENCH_MOD=<a .zip, .pak or folder> cargo test --release -p repak-x --bin REPAK-X install_bench -- --ignored --nocapture
+    #[test]
+    #[ignore]
+    fn install_bench() {
+        let Some(path) = std::env::var_os("REPAKXTRA_BENCH_MOD").map(std::path::PathBuf::from) else { return };
+        let clock = std::time::Instant::now();
+        let mut mods = super::map_paths_to_mods(&[path]);
+        println!("[install timing] read {} mods: {:.2} s", mods.len(), clock.elapsed().as_secs_f32());
+        let (out, clock) = (tempfile::tempdir().unwrap(), std::time::Instant::now());
+        let done = super::install_mod_logic::install_mods_in_viewport(&mut mods, out.path(), &std::sync::atomic::AtomicI32::new(0), &std::sync::atomic::AtomicBool::new(false));
+        let bytes: u64 = walkdir::WalkDir::new(out.path()).into_iter().flatten().filter_map(|e| e.metadata().ok()).filter(|m| m.is_file()).map(|m| m.len()).sum();
+        println!("[install timing] install {} results, {} MB written: {:.2} s", done.len(), bytes / 1_048_576, clock.elapsed().as_secs_f32());
+    }
+}

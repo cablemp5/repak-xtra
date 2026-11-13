@@ -89,7 +89,7 @@ import { fixInVfxWindow } from './custom/vfx/handoff' // repakxtra: the Mod Upda
 import VfxNotice, { VfxDot } from './custom/vfx/VfxNotice' // repakxtra: the game updated, VFX mods to fix
 import { blockedReason, showKeptOff } from './custom/safeOff' // repakxtra: mods turned off because they can crash stay off
 import { canUpdateVfx, checkVfxModInPlace, updateVfxModInPlace } from './custom/vfx/quick' // repakxtra: Update VFX in the right-click menu
-import { PREF_TOGGLED, type PrefToggled, fewerPopups, liteOn, newDefaultsOnce, setPref } from './custom/uiPrefs' // repakxtra
+import { PREF_TOGGLED, type PrefToggled, fewerPopups, liteOn, newDefaultsOnce, prefOn, setPref } from './custom/uiPrefs' // repakxtra
 import { reportSource } from './custom/setupReport' // repakxtra: Copy setup report reads the live list
 import { finishInstallLoadout } from './custom/installLoadout'
 import SetupButton from './custom/SetupPanel'
@@ -296,7 +296,7 @@ type AppSettings = {
   showSubfolderMods: boolean
   bypassGameRunningLock: boolean
   allowModOverwrite: boolean
-  launcherType: 'steam' | 'epic'
+  launcherType: 'steam' | 'epic' | 'loadingbay'
   enableAnimations: boolean
 }
 
@@ -335,7 +335,7 @@ function App() {
   const [holdToDelete, setHoldToDelete] = useState(false); // repakxtra: off by default
   const [bypassGameRunningLock, setBypassGameRunningLock] = useState(false);
   const [allowModOverwrite, setAllowModOverwrite] = useState(false);
-  const [launcherType, setLauncherType] = useState<'steam' | 'epic'>('steam');
+  const [launcherType, setLauncherType] = useState<'steam' | 'epic' | 'loadingbay'>('steam');
   const [enableAnimations, setEnableAnimations] = useState(true);
   // CSS gates animations on [data-animations="off"]
   useEffect(() => {
@@ -846,6 +846,19 @@ function App() {
       if (result) {
         foundUpdate.current = result;
         setUpdateInfo(result);
+        // repakxtra: Settings > Updates > Install updates automatically. The start-up check downloads it with no dialog
+        // and says so once it is ready. The restart is always the player's click, never in the middle of their work
+        if (silent && prefOn('auto-update') && result.asset_url && result.asset_name) {
+          try {
+            const path = await invoke<string>('download_update', { assetUrl: result.asset_url, assetName: result.asset_name });
+            setDownloadedUpdatePath(path);
+            alert.info(`${APP_NAME} v${result.latest} is ready`, 'Restart to finish the update.', { duration: 0, action: { label: 'Restart now', onClick: () => { void invoke('apply_update', { downloadedPath: path }).catch(e => alert.error('Update Failed', String(e))) } } });
+            return;
+          } catch (error) {
+            uiLog.warn('Update', `Automatic download failed: ${error}`); // the dialog then, where Download can be tried again
+            setUpdateDownloadProgress(null); // not its half-filled bar: the dialog shows Download update again
+          }
+        }
         setShowUpdateModal(true);
         console.debug('[Updates] Update available, opening UpdateAppModal', { latest: result.latest });
       } else if (!silent) {
@@ -927,6 +940,9 @@ function App() {
   };
 
   const handleCancelUpdate = async () => {
+    // repakxtra: a finished download stays when the dialog closes (the automatic update's Restart now toast points at
+    // it, and Check now shows it ready again). Only a download still running, or none, is cleared
+    if (downloadedUpdatePath) { setShowUpdateModal(false); return }
     try {
       await invoke('cancel_update_download');
     } catch (e) {
@@ -1615,10 +1631,10 @@ function App() {
 
   // Listen for update events
   useEffect(() => {
+    // repakxtra: only check_for_updates sends this, and handleCheckForUpdates already has its result: it decides
+    // whether the dialog opens (not on a retry, not when the update installs automatically)
     const unlistenUpdateAvailable = listen('update_available', (event: any) => {
       console.log('Update available:', event.payload);
-      setUpdateInfo(event.payload);
-      setShowUpdateModal(true);
     });
 
     const unlistenUpdateProgress = listen('update_download_progress', (event: any) => {
@@ -2050,6 +2066,12 @@ function App() {
     }
   }
 
+  // repakxtra: a game folder under Loading Bay's games folder picks that launcher. Never back to Steam or Epic by
+  // itself: those stay the player's choice
+  const launcherFor = (path: string) => {
+    if (/[\\/]Loading Bay Games[\\/]/i.test(path) && launcherType !== 'loadingbay') void saveAllSettings({ launcherType: 'loadingbay' })
+  }
+
   const handleAutoDetect = async (quiet = false, replace = false) => {
     try {
       setLoading(true)
@@ -2058,6 +2080,7 @@ function App() {
       setGamePath(path)
       setFoundGamePath(found && !quiet ? found : null)
       if (found) return
+      launcherFor(path)
       setStatus('Game path detected: ' + path)
       await loadMods()
       await loadFolders()
@@ -2080,6 +2103,7 @@ function App() {
       if (selected) {
         const stored = await invoke<string>('set_game_path', { path: selected }) // repakxtra: the game folder means its ~mods
         setGamePath(stored)
+        launcherFor(stored)
         uiLog.info('GamePath', `Mods folder set to ${stored}`)
         setStatus('Game path set: ' + stored)
         await loadMods()

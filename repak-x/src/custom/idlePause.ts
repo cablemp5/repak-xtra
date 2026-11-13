@@ -55,7 +55,9 @@ function thaw() {
 
 export const isIdle = () => document.hidden || !document.hasFocus()
 
-// While a grid of cards scrolls hard, its animated covers show a still: five of them in view, each decoding a full-size
+// A card plays an animated preview as a small looping video (previews.tsx loadThumb, thumbWorker.ts smallClip), which
+// a scroll costs nothing. Until that video is made, or where this WebView cannot make one, the animated picture itself
+// is on the card, and while the grid scrolls hard it shows a still: five of them in view, each decoding a full-size
 // frame 24 times a second, took a hard scroll of the Loadouts grid from 140 frames a second to 120 (hidden: 140).
 // shortcut: a loadout's own animated cover (a GIF or WebP he picked) has no still and keeps playing, give those one
 // here if a grid of them shows the drop
@@ -68,6 +70,8 @@ export function holdCovers(root: HTMLElement) {
     const still = coverStills.get(img.src)
     if (still) { held.set(img, img.src); img.src = still }
   }
+  // The clips in view play on (canvases, the draw loop below): stopping them for the scroll saved no frame (0, 1, 0 and
+  // 0 late frames in four 6 s runs left playing, the same as stopped). One that scrolls out stops at the rest (settle)
 }
 /** The held covers play again, where their still is what still shows (a preview that changed keeps its new picture). */
 export function releaseCovers() {
@@ -89,7 +93,8 @@ function update() {
         && a.effect?.getComputedTiming().iterations === Infinity && !target?.matches(':hover')) { a.pause(); loops.add(a) }
     })
   } else {
-    videos.forEach(v => { if (v.isConnected) v.play().catch(() => undefined) })
+    // one scrolled out of view while focus was away waits for the view instead (inView)
+    videos.forEach(v => { if (!v.isConnected) return; if (isOut(v)) away.add(v); else v.play().catch(() => undefined) })
     loops.forEach(a => { if (a.playState === 'paused') a.play() })
     thaw()
     videos.clear()
@@ -103,9 +108,97 @@ document.addEventListener('visibilitychange', update)
 // A preview that loads, changes, or mounts after focus left (a copy started in the background, a card still decoding)
 // missed that moment: it is caught as it lands. load and play do not bubble, so they are caught on the way down
 document.addEventListener('load', e => { if (isIdle() && e.target instanceof HTMLImageElement) void freeze(e.target) }, true)
+// A looping video plays only while it is in view (or about to be). Every card of the Loadouts grid stays mounted, so
+// 29 of 31 animated covers played off screen: each a decoder and a layer redrawn 60 times a second, and a scroll of
+// the grid spent 6.5 ms of every 6.9 ms frame sorting layers (.agent/perf/layers.mjs, trace-summary.mjs, 2026-11-12)
+const away = new WeakSet<HTMLVideoElement>() // paused for being out of view: plays again when it comes into view
+// The observer watches a video's parent: a card's clip (loadoutBits.tsx LoopClip, data-poster) is never rendered
+// itself and has no box
+const outside = new WeakSet<Element>() // parents out of view as of the observer's last report
+const watched = new WeakSet<Element>()
+const isOut = (v: HTMLVideoElement) => outside.has(v.parentElement ?? v)
+const seen = new Set<HTMLVideoElement>()
+// Nothing starts or stops while a scroll is going, only once it rests: a fast scroll took videos through the view
+// 185 times in 5 s, and every play and pause restyles the video's own controls and updates its layer (a repaint of the
+// window on most scrolled frames). Until the rest a video keeps doing what it did when the scroll began
+let settling = 0
+const settle = () => {
+  settling = 0
+  for (const v of seen) {
+    if (!v.isConnected) { seen.delete(v); continue }
+    if (isOut(v)) {
+      if (!v.paused) { away.add(v); v.pause() }
+      // out of view the card shows its still, no layer for it (theme.css), and the clip goes back to its first frame,
+      // which is that still: back in view it plays on from the picture the card shows, with no jump
+      const c = canvasOf(v)
+      if (c && !c.classList.contains('is-away')) {
+        c.classList.add('is-away'); c.classList.remove('is-drawn')
+        c.getContext('2d')?.clearRect(0, 0, c.width, c.height)
+        drawn.delete(v); v.currentTime = 0
+      }
+    } else {
+      canvasOf(v)?.classList.remove('is-away')
+      // into view while the window is in the background: it plays when focus returns (update)
+      if (away.delete(v)) { if (isIdle()) videos.add(v); else v.play().catch(() => undefined) }
+    }
+  }
+}
+const settleIn = (ms: number) => { clearTimeout(settling); settling = window.setTimeout(settle, ms) }
+const inView = new IntersectionObserver(entries => {
+  for (const e of entries) {
+    if (e.isIntersecting) outside.delete(e.target); else outside.add(e.target)
+  }
+  if (!settling) settleIn(0) // no scroll going (a card mounted, the window resized): now
+}, { rootMargin: '200px' })
+window.addEventListener('scroll', () => settleIn(150), { capture: true, passive: true })
+
+// A card's clip plays unseen and its frames are drawn onto the canvas before it (loadoutBits.tsx LoopClip). A <video>
+// on the page cost a scroll its frames however it was handled: 31 of them made 62 layers (every repaint sorted 99), and
+// even two playing in view held the whole window at 72 frames a second of 144 while nothing else moved, so each scroll
+// began at that pace (2026-11-13). A canvas is drawn at the clip's own 60 a second and leaves the window at full rate.
+const canvasOf = (v: HTMLVideoElement) => (v.previousElementSibling instanceof HTMLCanvasElement ? v.previousElementSibling : null)
+const clips = new Set<HTMLVideoElement>() // the videos drawn onto a canvas (data-poster), looping or not
+const drawn = new WeakMap<HTMLVideoElement, number>()
+const paint = (v: HTMLVideoElement) => {
+  const at = Math.floor(v.currentTime * 60), c = canvasOf(v)
+  if (!c || drawn.get(v) === at || v.readyState < 2) return
+  if (c.width !== v.videoWidth || c.height !== v.videoHeight) { c.width = v.videoWidth; c.height = v.videoHeight }
+  const g = c.getContext('2d')
+  if (!g) return
+  g.clearRect(0, 0, c.width, c.height) // a video with transparency: the frame before must not show through
+  g.drawImage(v, 0, 0)
+  drawn.set(v, at)
+  if (!c.classList.contains('is-drawn')) c.classList.add('is-drawn') // from now its still is hidden (theme.css)
+}
+let drawing = 0
+const draw = () => {
+  drawing = 0
+  let any = false
+  for (const v of clips) {
+    if (!v.isConnected) { clips.delete(v); continue }
+    if (v.paused) continue
+    any = true
+    paint(v)
+  }
+  if (any) drawing = requestAnimationFrame(draw) // ends with the last clip that plays
+}
+// a clip that is not playing still shows where it stands: its first frame once loaded, the frame a seek lands on
+for (const type of ['loadeddata', 'seeked']) document.addEventListener(type, e => {
+  if (e.target instanceof HTMLVideoElement && e.target.dataset.poster !== undefined) paint(e.target)
+}, true)
+
 document.addEventListener('play', e => {
   const v = e.target
-  if (isIdle() && v instanceof HTMLVideoElement && v.loop) { v.pause(); videos.add(v) }
+  if (!(v instanceof HTMLVideoElement)) return
+  if (v.dataset.poster !== undefined) { clips.add(v); if (!drawing) drawing = requestAnimationFrame(draw) }
+  if (!v.loop) return
+  if (!seen.has(v)) {
+    seen.add(v)
+    const box = v.parentElement ?? v
+    if (watched.has(box)) { if (!settling) settleIn(0) } // a new video in a watched parent: its place is known
+    else { watched.add(box); inView.observe(box) } // its first report says where it is
+  }
+  if (isIdle()) { v.pause(); videos.add(v) }
 }, true)
 
 if (import.meta.env.DEV) {

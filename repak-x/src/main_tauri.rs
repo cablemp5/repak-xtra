@@ -428,6 +428,9 @@ async fn save_app_settings(
     state.show_mod_type = settings.show_mod_type;
     state.show_experimental = settings.show_experimental;
     state.auto_check_updates = settings.auto_check_updates;
+    if state.parallel_processing != settings.parallel_processing {
+        crate::xtra_previews::stop_kept(false); // repakxtra: the kept preview helpers end, the next run keeps them for the new time
+    }
     state.parallel_processing = settings.parallel_processing;
     state.hold_to_delete = settings.hold_to_delete;
     state.show_subfolder_mods = settings.show_subfolder_mods;
@@ -476,6 +479,9 @@ async fn set_parallel_processing(
 ) -> Result<(), String> {
     info!("set_parallel_processing called: enabled={}", enabled);
     let mut state = state.lock().unwrap();
+    if state.parallel_processing != enabled {
+        crate::xtra_previews::stop_kept(false); // repakxtra: as in save_app_settings
+    }
     state.parallel_processing = enabled;
     save_state(&state).map_err(|e| e.to_string())?;
     Ok(())
@@ -678,7 +684,9 @@ async fn get_pak_files(state: State<'_, Arc<Mutex<AppState>>>) -> Result<Vec<Mod
 
     // Scan root ~mods directory and all subdirectories recursively (no depth limit)
     for entry in WalkDir::new(&game_path).into_iter().filter_entry(crate::xtra_bundle::library_walk) /* repakxtra */.filter_map(|e| e.ok()) {
-        let path = entry.path();
+        // repakxtra: a .pak.off set (RivalsFPS's off state) becomes this app's off state here, so every feature knows it
+        let adopted = entry.file_type().is_file().then(|| crate::xtra_offfiles::adopt(entry.path())).flatten();
+        let path = adopted.as_deref().unwrap_or(entry.path());
 
         // Skip directories themselves (repakxtra: the walk already knows, no extra disk stat per file)
         if entry.file_type().is_dir() || crate::xtra_builtins::is_own(path) {
@@ -5386,12 +5394,16 @@ async fn extract_mod_assets_inner(
 
 #[tauri::command]
 async fn check_game_running() -> Result<bool, String> {
-    Ok(is_game_process_running())
+    let running = is_game_process_running();
+    if running {
+        crate::xtra_previews::stop_kept(false); // repakxtra: a game started outside the app (Steam) gets the kept preview helpers' memory too
+    }
+    Ok(running)
 }
 
 /// Reliable game process detection using multiple methods
 /// Uses exe() path as primary method, falls back to name() matching
-fn is_game_process_running() -> bool {
+pub(crate) fn is_game_process_running() -> bool {
     use sysinfo::{ProcessRefreshKind, RefreshKind, System};
 
     // repakxtra: on Windows a process name is its exe file name, so names alone answer this. Reading every
@@ -5452,6 +5464,7 @@ async fn launch_game(app: tauri::AppHandle, state: State<'_, Arc<Mutex<AppState>
         (state.game_path.clone(), state.launcher_type.clone())
     };
 
+    crate::xtra_previews::stop_kept(false); // repakxtra: the preview helpers kept warm give their memory to the game
     // repakxtra: selecting the loader is a convenience here, never a reason to refuse Play
     match xtra_project::select(&mods_path) {
         Ok(true) => {
@@ -5513,7 +5526,7 @@ async fn launch_game(app: tauri::AppHandle, state: State<'_, Arc<Mutex<AppState>
         use std::os::windows::process::CommandExt;
         const CREATE_NO_WINDOW: u32 = 0x08000000;
 
-        if launcher_type == "epic" {
+        if matches!(launcher_type.as_str(), "epic" | "loadingbay") { // repakxtra: Loading Bay has no launch link, the game's own launcher starts it
             let launcher_exe = game_root.join("MarvelRivals_Launcher.exe");
             Command::new("cmd")
                 .arg("/C")
@@ -5536,7 +5549,7 @@ async fn launch_game(app: tauri::AppHandle, state: State<'_, Arc<Mutex<AppState>
 
     #[cfg(target_os = "linux")]
     let launch_result = {
-        if launcher_type == "epic" {
+        if matches!(launcher_type.as_str(), "epic" | "loadingbay") { // repakxtra: Loading Bay has no launch link, the game's own launcher starts it
             let launcher_exe = game_root.join("MarvelRivals_Launcher.exe");
             Command::new("wine")
                 .arg(&launcher_exe)
@@ -8722,7 +8735,7 @@ fn main() {
             xtra_trash::empty_trashed_mods,
             xtra_previews::list_mod_previews, xtra_previews::delete_loadout_previews,
             xtra_previews::list_preview_files, // repakxtra: pictures load as files (asset protocol)
-            xtra_viewer::get_viewer_file, xtra_viewer::viewer_state, xtra_viewer::generate_mod_viewer, xtra_viewer::generate_default_viewer, xtra_viewer::run_texcheck, // repakxtra: Rotate in 3D, texture check
+            xtra_viewer::get_viewer_file, xtra_viewer::viewer_state, xtra_viewer::generate_mod_viewer, xtra_viewer::prepare_mod_viewer, xtra_viewer::generate_default_viewer, xtra_viewer::run_texcheck, // repakxtra: Rotate in 3D, texture check
             xtra_soundmerge::sound_merge_plan, xtra_soundmerge::sound_merge_play, xtra_soundmerge::sound_merge_make, xtra_soundmerge::sound_merge_info, xtra_soundmerge::sound_merge_cleanup, xtra_soundmerge::sound_merge_done, // repakxtra: Merge sounds
             xtra_previews::get_preview_covers,
             xtra_previews::generate_mod_previews,
@@ -8763,6 +8776,7 @@ fn main() {
             xtra_vfx::xtra_vfx_dirs, // repakxtra: VFX Updater
             xtra_vfx::xtra_vfx_run_done, // repakxtra: VFX Updater
             xtra_vfx::xtra_vfx_warm, // repakxtra: VFX Updater
+            xtra_vfx::xtra_tool_warm, // repakxtra: the same for the Galacta converter
             xtra_vfx::xtra_vfx_detect,
             xtra_vfx::xtra_vfx_place,
             xtra_vfx::xtra_vfx_turn_off, // repakxtra
@@ -8964,6 +8978,7 @@ fn main() {
         .expect("error while running tauri application")
         .run(|app_handle, event| {
             if let tauri::RunEvent::ExitRequested { .. } = event {
+                crate::xtra_previews::stop_kept(false); // repakxtra: the preview helpers kept warm end with the app
                 // Ensure Discord RPC is disconnected on exit
                 let discord_state = app_handle.state::<DiscordState>();
                 if discord_state.manager.is_connected() {

@@ -23,7 +23,9 @@ export function quietFocus(el: HTMLElement) {
   el.setAttribute('data-pointer-focus', '')
 }
 document.addEventListener('keydown', e => {
-  if (['Tab', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Home', 'End', 'Enter', ' ', 'Escape'].includes(e.key)) clearPointerFocus()
+  // Tab only: arrows, Space, Enter, and Escape are shortcuts here too (the mod list, a dialog), and each one put a ring on
+  // whatever was clicked last. Arrow keys inside a menu move focus to a new item, which shows its ring as before
+  if (e.key === 'Tab') clearPointerFocus()
 }, true)
 
 let queued = false

@@ -205,7 +205,7 @@ export async function gatherReport(onStage?: (stage: ReportStage) => void): Prom
   return buildReport({
     version: REPAKXTRA_VERSION,
     repakx,
-    launcher: src.launcherType === 'epic' ? 'Epic' : src.launcherType === 'steam' ? 'Steam' : 'launcher unknown',
+    launcher: src.launcherType === 'epic' ? 'Epic' : src.launcherType === 'steam' ? 'Steam' : src.launcherType === 'loadingbay' ? 'Loading Bay' : 'launcher unknown',
     bypass: bypass ? BYPASS[bypass.state] ?? bypass.state : 'unknown',
     galacta: galactaText,
     kit: kit === undefined ? 'unknown' : kit.version ? `v${kit.version}` : 'not installed',

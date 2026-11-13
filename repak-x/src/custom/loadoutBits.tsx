@@ -8,8 +8,9 @@ import type { LoadoutProps } from './Loadouts'
 import { useMediaUrl } from './loadoutMedia'
 import { COVERS, type Cover, type Loadout, type Mod, captureKey, coverFills, displayName, flipMods, memberName, modKey, modsByKey, nameKey, patchLoadout, pickCover } from './loadoutStore'
 import { ModName, ordinal } from './modName'
-import { revealOnLoad, SwapText } from './motion'
-import { BeatVideo, formKeys, hasPreview, isDecoded, isKoPreview, isVideoPreview, noPreviewPossible, previewMade, previewSetKey, readyPreview, useCovers, usePreviewStage, usePreviewState, usePreviewUrl, usePreviewVersion } from './previews'
+import { predecode, revealOnLoad, SwapText } from './motion'
+import { isIdle } from './idlePause'
+import { BeatVideo, cachedPreviewUrl, clipStill, formKeys, hasPreview, isBoosted, isDecoded, isKoPreview, isLoopClip, isVideoPreview, noPreviewPossible, previewMade, previewSetKey, previewsListed, readyPreview, useCovers, usePreviewStage, usePreviewState, usePreviewUrl, usePreviewVersion } from './previews'
 import { isEmoteAnim, playEmoteSound, stopEmoteSound, useEmoteSound, webpSeconds } from './emoteSound'
 import { useVerdict } from './brokenMods'
 import { VerdictBadge } from './VerdictBadge'
@@ -127,6 +128,9 @@ export function CardMedia({ p, l, className = '', title, onClick, onRemoveImage,
   const src = cover === 'image' ? own : cover === 'capture' ? shot : cover === 'preview' ? generated : undefined
   const video = cover === 'image' && l.mediaType === 'video' ? ownUrl : undefined
   const [warm] = useState(src) // already cached when the card mounted: shown at once, without the blur-in
+  // the picture that has loaded, kept in state: the class revealOnLoad adds by hand is dropped by the next render that
+  // changes className (pv-kit once the boosted copy is known), which left loaded pictures invisible until a hover
+  const [loaded, setLoaded] = useState<string | null>(null)
   const state = usePreviewState(previewSetKey(l.id))
   const working = state && (cover === 'preview' || cover === null) ? state : null // a card showing another source stays put
   const stage = usePreviewStage(working?.kind === 'running')
@@ -139,6 +143,9 @@ export function CardMedia({ p, l, className = '', title, onClick, onRemoveImage,
   const editing = page && cover === 'text' && (typing || !fills.text)
   const empty = !src && !words
   const impossible = noPreviewPossible(l)
+  // Right after launch: the card's picture is known but not read yet, or the saved previews are not listed yet.
+  // shortcut: a picture that never reads (a deleted file still listed) keeps the skeleton, give it a failed state if that shows
+  const loading = !working && (cover ? cover !== 'text' && !src : !previewsListed())
   const saveCaption = (text: string) => { setTyping(false); if (text.trim() !== caption) patchLoadout(l.id, { caption: text.trim() || undefined }) }
   const clearCaption = () => { setTyping(false); patchLoadout(l.id, { caption: undefined, captionIcon: undefined, captionColor: undefined }) }
   // picking Text goes straight into its field, the cursor in it ready to type (also when the field was already showing)
@@ -163,9 +170,10 @@ export function CardMedia({ p, l, className = '', title, onClick, onRemoveImage,
     setRestart(r => { if (r) setTimeout(() => URL.revokeObjectURL(r.url), 30000); return null })
   }
   const startRestart = () => {
-    if (!hovering.current || !audible || !src || !slideKey || document.documentElement.classList.contains('is-dragging-card')) return
+    // not while another window has focus: the pointer can rest on a card behind it, and no sound should play then
+    if (!hovering.current || !audible || !src || !slideKey || isIdle() || document.documentElement.classList.contains('is-dragging-card')) return
     const key = slideKey
-    fetch(src).then(r => r.arrayBuffer()).then(buf => {
+    fetch(cachedPreviewUrl(key) ?? src).then(r => r.arrayBuffer()).then(buf => { // the animated picture itself, not the card's video of it
       if (!hovering.current || shownKey.current !== key) return // paged on, or left, while it loaded
       setRestart({ key, url: URL.createObjectURL(new Blob([buf], { type: 'image/webp' })), seconds: webpSeconds(buf) })
     }).catch(() => undefined)
@@ -223,16 +231,20 @@ export function CardMedia({ p, l, className = '', title, onClick, onRemoveImage,
             </span>
           : !src
             ? page ? <span className="lo-card-placeholder" />
+              : loading ? <span className="lo-card-placeholder is-loading" role="status" aria-label="Loading" />
               : impossible
                 ? <span className="lo-card-placeholder is-none"><Ban size={28} aria-hidden="true" /><span>No render possible. Open it to type text, or hover and paste an image.</span></span>
                 : <span className="lo-card-placeholder"><ImagePlus size={28} aria-hidden="true" /><span>{emptyText}</span></span>
           : slide?.keys
             ? <CarouselSlide slide={at} dir={dir}><span className="lo-media-multi">{slide.keys.map(k => <SlideImage key={k} k={k} thumb={!page} />)}</span></CarouselSlide>
           : video
-            ? l.mediaBeat ? <BeatVideo src={video} beat={l.mediaBeat} /> : <video src={video} autoPlay loop muted playsInline />
+            ? l.mediaBeat ? <BeatVideo src={video} beat={l.mediaBeat} card /> : <LoopClip src={video} />
             : <CarouselSlide slide={slides.length > 1 ? at : 0} dir={dir}>
-                {isVideoPreview(src) ? <BeatVideo key={src} src={src} beat={KO_BEAT} /> : <img key={src} src={live?.url ?? src} alt="" className={`${cover === 'preview' && slide?.key && !isKoPreview(slide.key) ? 'pv-kit' : ''}${src === warm || isDecoded(src) ? ' is-loaded' : ''}`} decoding="async" loading={page ? undefined : 'lazy'} crossOrigin="anonymous"
-                  onLoad={e => { revealOnLoad(e); if (audible && live && hovering.current && e.currentTarget.src === live.url) playEmoteSound(audible, live.seconds) }} />}
+                {/* keys apart from the picture's below: the clip now stays under a restarted picture until it loads, and two children
+                    with one key left the clip in place, a second figure under the restarted one */}
+                {live && loaded === live.url ? null : isLoopClip(src) ? <LoopClip key={`clip:${src}`} src={src} /> : isVideoPreview(src) ? <BeatVideo key={`clip:${src}`} src={src} beat={KO_BEAT} card /> : null}
+                {(live || !isVideoPreview(src)) && <img key={src} src={live?.url ?? src} alt="" className={`${cover === 'preview' && slide?.key && !isKoPreview(slide.key) && !isBoosted(live?.url ?? src) ? 'pv-kit' : ''}${src === warm || isDecoded(src) || loaded === src || (live && loaded === live.url) ? ' is-loaded' : ''}${live ? ' is-restart' : ''}`} decoding="async" crossOrigin="anonymous"
+                  onLoad={e => { revealOnLoad(e); setLoaded(e.currentTarget.getAttribute('src')); predecode(e.currentTarget); if (audible && live && hovering.current && !isIdle() && e.currentTarget.src === live.url) playEmoteSound(audible, live.seconds) }} />}
               </CarouselSlide>}
       </button>
       {/* before and after, once the kit has the hero's vanilla render (before the arrows, so they stay on top) */}
@@ -340,12 +352,27 @@ export function CardMedia({ p, l, className = '', title, onClick, onRemoveImage,
 /** How long the pointer rests on an animation card before its emote sound plays. */
 const HOVER_MS = 250
 
+/** A card's looping video (an animated preview's clip, or the loadout's own video): a canvas and the video, which is
+ *  never rendered. idlePause.ts plays the video while the card is in view and draws its frames onto the canvas, so no
+ *  video layer is on the page and a fast scroll holds its frame rate. Under a preview's clip sits its still (the first
+ *  frame, with the preview boost as the clip has it drawn in), which is all an out-of-view card shows. */
+function LoopClip({ src }: { src: string }) {
+  const still = clipStill(src)
+  return <span className="lo-clip-box">{/* its own box: the canvas covers this clip only, also in a slide of several */}
+    <canvas className="lo-clip" aria-hidden="true" />
+    <video src={src} autoPlay loop muted playsInline data-poster="" />
+    {/* after the canvas, so theme.css can hide it while the canvas shows a frame: a clip's background is clear, and the still showed through as a second figure */}
+    {still && <img src={still} alt="" className={`is-loaded${isBoosted(src) ? ' pv-kit' : ''}`} decoding="async" />}
+  </span>
+}
+
 /** One preview of a slide that shows several (a loadout's VFX swatches). */
 function SlideImage({ k, thumb }: { k: string; thumb: boolean }) {
   const src = usePreviewUrl(k, thumb)
   const [warm] = useState(src)
-  return !src ? <span /> : isVideoPreview(src) ? <BeatVideo src={src} beat={KO_BEAT} />
-    : <img src={src} alt="" className={`${isKoPreview(k) ? '' : 'pv-kit'}${src === warm || isDecoded(src) ? ' is-loaded' : ''}`} onLoad={revealOnLoad} crossOrigin="anonymous" />
+  const [loaded, setLoaded] = useState<string | null>(null) // as CardMedia's
+  return !src ? <span /> : isLoopClip(src) ? <LoopClip src={src} /> : isVideoPreview(src) ? <BeatVideo src={src} beat={KO_BEAT} card />
+    : <img src={src} alt="" className={`${isKoPreview(k) || isBoosted(src) ? '' : 'pv-kit'}${src === warm || isDecoded(src) || loaded === src ? ' is-loaded' : ''}`} onLoad={e => { revealOnLoad(e); setLoaded(src) }} crossOrigin="anonymous" />
 }
 
 /** How many of a loadout's installed mods are on: green all, yellow some, red none. */

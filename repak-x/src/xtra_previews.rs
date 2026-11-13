@@ -41,7 +41,7 @@ pub fn busy_text(who: &str) -> String {
         "kit" => "The preview kit is installing or being removed. Wait for it to finish.",
         "cleanup" => "Settings > Storage is deleting previews or the preview kit. Try again when it is done.", // repakxtra
         "texcheck" => "The preview kit is checking textures. Try again in a moment.", // repakxtra
-        "viewer" => "The 3D model is being prepared. Try again in a moment.", // repakxtra
+        "viewer" | "prepare" => "The 3D model is being prepared. Try again in a moment.", // repakxtra
         _ => "This PC is being checked for previews. Try again in a moment.",
     }
     .into()
@@ -336,6 +336,30 @@ pub(crate) fn lock_generator() -> Result<Option<std::fs::File>, String> {
     lock_generator_in(&previews_dir().join("work")).map_err(|_| "Previews are being made (here, in another copy of the app, or by hand). Try again when that is done.".into())
 }
 
+/// Blender and the exporter a preview run leaves open for the next one (preview_fixes/keeper.py, about 3 GB of memory
+/// and the kit's and the game's files held open) end when their state file goes: when the app closes, the game starts,
+/// and before the kit is replaced or removed. `wait`: until they are gone (each keeps an .alive file while it runs), 8 s
+/// at most, for a caller that needs the kit's files free. A preview run under way keeps its helpers until it ends (a
+/// keeper looks for its state file between runs, never in the middle of one): starting the game does not cancel it.
+pub(crate) fn stop_kept(wait: bool) {
+    let dir = previews_dir().join("work").join("keep");
+    let with = |ext: &str| -> Vec<PathBuf> {
+        std::fs::read_dir(&dir).into_iter().flatten().flatten().map(|e| e.path()).filter(|p| p.extension().is_some_and(|x| x == ext)).collect()
+    };
+    for f in with("json") {
+        let _ = std::fs::remove_file(f);
+    }
+    if wait {
+        let end = std::time::Instant::now() + std::time::Duration::from_secs(8);
+        while !with("alive").is_empty() && std::time::Instant::now() < end {
+            std::thread::sleep(std::time::Duration::from_millis(50));
+        }
+        for f in with("alive") { // a keeper that was killed left its file: never waited on twice
+            let _ = std::fs::remove_file(f);
+        }
+    }
+}
+
 fn clear_stale_work(scratch: &Path) {
     // held until the folders are gone, so no generator starts on them meanwhile (ours starts after this returns)
     let Ok(_held) = lock_generator_in(scratch) else { return };
@@ -408,6 +432,15 @@ fn rim_on() -> bool {
         .unwrap_or(false)
 }
 
+/// Settings > Performance > Faster processing, read from the app's saved state: Blender and the exporter a run leaves
+/// open (about 3 GB) wait 5 minutes for the next run with it on and 1 minute with it off (speed.py KEEP_IDLE).
+fn faster_on() -> bool {
+    std::fs::read_to_string(crate::app_dir().join("repakxtra-state.json")).ok()
+        .and_then(|t| serde_json::from_str::<serde_json::Value>(&t).ok())
+        .and_then(|v| v["parallel_processing"].as_bool())
+        .unwrap_or(false)
+}
+
 #[tauri::command]
 pub fn preview_rim_get() -> bool {
     rim_on()
@@ -473,6 +506,7 @@ pub(crate) fn generator_command(paks: Option<PathBuf>, need_blender: bool) -> Re
         ("borrowed_pose.py", include_str!("preview_fixes/borrowed_pose.py")),
         ("app_usmap.py", include_str!("preview_fixes/app_usmap.py")),
         ("speed.py", include_str!("preview_fixes/speed.py")),
+        ("keeper.py", include_str!("preview_fixes/keeper.py")),
         ("viewer_lobby.py", include_str!("preview_fixes/viewer_lobby.py")),
     ] {
         let path = runtime.join(name);
@@ -496,11 +530,14 @@ pub(crate) fn generator_command(paks: Option<PathBuf>, need_blender: bool) -> Re
     }
     // The game's key comes from the app (the same one it installs mods with), so the kit carries none
     cmd.env("REPAKXTRA_RIM", if rim_on() { "1" } else { "0" });
+    cmd.env("REPAKXTRA_KEEP_IDLE", if faster_on() { "300" } else { "60" });
     cmd.env("REPAKXTRA_AES", format!("0x{}", crate::install_mod::AES_KEY_HEX.trim_start_matches("0x")));
     #[cfg(windows)]
     {
         use std::os::windows::process::CommandExt;
-        cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+        // CREATE_NO_WINDOW, BELOW_NORMAL_PRIORITY_CLASS: Blender, the exporter, and the tools it starts inherit it, so a
+        // render on every core no longer takes frames from the window (as fast as before on an idle PC)
+        cmd.creation_flags(0x0800_0000 | 0x0000_4000);
     }
     Ok(cmd)
 }

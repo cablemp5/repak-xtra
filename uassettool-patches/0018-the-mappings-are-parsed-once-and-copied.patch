@@ -1,0 +1,183 @@
+diff --git a/src/UAssetAPI/Unversioned/Usmap.cs b/src/UAssetAPI/Unversioned/Usmap.cs
+--- a/src/UAssetAPI/Unversioned/Usmap.cs
++++ b/src/UAssetAPI/Unversioned/Usmap.cs
+@@ -778,6 +778,41 @@
+             return string.Join("\n", res.ToArray());
+         }
+ 
++        // repakxtra: the mappings file parsed once and handed out as copies. Every tool call parsed it again (about
++        // 0.8 s each, four times in a mod update). A copy has its own name, enum, and schema tables, because reading an
++        // asset adds what it learns to them, so a call never sees what an earlier call learned and its output is the
++        // same as with a fresh parse. The parsed schemas themselves are never changed after the read. The parse is
++        // let go 60 s after its last use, and read again when the file changes
++        private static readonly object SharedLock = new object();
++        private static string SharedKey;
++        private static Usmap SharedParse;
++        private static System.Threading.Timer SharedDrop;
++
++        public static Usmap Shared(string path)
++        {
++            var info = new FileInfo(path);
++            string key = info.FullName + "|" + info.Length + "|" + info.LastWriteTimeUtc.Ticks;
++            Usmap parse;
++            lock (SharedLock)
++            {
++                if (SharedKey != key) { SharedParse = new Usmap(path); SharedKey = key; }
++                parse = SharedParse;
++                SharedDrop ??= new System.Threading.Timer(_ => { lock (SharedLock) { SharedKey = null; SharedParse = null; } });
++                SharedDrop.Change(60000, System.Threading.Timeout.Infinite);
++            }
++            var names = parse.AreFNamesCaseInsensitive ? StringComparer.InvariantCultureIgnoreCase : StringComparer.InvariantCulture;
++            var copy = (Usmap)parse.MemberwiseClone();
++            copy.FilePath = path;
++            copy.NameMap = new List<string>(parse.NameMap);
++            copy.EnumMap = new ConcurrentDictionary<string, UsmapEnum>(parse.EnumMap, names);
++            copy.Schemas = new ConcurrentDictionary<string, UsmapSchema>(parse.Schemas, names);
++            if (parse.FailedExtensions != null) copy.FailedExtensions = new List<string>(parse.FailedExtensions);
++            // (each entry copied too: reading an asset that lacks one marks the entry itself as not serialized)
++            if (parse.CustomVersionContainer != null) copy.CustomVersionContainer = parse.CustomVersionContainer.ConvertAll(v => (CustomVersion)v.Clone());
++            copy.PathsAlreadyProcessedForSchemas = new ConcurrentDictionary<string, byte>();
++            return copy;
++        }
++
+         // not a set to ensure thread safety
+         public ConcurrentDictionary<string, byte> PathsAlreadyProcessedForSchemas = new ConcurrentDictionary<string, byte>();
+         public UsmapSchema GetSchemaFromName(string nm, UAsset asset = null, string modulePath = null, bool throwExceptions = true)
+diff --git a/src/UAssetTool/Program.cs b/src/UAssetTool/Program.cs
+--- a/src/UAssetTool/Program.cs
++++ b/src/UAssetTool/Program.cs
+@@ -2111,7 +2111,7 @@
+         // Load mappings once if provided
+         Usmap? mappings = null;
+         if (!string.IsNullOrEmpty(usmapPath) && File.Exists(usmapPath))
+-            mappings = new Usmap(usmapPath);
++            mappings = Usmap.Shared(usmapPath);
+ 
+         int successCount = 0;
+         int failCount = 0;
+@@ -2345,7 +2345,7 @@
+ 
+         Usmap? mappings = null;
+         if (!string.IsNullOrEmpty(usmapPath) && File.Exists(usmapPath))
+-            mappings = new Usmap(usmapPath);
++            mappings = Usmap.Shared(usmapPath);
+ 
+         // ── Pass 1: header-only load to discover export class types ──
+         var headerAsset = new UAsset(assetPath, EngineVersion.VER_UE5_3, mappings,
+@@ -2555,7 +2555,7 @@
+         string? usmapPath = args.Length > 2 ? args[2] : null;
+         if (!File.Exists(assetPath)) { Console.Error.WriteLine($"File not found: {assetPath}"); return 1; }
+         Usmap? mappings = null;
+-        if (!string.IsNullOrEmpty(usmapPath) && File.Exists(usmapPath)) mappings = new Usmap(usmapPath);
++        if (!string.IsNullOrEmpty(usmapPath) && File.Exists(usmapPath)) mappings = Usmap.Shared(usmapPath);
+ 
+         // Types we want to deep-inspect for color properties
+         var inspectTypes = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+@@ -2719,7 +2719,7 @@
+ 
+         Usmap? mappings = null;
+         if (!string.IsNullOrEmpty(usmapPath) && File.Exists(usmapPath))
+-            mappings = new Usmap(usmapPath);
++            mappings = Usmap.Shared(usmapPath);
+ 
+         string json = NiagaraService.GetColorDetails(assetPath, mappings);
+         Console.WriteLine(json);
+@@ -2784,7 +2784,7 @@
+ 
+         Usmap? mappings = null;
+         if (!string.IsNullOrEmpty(usmapPath) && File.Exists(usmapPath))
+-            mappings = new Usmap(usmapPath);
++            mappings = Usmap.Shared(usmapPath);
+ 
+         var editOpts = new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
+         var edits = JsonSerializer.Deserialize<List<NiagaraService.NiagaraEditRequest>>(editsJson, editOpts);
+@@ -3451,7 +3451,7 @@
+             // Load mappings if provided
+             Usmap? mappings = null;
+             if (!string.IsNullOrEmpty(usmapPath) && File.Exists(usmapPath))
+-                mappings = new Usmap(usmapPath);
++                mappings = Usmap.Shared(usmapPath);
+             
+             // Deserialize from JSON
+             var asset = UAsset.DeserializeJson(jsonData);
+@@ -4890,7 +4890,7 @@
+             Console.Error.WriteLine($"[UAssetTool] Loading USMAP from: {usmapPath}");
+             try
+             {
+-                var usmap = new Usmap(usmapPath);
++                var usmap = Usmap.Shared(usmapPath);
+                 Console.Error.WriteLine($"[UAssetTool] USMAP loaded successfully");
+                 return usmap;
+             }
+@@ -8370,7 +8370,7 @@
+                 
+                 if (!string.IsNullOrEmpty(usmapPath) && File.Exists(usmapPath))
+                 {
+-                    asset.Mappings = new Usmap(usmapPath);
++                    asset.Mappings = Usmap.Shared(usmapPath);
+                 }
+                 
+                 asset.FilePath = Path.GetFullPath(outputPath);
+@@ -8398,7 +8398,7 @@
+         // Load mappings once, shared across threads (read-only after construction)
+         Usmap? mappings = null;
+         if (!string.IsNullOrEmpty(usmapPath) && File.Exists(usmapPath))
+-            mappings = new Usmap(usmapPath);
++            mappings = Usmap.Shared(usmapPath);
+         
+         int successCount = 0;
+         int failCount = 0;
+@@ -8961,7 +8961,7 @@
+         // one at a time: a KO prompt's 44 textures took 28 s. The same mappings, so the same pictures. If they cannot
+         // be read here, each file reads them itself and reports why, as before
+         Usmap? sharedMappings = null;
+-        try { if (!string.IsNullOrEmpty(usmapPath) && File.Exists(usmapPath)) sharedMappings = new Usmap(usmapPath); } catch { }
++        try { if (!string.IsNullOrEmpty(usmapPath) && File.Exists(usmapPath)) sharedMappings = Usmap.Shared(usmapPath); } catch { }
+ 
+         void ProcessFile(string inputPath)
+         {
+diff --git a/src/UAssetTool/Texture/TextureExtractor.cs b/src/UAssetTool/Texture/TextureExtractor.cs
+--- a/src/UAssetTool/Texture/TextureExtractor.cs
++++ b/src/UAssetTool/Texture/TextureExtractor.cs
+@@ -99,7 +99,7 @@
+             Usmap? mappings = loaded;
+             if (mappings == null && !string.IsNullOrEmpty(usmapPath) && File.Exists(usmapPath))
+             {
+-                mappings = new Usmap(usmapPath);
++                mappings = Usmap.Shared(usmapPath);
+             }
+             
+             // Load the asset
+diff --git a/src/UAssetTool/Texture/TextureInjector.cs b/src/UAssetTool/Texture/TextureInjector.cs
+--- a/src/UAssetTool/Texture/TextureInjector.cs
++++ b/src/UAssetTool/Texture/TextureInjector.cs
+@@ -73,7 +73,7 @@
+         try
+         {
+             if (!File.Exists(baseUassetPath)) { result.ErrorMessage = $"Base uasset not found: {baseUassetPath}"; return result; }
+-            Usmap? mappings = (!string.IsNullOrEmpty(usmapPath) && File.Exists(usmapPath)) ? new Usmap(usmapPath) : null;
++            Usmap? mappings = (!string.IsNullOrEmpty(usmapPath) && File.Exists(usmapPath)) ? Usmap.Shared(usmapPath) : null;
+             var asset = new UAsset(baseUassetPath, EngineVersion.VER_UE5_3, mappings);
+             asset.UseSeparateBulkDataFiles = true;
+ 
+diff --git a/src/UAssetTool/MaterialTagPresets.cs b/src/UAssetTool/MaterialTagPresets.cs
+--- a/src/UAssetTool/MaterialTagPresets.cs
++++ b/src/UAssetTool/MaterialTagPresets.cs
+@@ -249,7 +249,7 @@
+             return 1;
+         }
+ 
+-        var mappings = new Usmap(usmapPath);
++        var mappings = Usmap.Shared(usmapPath);
+         using var context = LoadGameContext(paksPath, options.AesKeys, log: Console.WriteLine);
+ 
+         var result = Collect(context, mappings, options, log: Console.WriteLine);
+@@ -283,7 +283,7 @@
+         if (filters != null) options.Filters.AddRange(filters.Where(f => !string.IsNullOrWhiteSpace(f)));
+         if (!string.IsNullOrEmpty(aesKey)) options.AesKeys.Add(aesKey);
+ 
+-        var mappings = new Usmap(usmapPath);
++        var mappings = Usmap.Shared(usmapPath);
+         using var context = LoadGameContext(paksPath, options.AesKeys, log: Console.Error.WriteLine);
+         var result = Collect(context, mappings, options, log: Console.Error.WriteLine);
+         WriteIni(outputPath, result.Presets, writePathComments: !options.NoPathComment);

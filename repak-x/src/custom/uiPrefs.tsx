@@ -32,6 +32,7 @@ const PREFS: { key: string; label: string; on?: boolean; group?: 'header' | 'mod
   { key: 'quick-organize', label: 'Show Quick Organize when dropping files on the window' }, // shown under Installing mods
   { key: 'new-strip', label: 'New this week on the Loadouts screen' }, // off by default (NewStripPref)
   { key: 'builtins', label: 'Built-in mods on the Loadouts screen and in the Library', on: true }, // shown by default (BuiltinsPref)
+  { key: 'auto-update', label: 'Install updates automatically', on: true }, // AutoUpdatePref, read by App's start-up check
 ]
 
 // 100% draws the app at the webview's 120% (what was the old 125% step, a little smaller); the rest scale from there.
@@ -401,6 +402,19 @@ export function NewStripPref() {
         <span>Show New this week on the Loadouts screen</span>
       </Checkbox>
       <p className="setting-subtext">The strip of mods added in the last 7 days that no loadout turns on.</p>
+    </div>
+  )
+}
+
+/** Settings > Updates: a found update downloads by itself at start-up, checked until switched off. */
+export function AutoUpdatePref() {
+  const on = useUiPref('auto-update')
+  return (
+    <div className="setting-item">
+      <Checkbox checked={on} onChange={(checked: boolean) => update(storageKey('auto-update'), checked ? '1' : '0')}>
+        <span>Install updates automatically</span>
+      </Checkbox>
+      <p className="setting-subtext">An update found at start-up downloads by itself and waits for your restart. Off: it asks first.</p>
     </div>
   )
 }

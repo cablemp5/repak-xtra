@@ -15,7 +15,7 @@ use serde_json::Value;
 use tauri::Window;
 
 use crate::vfx_updater::progress::{NoOpProgressSink, TauriVfxProgressSink, VfxProgressSink};
-use crate::xtra_niagara::{older_usmaps, read_json, stage, to_json, usmap_build};
+use crate::xtra_niagara::{older_usmaps, read_json, stage, stage_links, to_json, usmap_build};
 
 #[derive(Serialize, Debug, Default)]
 #[serde(rename_all = "camelCase")]
@@ -184,20 +184,36 @@ fn decode(dir: &Path, rel: &str) -> Option<Value> {
 pub(crate) async fn relayout(usmap: &str, mod_extract: &Path, rels: &[String], older: bool, made: u64, game: Game<'_>, today: Option<&Path>, work: &Path, progress: &dyn VfxProgressSink) -> Result<Relaid, String> {
     let mut out = Relaid::default();
     let Some(build) = usmap_build(usmap) else { return Ok(out) };
+    // what each part took, in the app's log and (REPAKXTRA_TIMING set) on the console: .agent/vfx/bench.mjs reads it
+    let mut clock = std::time::Instant::now();
+    let mut lap = |what: &str| {
+        let line = format!("[relayout timing] {what}: {:.2} s", clock.elapsed().as_secs_f32());
+        log::info!("{line}");
+        if std::env::var_os("REPAKXTRA_TIMING").is_some() {
+            eprintln!("{line}");
+        }
+        clock = std::time::Instant::now();
+    };
     let now_json = match today {
         Some(d) => d.to_path_buf(),
         None => {
             let (now, json) = (work.join("now"), work.join("now_json"));
-            stage(mod_extract, &now, rels, true)?;
+            stage_links(mod_extract, &now, rels)?;
             to_json(usmap, &now, &json, progress).await?;
             json
         }
     };
+    lap("decode with today's mappings");
+    // today's reading of each file, where it read whole: parsed once (a mod's 400 materials are 100 MB of JSON, and
+    // each was read from disk for the question below, and again for the list after it)
+    // (several files at a time: reading 400 of them one after the other took over a second)
+    use rayon::prelude::*;
+    let mut whole: std::collections::HashMap<&String, Value> = rels.par_iter().filter_map(|r| Some((r, decode(&now_json, r).filter(|j| decoded(j).is_some())?))).collect();
     let fetched = match game {
         Game::Fetch(paks) => {
             // only what the copies could settle: material instances today's USMAP reads whole
-            let ask: Vec<String> = rels.iter().filter(|r| decode(&now_json, r).filter(|j| decoded(j).is_some()).is_some_and(|j| overrides(&j).is_some())).cloned().collect();
-            if ask.is_empty() { None } else { game_copies(paks, usmap, &ask, work).await }
+            let ask: Vec<String> = rels.iter().filter(|r| whole.get(r).is_some_and(|j| overrides(j).is_some())).cloned().collect();
+            if ask.is_empty() { None } else { game_copies(paks, usmap, &ask, work, true).await }
         }
         _ => None,
     };
@@ -205,15 +221,23 @@ pub(crate) async fn relayout(usmap: &str, mod_extract: &Path, rels: &[String], o
         Game::Json(d) => Some(d),
         _ => fetched.as_deref(),
     };
-    let game: std::collections::HashMap<&String, Value> = game_dir.map_or_else(Default::default, |g| rels.iter().filter_map(|r| Some((r, decode(g, r)?))).collect());
+    let game: std::collections::HashMap<&String, Value> = game_dir.map_or_else(Default::default, |g| rels.par_iter().filter_map(|r| Some((r, decode(g, r)?))).collect());
     // (package, today's decode when it read whole)
     let mut pending: Vec<(String, Option<Value>)> = rels
         .iter()
         .filter_map(|r| {
-            let today = decode(&now_json, r).filter(|j| decoded(j).is_some());
+            // (a path listed twice finds the map empty the second time and is read again, as each one used to be)
+            let today = whole.remove(r).or_else(|| decode(&now_json, r).filter(|j| decoded(j).is_some()));
+            // Read whole today with the game's own overrides: today's layout is the right one whatever an older USMAP
+            // reads (old_reading_right's first case), so no older USMAP is asked about it. For a mod already in
+            // today's layout that is every file, and the older decode (5 s for 400 materials) does not run at all
+            if today.as_ref().is_some_and(|t| game.get(r).and_then(overrides).is_some_and(|g| overrides(t).as_ref() == Some(&g))) {
+                return None;
+            }
             (today.is_none() || older || game.contains_key(r)).then(|| (r.clone(), today))
         })
         .collect();
+    lap(&format!("game copies and reading {} decodes", rels.len()));
     if pending.is_empty() {
         out.complete = true;
         return Ok(out);
@@ -227,10 +251,11 @@ pub(crate) async fn relayout(usmap: &str, mod_extract: &Path, rels: &[String], o
             break;
         }
         let Some(old) = candidate.fetch().await else { continue };
+        lap("older mappings fetched");
         read_any = true;
         let (input, json) = (work.join("old"), work.join("old_json"));
         let names: Vec<String> = pending.iter().map(|(r, _)| r.clone()).collect();
-        stage(mod_extract, &input, &names, true)?;
+        stage_links(mod_extract, &input, &names)?;
         if to_json(&old, &input, &json, progress).await.is_err() {
             continue;
         }
@@ -259,6 +284,7 @@ pub(crate) async fn relayout(usmap: &str, mod_extract: &Path, rels: &[String], o
             }
             false
         });
+        lap("decode with older mappings and compare");
     }
     out.complete = pending.is_empty();
     out.no_usmap = !out.complete && !read_any;
@@ -274,10 +300,12 @@ pub(crate) async fn relayout(usmap: &str, mod_extract: &Path, rels: &[String], o
     if let Err(e) = crate::vfx_updater::pipeline::step_convert_json_to_uassets(Path::new(""), usmap, &fixed_json.to_string_lossy(), &fixed.to_string_lossy(), progress).await {
         log::warn!("[vfx relayout] {e}");
     }
+    lap(&format!("write {} files in today's layout", out.files.len()));
     let written: Vec<&str> = out.files.iter().filter(|r| fixed.join(format!("{r}.uasset")).is_file()).map(String::as_str).collect();
     std::fs::create_dir_all(&fixed).map_err(|e| e.to_string())?;
     std::fs::write(fixed.join("uasset_list.txt"), written.join("\n")).map_err(|e| e.to_string())?;
     to_json(usmap, &fixed, &check, progress).await?;
+    lap("read back");
     let mut surgical_backups = std::collections::HashMap::new();
     for r in &out.files {
         let original_header = std::fs::read(mod_extract.join(format!("{r}.uasset")));
@@ -297,6 +325,7 @@ pub(crate) async fn relayout(usmap: &str, mod_extract: &Path, rels: &[String], o
     // read into its own folder: a restored file is again the one `check` read, so a failed read loses only the patches
     let check2 = work.join("check2_json");
     let read2 = out.surgical.is_empty() || to_json(usmap, &fixed, &check2, progress).await.is_ok();
+    lap(&format!("{} header patches and their read back", out.surgical.len()));
     let mut unrestored = HashSet::new();
     out.surgical.retain(|r| {
         let same = read2 && match (decode(&check2, r), decode(&fixed_json, r)) {
@@ -324,6 +353,7 @@ pub(crate) async fn relayout(usmap: &str, mod_extract: &Path, rels: &[String], o
     }
     out.surgical.retain(|r| kept.contains(r));
     out.files = kept;
+    lap("compare and copy into the mod");
     Ok(out)
 }
 
@@ -353,6 +383,28 @@ fn raw_exports(j: &Value) -> usize {
     j.get("Exports").and_then(Value::as_array).map_or(0, |a| a.iter().filter(|e| e.get("$type").and_then(Value::as_str).unwrap_or_default().contains("RawExport")).count())
 }
 
+/// raw_exports of the JSON file at `p`, None when it cannot be read. Only the exports' types are kept while parsing (a
+/// material's JSON is 250 KB of which this reads one string per export), and a document that is not shaped as the
+/// tool writes them is read whole, as before.
+fn raw_count(p: &Path) -> Option<usize> {
+    #[derive(serde::Deserialize)]
+    struct Export {
+        #[serde(rename = "$type", default)]
+        kind: Option<String>,
+    }
+    #[derive(serde::Deserialize)]
+    struct Doc {
+        #[serde(rename = "Exports", default)]
+        exports: Option<Vec<Export>>,
+    }
+    let b = std::fs::read(p).ok()?;
+    let b = b.strip_prefix(&[0xEF, 0xBB, 0xBF]).unwrap_or(&b);
+    match serde_json::from_slice::<Doc>(b) {
+        Ok(d) => Some(d.exports.map_or(0, |e| e.iter().filter(|e| e.kind.as_deref().is_some_and(|t| t.contains("RawExport"))).count())),
+        Err(_) => serde_json::from_slice::<Value>(b).ok().map(|j| raw_exports(&j)),
+    }
+}
+
 /// pipeline.ts, before packing: of `rels` (rebuilt packages under `dir`, no extension), those that do not read back
 /// with `usmap` as well as the JSON they were written from (under `json_dir`): no decode at all, or more exports the
 /// tool cannot read than that JSON had. The game's own files keep a few such exports (a KO prompt's widget: 6 of 562,
@@ -363,21 +415,31 @@ pub async fn xtra_vfx_verify(window: Window, usmap_path: String, dir: String, re
 }
 
 /// xtra_vfx_verify without a window (xtra_vfx.rs vfx_rpc runs the pipeline headless).
-pub(crate) async fn verify(usmap_path: &str, dir: &str, rels: &[String], json_dir: &str, stage_dir: &str, progress: &dyn VfxProgressSink) -> Result<Vec<String>, String> {
+pub(crate) async fn verify(usmap_path: &str, dir: &str, rels: &[String], json_dir: &str, stage_dir: &str, _progress: &dyn VfxProgressSink) -> Result<Vec<String>, String> {
     if rels.is_empty() {
         return Ok(Vec::new());
     }
     let work = Path::new(&stage_dir).join("verify");
-    let (input, json) = (work.join("in"), work.join("json"));
+    let input = work.join("in");
     let r = async {
-        stage(Path::new(dir), &input, rels, true)?;
-        to_json(usmap_path, &input, &json, progress).await?;
-        let source = |r: &str| read_json(&Path::new(json_dir).join(format!("{r}.json"))).ok();
+        stage_links(Path::new(dir), &input, rels)?;
+        // the tool loads each file as a decode to JSON does and answers with the counts alone (UAssetTool patch 0019):
+        // the JSON of 400 materials was 100 MB written and read back for one number each
+        // named as stage_links wrote them (the extension added, never swapped in: a name may hold a dot)
+        let path = |r: &str| input.join(format!("{r}.uasset")).to_string_lossy().to_string();
+        let req = crate::vfx_updater::uasset_tool::VfxUatRequest { action: "batch_raw_export_counts", file_paths: Some(rels.iter().map(|r| path(r)).collect()), usmap_path: Some(usmap_path), ..Default::default() };
+        let answer = crate::vfx_updater::uasset_tool::run_vfx_uat_request(Path::new(""), &req).await?;
+        if !answer.success {
+            return Err(format!("The rebuilt files could not be read back: {}", answer.message));
+        }
+        let back: std::collections::HashMap<&str, usize> = answer.message.lines().filter_map(|l| l.split_once('\t')).filter_map(|(n, p)| Some((p, n.parse().ok()?))).collect();
+        use rayon::prelude::*;
+        let source = |r: &str| raw_count(&Path::new(json_dir).join(format!("{r}.json")));
         Ok::<_, String>(
-            rels.iter()
-                .filter(|r| match (read_json(&json.join(format!("{r}.json"))).ok(), source(r)) {
-                    (Some(back), Some(src)) => raw_exports(&back) > raw_exports(&src),
-                    (Some(back), None) => raw_exports(&back) > 0, // no source JSON (a merged table): whole, or not
+            rels.par_iter()
+                .filter(|r| match (back.get(path(r).as_str()).copied(), source(r)) {
+                    (Some(back), Some(src)) => back > src,
+                    (Some(back), None) => back > 0, // no source JSON (a merged table): whole, or not
                     (None, _) => true,
                 })
                 .cloned()
@@ -390,22 +452,50 @@ pub(crate) async fn verify(usmap_path: &str, dir: &str, rels: &[String], json_di
 }
 
 /// The game's current copies of `rels` decoded with `usmap`, under `work`/game_json. None when they could not be read.
-pub(crate) async fn game_copies(game_paks: &str, usmap: &str, rels: &[String], work: &Path) -> Option<std::path::PathBuf> {
+/// `keep`: the copies are kept for this game build, USMAP and parser (inside vanilla_dir, which goes when any of them
+/// changes) and only the ones not yet there are fetched: the game's copy of a material is the same for every mod and
+/// every run, and fetching 400 of them took each run about 5 s. Only for the layout check, which reads nothing of a
+/// copy but its material overrides (a native struct, read by the USMAP alone). The table merger takes the whole
+/// document of a table, whose structs can be read from the files beside it, so it fetches its copies fresh (`keep`
+/// false), each run in its own folder as before. A file the extract did not give is never remembered: it is asked for
+/// again on the next run, since an extract can miss a file once.
+pub(crate) async fn game_copies(game_paks: &str, usmap: &str, rels: &[String], work: &Path, keep: bool) -> Option<std::path::PathBuf> {
+    let cache = crate::xtra_vfx::vanilla_dir(game_paks, usmap).join("layout_json");
+    let ask: Vec<String> = rels.iter().filter(|r| !keep || !cache.join(format!("{r}.json")).is_file()).cloned().collect();
+    if ask.is_empty() {
+        return Some(cache);
+    }
     let (out, json) = (work.join("game"), work.join("game_json"));
     let _ = std::fs::remove_dir_all(&out);
     let req = crate::vfx_updater::uasset_tool::VfxUatRequest {
         action: "extract_iostore_legacy",
         game_paks: Some(game_paks.to_string()),
         output_path: Some(out.to_string_lossy().to_string()),
-        filter_patterns: Some(rels.to_vec()),
+        filter_patterns: Some(ask.clone()),
         with_deps: Some(false),
         ..Default::default()
     };
     crate::vfx_updater::uasset_tool::run_vfx_uat_request(Path::new(""), &req).await.ok().filter(|r| r.success)?;
-    let have: Vec<String> = rels.iter().filter(|r| out.join(format!("{r}.uasset")).is_file()).cloned().collect();
+    let have: Vec<String> = ask.iter().filter(|r| out.join(format!("{r}.uasset")).is_file()).cloned().collect();
     stage(&out, &work.join("game_in"), &have, true).ok()?;
     to_json(usmap, &work.join("game_in"), &json, &NoOpProgressSink).await.ok()?;
-    Some(json)
+    if !keep {
+        return Some(json);
+    }
+    // into the cache whole or not at all: written beside its place, then renamed (two runs may fill it at once)
+    for (n, r) in have.iter().enumerate() {
+        let (from, to) = (json.join(format!("{r}.json")), cache.join(format!("{r}.json")));
+        if !from.is_file() {
+            continue; // the tool wrote none for it: not known, asked again next run
+        }
+        let tmp = to.with_extension(format!("tmp{}-{n}", std::process::id()));
+        std::fs::create_dir_all(to.parent()?).ok()?;
+        if std::fs::copy(&from, &tmp).and_then(|_| std::fs::rename(&tmp, &to)).is_err() {
+            let _ = std::fs::remove_file(&tmp);
+            return None; // no game copies this run, as when the decode fails
+        }
+    }
+    Some(cache)
 }
 
 #[cfg(test)]
@@ -452,6 +542,16 @@ mod tests {
         let j = json!({ "Exports": [{ "$type": "UAssetAPI.ExportTypes.RawExport, UAssetAPI" }, { "$type": "UAssetAPI.ExportTypes.NormalExport, UAssetAPI" }, { "$type": "UAssetAPI.ExportTypes.RawExport, UAssetAPI" }] });
         assert_eq!(raw_exports(&j), 2);
         assert_eq!(raw_exports(&json!({})), 0);
+        // the file reader counts the same, whatever the document's shape
+        let d = tempfile::tempdir().unwrap();
+        for (n, doc) in [j, json!({}), json!({ "Exports": null }), json!({ "Exports": [{ "$type": 3 }, { "x": 1 }, 7] }), json!({ "Exports": "RawExport" })].iter().enumerate() {
+            let p = d.path().join(format!("{n}.json"));
+            std::fs::write(&p, [&[0xEF, 0xBB, 0xBF], doc.to_string().as_bytes()].concat()).unwrap();
+            assert_eq!(raw_count(&p), Some(raw_exports(doc)), "{doc}");
+        }
+        std::fs::write(d.path().join("bad.json"), "{").unwrap();
+        assert_eq!(raw_count(&d.path().join("bad.json")), None);
+        assert_eq!(raw_count(&d.path().join("none.json")), None);
     }
 
     #[test]

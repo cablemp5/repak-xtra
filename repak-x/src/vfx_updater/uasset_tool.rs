@@ -777,6 +777,8 @@ fn stage_allowed_assets(input_dir: &Path, allowed: &[String]) -> Result<(PathBuf
 
     let mut staged = 0usize;
     let mut dropped = 0usize;
+    // repakxtra: each folder is listed once, not once per asset in it (400 materials share one folder)
+    let mut listings: std::collections::HashMap<PathBuf, Vec<String>> = std::collections::HashMap::new();
 
     for asset in &uasset_paths {
         let relative = asset
@@ -806,20 +808,31 @@ fn stage_allowed_assets(input_dir: &Path, allowed: &[String]) -> Result<(PathBuf
             .ok_or_else(|| format!("[VFX] No parent for {}", asset.display()))?;
         let prefix = format!("{}.", stem);
 
-        for entry in fs::read_dir(source_dir).map_err(|e| e.to_string())? {
-            let entry = entry.map_err(|e| e.to_string())?;
-            // Name first: this runs for every file in the folder, once per asset, and
-            // is_file hits the disk.
-            let name = entry.file_name().to_string_lossy().to_string();
+        if !listings.contains_key(source_dir) {
+            let mut names = Vec::new();
+            for entry in fs::read_dir(source_dir).map_err(|e| e.to_string())? {
+                names.push(entry.map_err(|e| e.to_string())?.file_name().to_string_lossy().to_string());
+            }
+            listings.insert(source_dir.to_path_buf(), names);
+        }
+        for name in &listings[source_dir] {
+            // Name first: is_file hits the disk.
             if !name.starts_with(&prefix) {
                 continue;
             }
-            let path = entry.path();
+            let path = source_dir.join(name);
             if !path.is_file() {
                 continue;
             }
-            fs::copy(&path, dest_dir.join(&name))
-                .map_err(|e| format!("[VFX] Failed to stage {}: {}", path.display(), e))?;
+            // repakxtra: a hard link, not a copy: the packer only reads this folder, and nothing writes the update's
+            // files again before it is deleted (a copy where a link cannot be made)
+            let to = dest_dir.join(name);
+            if to.exists() {
+                continue; // staged by an asset whose name starts this one's (Foo and Foo.Bar): a copy onto its own link fails
+            }
+            if fs::hard_link(&path, &to).is_err() {
+                fs::copy(&path, &to).map_err(|e| format!("[VFX] Failed to stage {}: {}", path.display(), e))?;
+            }
         }
 
         staged += 1;
@@ -858,6 +871,16 @@ pub async fn pack_to_iostore(
         ));
     }
 
+    // repakxtra: what staging and the tool each took, in the log and (REPAKXTRA_TIMING set) on the console
+    let mut clock = std::time::Instant::now();
+    let mut lap = |what: &str| {
+        let line = format!("[pack timing] {what}: {:.2} s", clock.elapsed().as_secs_f32());
+        log::info!("{line}");
+        if std::env::var_os("REPAKXTRA_TIMING").is_some() {
+            eprintln!("{line}");
+        }
+        clock = std::time::Instant::now();
+    };
     // An empty manifest means "no manifest" — packing nothing is never the intent.
     let pack_dir = match allowed_assets {
         Some(allowed) if !allowed.is_empty() => {
@@ -935,7 +958,9 @@ pub async fn pack_to_iostore(
         ..Default::default()
     };
 
+    lap(&format!("stage {} packages", uasset_files.len()));
     let response = run_vfx_uat_request(tool_path, &request).await?;
+    lap("the tool's pack");
     if !response.success {
         return Err(format!(
             "[VFX] create_mod_iostore failed: {}",

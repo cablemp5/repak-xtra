@@ -148,7 +148,7 @@ const findGame = (f: Flow) => {
       action={!f.gamePath && <>
         <StepButton className="btn-primary" working={f.busy === 'find' && 'Looking'} label="Find it" disabled={Boolean(f.busy)} onClick={() => f.run('find', f.onAutoDetect)} />
         <button type="button" className="lo-text-btn" onClick={() => f.onBrowse()}>Browse…</button></>}>
-      <p>{!f.gamePath ? 'Not found yet. Find it searches your Steam libraries.' : <>Found. Mods go to <code title={f.gamePath}>{where}</code></>}</p>
+      <p>{!f.gamePath ? 'Not found yet. Find it searches your Steam libraries and Loading Bay games.' : <>Found. Mods go to <code title={f.gamePath}>{where}</code></>}</p>
     </Step>
   )
 }

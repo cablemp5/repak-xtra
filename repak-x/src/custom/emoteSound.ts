@@ -86,7 +86,7 @@ let turn = 0 // a stop (or a newer play) while the sound is still loading cancel
 /** Plays the sound from its start, looping every `loopSeconds` with the clip (once, whole, without a length). */
 export async function playEmoteSound(sound: Sound, loopSeconds: number) {
   stopEmoteSound()
-  if (!isSoundOn()) return
+  if (!isSoundOn() || document.hidden || !document.hasFocus()) return // a hover preview plays only in the focused app
   const mine = turn
   ctx ??= new AudioContext()
   ctx.resume().catch(() => undefined) // refused before the first click in the app: then it stays silent

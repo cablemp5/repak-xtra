@@ -4,7 +4,139 @@ mounting the game again (about 2.3 s). An older one serves every "game alone" ex
 colors, sound banks, skin tables, the "before" renders) and each mod gets its own, as before. A VFX card's game colors
 are cached per game version, so only instances no earlier card read are exported. The dance outline grows its alpha
 with numpy, the same pixels as MaxFilter in a fifteenth of the time."""
+import socket
 _kit_run_spec, _kit_close_exporters = run_spec, close_exporters
+
+# ---------- helper programs kept running between runs (keeper.py) ----------
+# Seconds a kept program waits for the next run before it ends. The app says how long (xtra_previews.rs: 300 with Faster
+# processing on, 60 with it off: a 3D view opened after that loads the game again, 17 s instead of 4, and until then the
+# helpers hold about 3 GB). The app ends them when the game starts (stop_kept)
+KEEP_IDLE = int(v) if (v := os.environ.get("REPAKXTRA_KEEP_IDLE", "")).isdigit() else 90
+
+
+class _Lines:
+    """A kept program's output or errors: lines as they come, ended by its end or the connection's."""
+    def __init__(self):
+        self.q = queue.Queue()
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        line = self.q.get()
+        if line is None:
+            self.q.put(None)   # ended for every later reader too
+            raise StopIteration
+        return line
+
+
+class _In:
+    def __init__(self, kept):
+        self.kept = kept
+
+    def write(self, text):
+        self.kept.sock.sendall(text.encode("utf-8"))
+
+    def flush(self):
+        pass
+
+    def close(self):
+        self.kept.release()
+
+
+class _Kept:
+    """What subprocess.Popen gives the generator (stdin, stdout, stderr, poll, wait, kill, args), for a program a keeper
+    runs: closing its stdin hands it back still running, kill ends it."""
+    def __init__(self, cmd, extra, merge):
+        self.args = [str(c) for c in cmd]
+        state = WORK.parent / "keep" / (hashlib.sha1(json.dumps([self.args, extra], sort_keys=True).encode()).hexdigest()[:16] + ".json")
+        self.stdin, self.stdout, self.stderr = _In(self), _Lines(), _Lines()
+        self.done = False
+        self.sock = self._connect(state)
+        if self.sock is None:
+            state.unlink(missing_ok=True)   # a keeper that is gone left it behind
+            subprocess.Popen([sys.executable, str(runtime / "keeper.py"), str(state), str(KEEP_IDLE), json.dumps(self.args), json.dumps(extra)],
+                             stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                             creationflags=NO_WINDOW | 0x00000200, close_fds=True)   # its own process group: Ctrl+C in a console run stays ours
+            end = time.time() + 15
+            while self.sock is None and time.time() < end:
+                time.sleep(0.05)
+                self.sock = self._connect(state)
+            if self.sock is None:
+                raise RuntimeError("the keeper did not start")
+        errs = self.stdout if merge else self.stderr
+
+        def pump():
+            try:
+                for line in self.lines:
+                    (self.stdout if line[:1] == "O" else errs).q.put(line[1:])
+            except (OSError, ValueError):
+                pass
+            self.done = True
+            self.stdout.q.put(None)
+            self.stderr.q.put(None)
+        threading.Thread(target=pump, daemon=True).start()
+
+    def _connect(self, state):
+        """The keeper's socket once it has let us in (its line "K", after what the program printed at its start, which
+        goes to stdout as if just printed); None without a keeper that answers."""
+        try:
+            st = json.loads(state.read_text(encoding="utf-8"))
+            sock = socket.create_connection(("127.0.0.1", int(st["port"])), timeout=3)
+            sock.settimeout(10)
+            sock.sendall((st["token"] + "\n").encode("utf-8"))
+            lines = sock.makefile("r", encoding="utf-8", errors="replace", newline="\n")
+            while True:
+                line = lines.readline()
+                if not line:   # a keeper on its way out took the connection and dropped it
+                    sock.close()
+                    return None
+                if line[:1] == "K":
+                    break
+                if line[:1] == "O":
+                    self.stdout.q.put(line[1:])
+            sock.settimeout(None)
+            self.lines = lines
+            return sock
+        except (OSError, ValueError, KeyError):
+            return None
+
+    def release(self):
+        if not self.done:
+            self.done = True
+            try:
+                self.sock.sendall(b"\0IDLE\n")
+                self.sock.shutdown(socket.SHUT_WR)
+            except OSError:
+                pass
+
+    def poll(self):
+        return 0 if self.done else None
+
+    def wait(self, timeout=None):
+        return 0
+
+    def kill(self):
+        self.done = True
+        try:
+            self.sock.shutdown(socket.SHUT_RDWR)   # dropped without the idle line: the keeper ends the program. A plain
+            self.sock.close()                      # close waits for the reader thread's file, and never reached it
+        except OSError:
+            pass
+
+
+def kept(cmd, extra=None, merge=False):
+    """The program started, or the one a keeper still has from the last run. Any trouble with the keeper: started the
+    plain way, as before."""
+    if os.environ.get("REPAKXTRA_KEEP", "1") != "0":
+        try:
+            return _Kept(cmd, extra or {}, merge)
+        except Exception as e:
+            print(f"# keeper: {e}, starting {Path(str(cmd[0])).name} the plain way", file=sys.stderr, flush=True)
+    return subprocess.Popen([str(c) for c in cmd], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                            stderr=subprocess.STDOUT if merge else subprocess.PIPE, text=True, encoding="utf-8", errors="replace",
+                            creationflags=NO_WINDOW, env={**os.environ, **(extra or {})})
+
 _SHARED = {}   # (exe, the game's config text) -> {"server": (proc, lines), "swap": bool, "extra": [mounted mod folders]}
 _ASKING = []   # non-empty while a line waits for its answer: a timeout then kills the shared exporters instead of asking them
 
@@ -20,8 +152,35 @@ def split_config(config):
     return json.dumps(cfg, sort_keys=True), extra
 
 
+_SHARED_LOCK = threading.Lock()   # warm_exporter starts it on a thread while a request may already wait for it
+
+
 def shared_exporter(exe, text):
     """The run's exporter for this game config, started with the game alone; None when this build cannot serve."""
+    with _SHARED_LOCK:
+        return _shared_exporter(exe, text)
+
+
+def warm_exporter(cfg):
+    """The run's exporter started on a thread now, the game mounted with no mod: the first export after an unpack finds it
+    ready. Its start and the game's mount (about 6 s) ran after the unpack (about 10 s cold) and now run beside it: a
+    first 3D view of an encrypted mod took 24 s with no helper open. Any trouble: the export starts it as before."""
+    text = json.dumps({k: v for k, v in cfg.items() if k != "extra_paks"}, sort_keys=True)
+    def go():
+        try:
+            if str(CUE) not in _no_serve:
+                shared_exporter(CUE, text)
+        except Exception as e:
+            print(f"# exporter warm-up: {e}", file=sys.stderr, flush=True)
+    t = threading.Thread(target=go, daemon=True)
+    _WARMING.append(t)
+    t.start()
+
+
+_WARMING = []   # warm_exporter's threads: joined before the run hands its exporters back (close_shared_exporters)
+
+
+def _shared_exporter(exe, text):
     key = (str(exe), text)
     s = _SHARED.get(key)
     if s and s["server"][0].poll() is None:
@@ -29,8 +188,7 @@ def shared_exporter(exe, text):
     config = WORK / "_game" / (hashlib.sha1(text.encode()).hexdigest()[:16] + ".json")
     config.parent.mkdir(parents=True, exist_ok=True)
     config.write_text(text, encoding="utf-8")
-    proc = subprocess.Popen([str(exe), "--serve", str(config)], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-                            stderr=subprocess.STDOUT, text=True, encoding="utf-8", errors="replace", creationflags=NO_WINDOW)
+    proc = kept([str(exe), "--serve", str(config)], merge=True)   # the one the last run left mounted, when there is one
     q = queue.Queue()
 
     def pump():
@@ -130,6 +288,8 @@ def close_exporters():
 
 
 def close_shared_exporters():
+    for t in _WARMING:   # one still starting would be cut off by the run's end and ended by its keeper, not kept
+        t.join(120)
     for s in _SHARED.values():
         try:
             s["server"][0].stdin.close()
@@ -205,3 +365,231 @@ _k = Image.new("RGBA", _t.size, OUTLINE + (0,))
 _k.putalpha(_t.getchannel("A").filter(ImageFilter.MaxFilter(5)))
 _k.alpha_composite(_t)
 assert outlined(_t).tobytes() == _k.tobytes(), "the numpy outline matches MaxFilter, edges included"
+
+def on_threads(fn, items, most=16):
+    """fn over items on a few threads, in order (Pillow's filters, resizes and encoders release the lock)."""
+    from concurrent.futures import ThreadPoolExecutor
+    with ThreadPoolExecutor(max(1, min(most, (os.cpu_count() or 2) - 1))) as pool:
+        return list(pool.map(fn, items))
+
+
+_UAT_SERVE = {}   # "proc": the app's tool in serve mode (kept), "q": its lines; "off": it cannot serve
+_UAT_LOCK = threading.Lock()
+
+
+def uat_extract(args, timeout=600):
+    """An extract_iostore_legacy run. Through the app's own tool in `serve` mode when the app gave one (REPAKXTRA_UAT,
+    xtra_uat_cli.rs): it keeps the game's containers loaded between requests, which a one-shot run opens every time (5 to
+    9 s of each encrypted mod's unpack). One request at a time. Without it, or on any trouble: the kit's tool, one-shot."""
+    tool, s = os.environ.get("REPAKXTRA_UAT"), _UAT_SERVE
+    if tool and not s.get("off"):
+        with _UAT_LOCK:
+            try:
+                if not s.get("proc") or s["proc"].poll() is not None:
+                    proc, q = kept([tool, "serve"], merge=True), queue.Queue()
+                    threading.Thread(target=lambda: ([q.put(l) for l in proc.stdout], q.put(None)), daemon=True).start()
+                    s["proc"], s["q"] = proc, q
+                s["proc"].stdin.write("\x1f".join(str(a) for a in args) + "\n")
+                s["proc"].stdin.flush()
+                end = time.time() + timeout
+                while True:
+                    line = s["q"].get(timeout=max(1, end - time.time()))
+                    if line is None:
+                        raise EOFError("the tool ended")
+                    if line.startswith("@@DONE "):
+                        if line[7:].split("\x1f")[0].strip() == "0":
+                            return
+                        raise RuntimeError(line[:300])
+            except Exception as e:   # this run goes on one-shot
+                print(f"# unpack: the tool's serve mode is off for this run ({e})", file=sys.stderr, flush=True)
+                if s.get("proc"):
+                    stop(s["proc"])
+                s.clear()
+                s["off"] = True
+                if isinstance(e, queue.Empty):   # no answer in time: it may still be writing these files, so no second run on them
+                    raise RuntimeError("the tool did not answer an unpack in time") from None
+    run([UAT, *args], timeout)
+
+
+def close_uat_serve():
+    if _UAT_SERVE.get("proc"):
+        try:
+            _UAT_SERVE["proc"].stdin.close()   # kept: handed back running, for the next run
+        except Exception:
+            pass
+
+
+atexit.register(close_uat_serve)
+
+
+TOGETHER = [False]   # this mount repacks every mod of the set (repack_dir, mount() through runtime.py)
+
+
+def repack_dir(entries, utoc, ucas, pak):
+    """Where a mod's repacked container is kept. Alone (no encrypted mod in the set): by its own files, as the kit keeps
+    it. Repacked with its set (TOGETHER): by its files and every other mod's of the set, which its references resolved
+    against."""
+    own = signature(utoc, ucas, current_pak(utoc, pak))
+    if TOGETHER[0]:
+        own += "|set|" + "|".join(sorted(signature(u, c, current_pak(u, p)) for _, u, c, p in entries if u))
+    return WORK.parent / "cache" / "repacked" / hashlib.sha1(own.encode()).hexdigest()[:16]
+
+
+def unpack_ahead(work, cfg, entries):
+    """mount()'s unpack of every encrypted mod that is not kept yet, before it runs: mount() then finds each kept. A
+    one-shot run loads the game in the tool each time (5 to 9 s), so a loadout's five took 36 s one after another. They
+    go through the app's tool kept in serve mode (uat_extract), or without it all at once (16 s for the five).
+    With an encrypted mod in a set of several, every mod of the set is unpacked together, in one extract with all of
+    them mounted, and each is repacked from its own share of it. One mod's references into another (a mesh swap's hair
+    slots pointing at a material only an encrypted mod ships) are written by package hash, and the repacked encrypted mod
+    hashes its packages differently from the tool that made the original, so a mod left as shipped lost them: the
+    HonnasPhoenix loadout rendered bald (its four hair slots read as no material, 2026-11-13)."""
+    TOGETHER[0] = len([e for e in entries if e[1]]) > 1 and any(e[1] and obfuscated(e[1]) for e in entries)
+    if TOGETHER[0]:
+        return unpack_together(work, cfg, entries)
+    def kept_at(e):
+        return repack_dir(entries, e[1], e[2], e[3])
+    todo = [e for e in entries if obfuscated(e[1]) and not (kept_at(e) / (e[0] + ".utoc")).exists()]
+    if not todo:
+        return
+    warm_exporter(cfg)
+    stage("unpack")
+    def one(e):
+        stem, utoc = e[0], e[1]
+        repacked = kept_at(e)
+        legacy, tmp = work / "legacy" / stem, repacked.with_name(repacked.name + ".tmp")
+        shutil.rmtree(tmp, ignore_errors=True)
+        tmp.mkdir(parents=True)
+        uat_extract(["extract_iostore_legacy", cfg["paks"], legacy, "--mod", utoc, "--aes", cfg["aes"]])
+        run([UAT, "create_mod_iostore", tmp / stem, legacy, "--usmap", cfg["usmap"]], 600)
+        if (tmp / (stem + ".utoc")).exists():   # a failed one is left to mount(), which says why
+            shutil.rmtree(repacked, ignore_errors=True)
+            tmp.rename(repacked)
+    on_threads(one, todo, 6)
+    # mount() trims the kept ones to the 20 newest only when it unpacks one itself: here, never this run's own
+    mine = {kept_at(e) for e in entries if e[1] and obfuscated(e[1])}
+    old = sorted((d for d in (WORK.parent / "cache" / "repacked").iterdir() if d.is_dir() and not d.name.endswith(".tmp") and d not in mine),
+                 key=lambda d: d.stat().st_mtime, reverse=True)
+    for d in old[max(0, 20 - len(mine)):]:
+        shutil.rmtree(d, ignore_errors=True)
+    stage("mount")
+
+
+def unpack_together(work, cfg, entries):
+    """unpack_ahead for a set with an encrypted mod: one extract of every mod (all mounted, in their order, so a later
+    mod's copy of a package wins as in the game), then each mod's own packages repacked into its kept folder."""
+    mods = [e for e in entries if e[1]]
+    todo = [e for e in mods if not (repack_dir(entries, e[1], e[2], e[3]) / (e[0] + ".utoc")).exists()]
+    if not todo:
+        return
+    warm_exporter(cfg)
+    stage("unpack")
+    legacy = work / "legacy" / "_set"
+    shutil.rmtree(legacy, ignore_errors=True)
+    uat_extract(["extract_iostore_legacy", cfg["paks"], legacy, "--mod", *[e[1] for e in mods], "--aes", cfg["aes"]])
+    def one(e):
+        stem, utoc = e[0], e[1]
+        repacked = repack_dir(entries, utoc, e[2], e[3])
+        own, tmp = work / "legacy" / stem, repacked.with_name(repacked.name + ".tmp")
+        shutil.rmtree(own, ignore_errors=True)
+        shutil.rmtree(tmp, ignore_errors=True)
+        tmp.mkdir(parents=True)
+        # its packages, as its listing names them (Marvel/Content/..., a plugin's Content/...): every file of each
+        for rel in {m for m in re.findall(r"(?:\.\./)*(\S+?)\.uasset", listing(utoc))}:
+            for f in (legacy / rel).parent.glob((legacy / rel).name + ".*"):
+                if f.suffix.lower() in (".uasset", ".uexp", ".ubulk", ".uptnl") or f.name.lower().endswith(".m.ubulk"):
+                    (own / rel).parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copyfile(f, own / f.relative_to(legacy))
+        if not own.exists():
+            return   # nothing of its own came out: mount() unpacks it alone, as before
+        run([UAT, "create_mod_iostore", tmp / stem, own, "--usmap", cfg["usmap"]], 600)
+        if (tmp / (stem + ".utoc")).exists():
+            shutil.rmtree(repacked, ignore_errors=True)
+            tmp.rename(repacked)
+    on_threads(one, todo, 6)
+    mine = {repack_dir(entries, e[1], e[2], e[3]) for e in mods}
+    old = sorted((d for d in (WORK.parent / "cache" / "repacked").iterdir() if d.is_dir() and not d.name.endswith(".tmp") and d not in mine),
+                 key=lambda d: d.stat().st_mtime, reverse=True)
+    for d in old[max(0, 20 - len(mine)):]:
+        shutil.rmtree(d, ignore_errors=True)
+    stage("mount")
+
+
+def prepare_viewer(a, out_dir):
+    """--viewer --prepare (xtra_viewer.rs prepare_mod_viewer): what a 3D view of these mods would mount, unpacked now if
+    an encrypted mod in it is not kept yet, the exporter started beside it, and nothing else. The app asks while a loadout
+    page or a mod's details are open, so a click on Rotate in 3D finds both ready: a first view of an encrypted mod took
+    20 to 24 s with no helper open, most of it the unpack and the game's mount. Mounts what viewer() mounts, in its
+    order, so the kept containers are the ones it looks for."""
+    cfg = cue_config()
+    wanted = lambda k: not (a.key and k not in a.key) and not (a.only and not re.search(a.only, k, re.I))
+    mods = {k: v for k, v in installed(a.mods).items() if wanted(k)}
+    jobs = [(a.set, list(mods))] if a.set else [(k, [k]) for k in mods]
+    for key, keys in jobs:
+        if not any(obfuscated(mods[k][1]) for k in keys) or any(unreadable(mods[k][1]) for k in keys):
+            continue   # nothing to unpack, or nothing that can be read
+        mounted = keys
+        if a.set:
+            plan = plan_set({k: packages(mods[k][1]) for k in keys}, game_meshes(cfg))
+            mounted = plan[2] if plan else []
+        if not any(obfuscated(mods[k][1]) for k in mounted):
+            continue
+        work = WORK / ("p_" + re.sub(r"[^\w.+-]", "_", key))
+        drop_work(work)
+        try:
+            unpack_ahead(work, cfg, [mods[k] for k in mounted])
+        finally:
+            shutil.rmtree(work, ignore_errors=True)
+        print(f"VIEWER_PREPARED {key}", flush=True)
+
+
+def write_webp(frames, path, duration):
+    """A looping animated WebP (quality 80, method 2, every frame a key frame as save_webp explains), encoded in chunks on
+    threads and joined: 279 frames of 512x724 took one encoder 8.8 s and eleven of them 1.7 s. Every frame decodes to the
+    pixels the one encoder gives. The encoder stores an animation's first frame cropped to what is not clear, which
+    compresses a little differently, so each later chunk starts one frame early (the frame before it) and that extra
+    frame is left out of the join: every frame kept is then a whole-canvas key frame, as in the one encoder's file.
+    Anything unexpected in a chunk falls back to the one encoder."""
+    import io
+    def encode(part, to=None):
+        out = to or io.BytesIO()
+        part[0].save(out, format="WEBP", save_all=True, append_images=part[1:], duration=duration, loop=0, quality=80, method=2, kmax=1)
+        return None if to else out.getvalue()
+    def chunks(data):
+        at, found = 12, []
+        while at + 8 <= len(data):
+            end = at + 8 + int.from_bytes(data[at + 4:at + 8], "little")
+            end += end - at & 1   # chunks are padded to an even size
+            found.append((data[at:at + 4], data[at:end]))
+            at = end
+        return found
+    n = min(16, (os.cpu_count() or 2) - 1, len(frames) // 8)   # one chunk per spare thread: the encoder is all CPU
+    try:
+        if n < 2:
+            raise ValueError("too few frames to split")
+        cuts = [i * len(frames) // n for i in range(n + 1)]
+        parts = [chunks(d) for d in on_threads(encode, [frames[max(0, a - 1):b] for a, b in zip(cuts, cuts[1:])], n)]
+        heads = [bytearray(next(c for f, c in p if f == b"VP8X")) for p in parts]
+        for h in heads[1:]:
+            heads[0][8] |= h[8]   # the file has alpha when any chunk has
+        shown = [[bytearray(c) for f, c in p if f == b"ANMF"] for p in parts]
+        for part in shown[1:]:   # the frame each later chunk started early on
+            if not part:
+                raise ValueError("a chunk is not an animation")
+            ms = int.from_bytes(part[0][20:23], "little")   # ANMF: 8 header, X 3, Y 3, W 3, H 3, duration 3, flags 1
+            if ms == duration:
+                del part[0]
+            elif ms > duration:   # equal frames after it were stored as this one picture, shown longer
+                part[0][20:23] = (ms - duration).to_bytes(3, "little")
+            else:
+                raise ValueError("a chunk's first frame has no full duration")
+            # what is kept must not lean on that frame: the whole canvas, not blended over what was there
+            if not part or part[0][8:14] != bytes(6) or part[0][14:20] != heads[0][12:18] or not part[0][23] & 2:
+                raise ValueError("a chunk does not start on a whole frame")
+        if not shown[0]:
+            raise ValueError("a chunk is not an animation")
+        body = bytes(heads[0]) + next(c for f, c in parts[0] if f == b"ANIM") + b"".join(bytes(c) for part in shown for c in part)
+        Path(path).write_bytes(b"RIFF" + (len(body) + 4).to_bytes(4, "little") + b"WEBP" + body)
+    except (StopIteration, ValueError):
+        with open(path, "wb") as f:
+            encode(frames, f)

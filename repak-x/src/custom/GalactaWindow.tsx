@@ -75,6 +75,10 @@ function GalactaPanel() {
   busyRef.current = busy
   const loadouts = useLoadouts()
 
+  // the game's file index loads while the list is read, so the first conversion does not wait about 5 s for it (the
+  // Mod Updater's window does the same, xtra_vfx.rs)
+  useEffect(() => { void invoke('xtra_tool_warm').catch(() => {}) }, [])
+
   // a mod toggled, installed or removed anywhere: read the list again (a run reads it after)
   useEffect(() => {
     const un = listen('mods_dir_changed', () => { if (!busyRef.current) setReload(n => n + 1) })

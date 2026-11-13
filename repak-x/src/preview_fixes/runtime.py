@@ -1,11 +1,16 @@
 """Run a preview kit with app-owned renderer fixes, leaving the installed kit unchanged."""
 import os
 import re
+import sys
 from pathlib import Path
 
 kit = Path(os.environ["REPAKXTRA_KIT"])
 rim_on = os.environ.get("REPAKXTRA_RIM", "0") == "1"   # Settings > Previews, off unless switched on
 runtime = Path(__file__).resolve().parent
+# --prepare (xtra_viewer.rs prepare_mod_viewer): the kit's own arguments do not know it, a --viewer run then only unpacks
+prepare = "--prepare" in sys.argv
+if prepare:
+    sys.argv.remove("--prepare")
 original = kit / "previews" / "mod_previews.py"
 renderer = kit / "previews" / "render_preview.py"
 source = renderer.read_text(encoding="utf-8-sig")
@@ -46,6 +51,35 @@ if any(old not in source for old, _ in hooks):
     raise RuntimeError("This preview kit needs an update before the material fixes can be applied.")
 for old, new in hooks:
     source = source.replace(old, new, 1)
+# The pose is the lobby idle's first frame: only each bone's first key is read from the file and made into curves (a
+# bone's other 350 keys took about half a second of every character preview to parse and build, never used). The
+# reader is put back right after, so a dance rendered next in the same Blender reads its clips whole. A kit without
+# these exact lines, or an older animation file format (its own reader), imports the whole idle, as before.
+pose_import = "            act, _ = UEFormatImport(UEAnimOptions(scale_factor=1, override_skeleton=A, import_curves=False)).import_file_with_dto(path)\n"
+pose_loop = "    A.animation_data_create()\n    for path in anims:\n"
+if source.count(pose_import) == 1 and source.count(pose_loop) == 1:
+    source = source.replace(pose_import, "            act, _ = pose_import(path)\n", 1)
+    source = source.replace(pose_loop, '''    import io_scene_ueformat.importer.deserialize.anim as _da
+
+    def pose_import(path):
+        whole = _da.read_track
+
+        def first_keys(ar):
+            def one(read, size):   # the first key, the rest stepped over (a key is its frame and 3 or 4 floats)
+                n = ar.read_int()
+                if n <= 0:
+                    return []
+                key = read(ar)
+                ar.skip((n - 1) * size)
+                return [key]
+            return _da.TrackDto(name=ar.read_fstring(), position_keys=one(_da.read_vector_key, 16),
+                                rotation_keys=one(_da.read_quat_key, 20), scale_keys=one(_da.read_vector_key, 16))
+        _da.read_track = first_keys
+        try:
+            return UEFormatImport(UEAnimOptions(scale_factor=1, override_skeleton=A, import_curves=False)).import_file_with_dto(path)
+        finally:
+            _da.read_track = whole
+''' + pose_loop, 1)
 fix = f"RIM_ON = {rim_on}\n" + "\n".join(
     (runtime / f).read_text(encoding="utf-8")
     for f in ("galactic_mane.py", "material_rim.py", "translucent_layers.py", "screen_rim.py", "studio_lights.py", "cosmic_tuning.py", "flow_anim.py", "borrowed_pose.py"))
@@ -163,6 +197,22 @@ if source.count(vfx_vanilla) != 1:
     raise RuntimeError("This preview kit does not support the app's faster previews. Update it in Setup.")
 source = source.replace(vfx_vanilla, '    bands = palette(changed_colors(mi_vectors(work / "vfx_raw"), vanilla_vectors(work, mis)))', 1)
 source = source.replace(main_guard, (runtime / "speed.py").read_text(encoding="utf-8") + "\n" + main_guard, 1)
+dispatch = "viewer(a, out_dir) if a.viewer else"
+if prepare and source.count(dispatch) == 1:
+    source = source.replace(dispatch, "prepare_viewer(a, out_dir) if a.viewer else", 1)
+elif prepare:
+    sys.exit(0)   # a kit this does not fit: nothing is prepared, the 3D view works as before
+# A loadout's encrypted mods are unpacked at once before mount() copies them (speed.py unpack_ahead). A kit whose mount()
+# reads differently keeps its own one-by-one unpack
+mount_start = '    stage("mount")\n    (work / "paks").mkdir(parents=True)\n'
+if source.count(mount_start) == 1:
+    source = source.replace(mount_start, mount_start + "    unpack_ahead(work, cfg, entries)\n", 1)
+    # a set with an encrypted mod mounts every mod repacked together (speed.py unpack_ahead): mount() takes each from there
+    for old, new in (("        if obfuscated(utoc):\n", "        if obfuscated(utoc) or (TOGETHER[0] and utoc):\n"),
+                     ('            repacked = WORK.parent / "cache" / "repacked" / hashlib.sha1(signature(utoc, ucas, pak).encode()).hexdigest()[:16]\n',
+                      "            repacked = repack_dir(entries, utoc, ucas, pak)\n")):
+        if source.count(old) == 1:
+            source = source.replace(old, new, 1)
 # The animation lives beside its still: a character's cleanup (keep_only .png) keeps a .webp written after the .png (a flow
 # animation; an older animation mod's .webp is older and still goes), and a dropped form or an empty loadout takes its .webp too
 cleanup = [
@@ -191,8 +241,8 @@ vfx_hooks = [
     ("(MARGIN + 4, y + bh + 24)", "(MARGIN + 4, y + bh + 16)"),
     ("(w - MARGIN - 4, y + bh + 24)", "(w - MARGIN - 4, y + bh + 16)"),
     ("font(84", "font(55"),
-    ("\nANIM = 7 ", "\nANIM = 13 "),
-    ('REDO = {"sound": 4, "anim": 6}', 'REDO = {"sound": 13, "anim": 10, "vfx": 8}'),
+    ("\nANIM = 7 ", "\nANIM = 14 "),   # 14 with REDO anim 14: cached animation previews render once more, at 60 frames a second
+    ('REDO = {"sound": 4, "anim": 6}', 'REDO = {"sound": 13, "anim": 14, "vfx": 8}'),
     # sound cards: the VFX labels' size (55 px, weight 560), the speaker icon and spacing scaled to match
     ("font(52, 520)", "font(55, 560)"),
     ("icon_image(VOLUME_ICON, 48,", "icon_image(VOLUME_ICON, 51,"),
@@ -254,6 +304,82 @@ if source.count(kept_none) == 1:
         '            print(f"# {key}: nothing to show this time, its preview from the same files is kept (Regenerate tries again)", file=sys.stderr, flush=True)\n'
         '            kind = "kept"\n'
         + kept_none.replace('index[key] = {', 'index[key] = index[key] if kept_old else {', 1)), 1)
+# White Fox's fox form (her ultimate, form 10601) gets no picture of its own beside her (cable, 2026-11-12): it is
+# rendered only when it is the one form a mod changes. A kit without this exact line keeps both.
+fox_form = '    return [min([p for p in ps if not p.endswith("_Lobby")] or ps, key=len) for _, ps in sorted(forms.items())]'
+if source.count(fox_form) == 1:
+    source = source.replace(fox_form, fox_form.replace("for _, ps in sorted(forms.items())]", 'for f, ps in sorted(forms.items()) if f != "10601" or len(forms) == 1]'), 1)
+# Animated previews at 60 frames a second (15 before). The game's clips are keyed at 30, so a sample between two keys
+# blends both (the curve read at a subframe), where the kit took the nearest key. Four times the frames in about the old
+# render time: each frame's edges get one FXAA pass instead of five samples (the outline covers the edges). A kit
+# without these exact lines keeps its 15.
+anim_render = kit / "previews" / "render_anim.py"
+anim_hooks = [
+    (mesh_path, repr(str(kit / "meshes"))),   # the copy runs from this folder: its mesh reader is still the kit's
+    ("    samples += [(act, min(n - 1, round(i * fps / FPS))) for i in range(shown)]", "    samples += [(act, min(n - 1.0, i * fps / FPS)) for i in range(shown)]"),
+    ("    sc.frame_set(frame)\n", "    sc.frame_set(int(frame), subframe=frame - int(frame))\n"),
+    ('sc.display.render_aa = "5"', 'sc.display.render_aa = "FXAA"'),
+    # the camera is framed from the poses the 15 a second render sampled, not all four times as many (a skinned mesh read each)
+    ("for act, frame in samples:\n    pose(act, frame)\n    ev = M.evaluated_get(", "for act, frame in samples[::max(1, round(FPS / 15))]:\n    pose(act, frame)\n    ev = M.evaluated_get("),
+    # frames are read once and deleted: raw TGA, a third of a PNG's write time even uncompressed
+    ('sc.render.image_settings.file_format = "PNG"', 'sc.render.image_settings.file_format = "TARGA_RAW"'),
+    # Each clip in one animation render call over a remapped timeline, instead of a render call per frame. Measured on
+    # 279 frames: posing and rendering 10.9 s as separate calls with PNGs, 4.7 s this way, the frames the same but for
+    # 0.002% of pixels. A clip whose sampling no frame map can express keeps the call per frame
+    ("for i, (act, frame) in enumerate(samples):\n    pose(act, frame)\n    sc.render.filepath = str(out_dir / f\"f_{i:04d}.png\")\n    bpy.ops.render.render(write_still=True)\n",
+     "_runs = []\n"
+     "for _i, (_act, _f) in enumerate(samples):   # one run per clip, in order\n"
+     "    if _runs and _runs[-1][0] is _act:\n"
+     "        _runs[-1][2].append(_f)\n"
+     "    else:\n"
+     "        _runs.append((_act, _i, [_f]))\n"
+     "for _act, _base, _fs in _runs:\n"
+     "    _step = _fs[1] - _fs[0] if len(_fs) > 1 else 0\n"
+     "    _ratio = __import__(\"fractions\").Fraction(_step).limit_denominator(900) if _step > 0 else None\n"
+     "    # every sample on the mapped timeline (the clip's last frame held past its end), not only the first two\n"
+     "    if _ratio and _ratio.numerator <= 900 and all(abs(_f - min(_fs[-1], _k * float(_ratio))) < 0.02 for _k, _f in enumerate(_fs)):\n"
+     "        pose(_act, 0)\n"
+     "        sc.render.frame_map_old, sc.render.frame_map_new = _ratio.numerator, _ratio.denominator\n"
+     "        sc.frame_start, sc.frame_end = 0, len(_fs) - 1\n"
+     "        sc.render.filepath = str(out_dir / f\"c{_base:04d}_####\")\n"
+     "        bpy.ops.render.render(animation=True)\n"
+     "        sc.render.frame_map_old = sc.render.frame_map_new = 100\n"
+     "        for _k in range(len(_fs)):   # the clip's frames take their place in the whole\n"
+     "            (out_dir / f\"c{_base:04d}_{_k:04d}.tga\").rename(out_dir / f\"f_{_base + _k:04d}.tga\")\n"
+     "    else:\n"
+     "        for _k, _f in enumerate(_fs):\n"
+     "            pose(_act, _f)\n"
+     "            sc.render.filepath = str(out_dir / f\"f_{_base + _k:04d}.tga\")\n"
+     "            bpy.ops.render.render(write_still=True)\n"),
+]
+# their frames get their rim on threads and are encoded in chunks on threads (speed.py write_webp)
+anim_save = [
+    ('    frames = sorted(frames_dir.glob("f_*.png"))\n', '    frames = sorted(frames_dir.glob("f_*.*"))\n'),   # .tga now
+    ("    save_webp([outlined(Image.open(f).convert(\"RGBA\")) for f in frames], out_webp)\n", "    save_webp(on_threads(lambda f: outlined(Image.open(f).convert(\"RGBA\")), frames), out_webp)\n"),
+    ("    frames[0].save(tmp, save_all=True, append_images=frames[1:], duration=round(1000 / ANIM_FPS), loop=0, quality=80, method=2, kmax=1)\n", "    write_webp(frames, tmp, round(1000 / ANIM_FPS))\n"),
+]
+if all(source.count(old) == 1 for old, _ in anim_save):
+    for old, new in anim_save:
+        source = source.replace(old, new, 1)
+anim_fps = "ANIM_SIZE, ANIM_FPS, ANIM_SECONDS, ANIM_SHORTEST = (512, 724), 15, 6.0, 0.3"
+anim_path = 'KIT / "previews" / "render_anim.py"'
+anim_source = anim_render.read_text(encoding="utf-8-sig") if anim_render.exists() else ""
+if all(anim_source.count(old) == 1 for old, _ in anim_hooks) and source.count(anim_fps) == 1 and source.count(anim_path) == 1:
+    for old, new in anim_hooks:
+        anim_source = anim_source.replace(old, new, 1)
+    patched_anim = runtime / "render_anim.py"
+    if not patched_anim.exists() or patched_anim.read_text(encoding="utf-8") != anim_source:
+        patched_anim.write_text(anim_source, encoding="utf-8")
+    source = source.replace(anim_fps, anim_fps.replace("15, 6.0", "60, 6.0"), 1).replace(anim_path, "Path(" + repr(str(patched_anim)) + ")", 1)
+# Blender's render server is the one the last run left open, when a keeper still has it (speed.py kept, keeper.py). A
+# kit without this exact line starts its own each run, as before.
+open_blender = '''        cls.proc = subprocess.Popen([str(bl), "-b", "--factory-startup", "--python", str(BLENDER_SERVER)],
+                                    stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+                                    encoding="utf-8", errors="replace", creationflags=NO_WINDOW,
+                                    env={**os.environ, "REPAKXTRA_STAGES": "1"})
+'''
+if source.count(open_blender) == 1:
+    source = source.replace(open_blender, '        cls.proc = kept([str(bl), "-b", "--factory-startup", "--python", str(BLENDER_SERVER)], {"REPAKXTRA_STAGES": "1"})\n', 1)
 # A different fingerprint regenerates cached renders as they are requested. The rim setting is not part of it: changing
 # the setting must not render every preview again
 # (10001: painted galaxy skins, flow lines and their animation. 10002: blueprint skins, galaxy masks and sprites, borrowed

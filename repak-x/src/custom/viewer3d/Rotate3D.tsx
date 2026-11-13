@@ -320,6 +320,23 @@ export function Viewer3DWindow({ title, sub, viewKey, paths, set, onClose }: {
   )
 }
 
+/** While a loadout page or a mod's details show Rotate in 3D (`on`) and its view is not made yet: the kit gets it ready
+ *  (xtra_viewer.rs prepare_mod_viewer), so the first click on an encrypted mod skips its unpack. Asked once per open,
+ *  after a second on the page, so paging through mods asks for none. */
+export function usePrepare3d(on: boolean, key: string, paths: string[], set: string | null) {
+  const sig = paths.join('|')
+  useEffect(() => {
+    if (!on || !paths.length) return
+    let live = true
+    const t = setTimeout(() => {
+      invoke<string>('viewer_state', { key, paths }).then(s => {
+        if (live && s !== 'ready' && s !== 'none' && s !== 'overridden') void invoke('prepare_mod_viewer', { paths, set }).catch(() => undefined)
+      }).catch(() => undefined)
+    }, 1000)
+    return () => { live = false; clearTimeout(t) }
+  }, [on, key, sig, set]) // eslint-disable-line react-hooks/exhaustive-deps
+}
+
 /** Whether Rotate in 3D can show anything for this key (viewer_state is not "none": the kit found a VFX, UI, sound or
  *  animation mod), asked again whenever previews change (`rev`). */
 export function use3dPossible(key: string, rev: number) {

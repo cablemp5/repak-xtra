@@ -107,6 +107,16 @@ fn prune_exports(current: &str) {
 
 /// Whether an export's physics.json is this version's (v 2: with the KawaiiPhysics chains). An older or missing one
 /// reads as not made, so the export is made again.
+/// A Spider-Man export whose idle is his Lobby_Stand_Idle hangs him upside down from his web. Kit 21 takes the first
+/// lobby idle that stands, so with that kit installed such an export is made again (never with an older kit, which
+/// would only make the same one on every open).
+fn hangs(model: &serde_json::Value) -> bool {
+    crate::xtra_kit::installed_version().is_some_and(|v| v >= 21) && hangs_upside_down(model)
+}
+fn hangs_upside_down(model: &serde_json::Value) -> bool {
+    model["target"].as_str().is_some_and(|t| t.contains("/Characters/1036/")) && model["idle"]["anim"].as_str().is_some_and(|a| a.ends_with("/Lobby_Stand_Idle"))
+}
+
 fn physics_current(export: &Path) -> bool {
     std::fs::read(export.join("physics.json")).ok().and_then(|b| serde_json::from_slice::<serde_json::Value>(&b).ok()).is_some_and(|p| p["v"].as_u64().unwrap_or(0) >= 3)
 }
@@ -150,7 +160,7 @@ pub fn viewer_state(key: String, paths: Vec<String>) -> &'static str {
         // and for its v 3: additive pose assets and how far a chain lags behind a turn)
         let no_physics = model["lobby"] == true && !physics_current(&export);
         let unnamed = || !export.join("slots.json").is_file() && glb_has_unnamed_slot(&export.join("model.glb")); // last: it reads the file
-        return if !base_gone && !old && !no_physics && !unnamed() && (paths.is_empty() || read(export.join("stamp.json")) == stamp_of(&paths)) { "ready" } else { "stale" };
+        return if !base_gone && !old && !no_physics && !hangs(&model) && !unnamed() && (paths.is_empty() || read(export.join("stamp.json")) == stamp_of(&paths)) { "ready" } else { "stale" };
     }
     let none = dir.join(format!("{key}.3d-none.json"));
     if none.is_file() && (paths.is_empty() || read(none) == stamp_of(&paths)) {
@@ -217,6 +227,11 @@ fn run_kit(who: &'static str, extra: &str, jobs: &[(String, String)], set: Optio
 /// Anything else holding it (a preview run, a kit install) is answered at once.
 pub(crate) fn reserve_waiting(who: &'static str) -> Result<crate::xtra_previews::Hold, &'static str> {
     use std::sync::atomic::Ordering;
+    // the background prepare (prepare_mod_viewer): the kit now or not at all, never ahead of a click waiting for it and
+    // never stopping a texture check
+    if who == "prepare" {
+        return if WAITERS.load(Ordering::SeqCst) > 0 { Err("prepare") } else { crate::xtra_previews::reserve(who) };
+    }
     // someone else (a click) is waiting: the texture check steps aside instead of taking its next batch first
     if who == "texcheck" && WAITERS.load(Ordering::SeqCst) > 0 {
         return Err("texcheck");
@@ -244,7 +259,7 @@ pub(crate) fn reserve_waiting(who: &'static str) -> Result<crate::xtra_previews:
             }
             // the default skin exported in the background behind an open 3D view (Rotate3D.tsx): the click waits its
             // turn instead of answering "The 3D model is being prepared"
-            Err("viewer") if who != "texcheck" && std::time::Instant::now() < until => std::thread::sleep(std::time::Duration::from_millis(200)),
+            Err("viewer" | "prepare") if who != "texcheck" && std::time::Instant::now() < until => std::thread::sleep(std::time::Duration::from_millis(200)),
             other => {
                 if stopped {
                     let _ = std::fs::remove_file(&stop); // only the Stop this click wrote, before its own run starts
@@ -304,6 +319,24 @@ pub async fn generate_mod_viewer(app: AppHandle, paths: Vec<String>, set: Option
     .map_err(|e| e.to_string())?
 }
 
+/// Gets a 3D view of these mods (or a loadout with `set`) ready before it is asked for: an encrypted mod in it unpacked and
+/// the exporter started (the kit's --viewer --prepare, preview_fixes/speed.py prepare_viewer). A loadout page or a mod's
+/// details call it while open, so a first Rotate in 3D of an encrypted mod skips the unpack (20 to 24 s with no helper
+/// open, 8 s after this). Quiet: when the kit is busy or missing, nothing is prepared and the click works as before.
+#[tauri::command]
+pub async fn prepare_mod_viewer(paths: Vec<String>, set: Option<String>, state: State<'_, Arc<Mutex<crate::AppState>>>) -> Result<(), String> {
+    if crate::is_game_process_running() {
+        return Ok(()); // the game needs the memory more
+    }
+    let jobs = jobs_of(&paths);
+    let paks = paks_of(&state);
+    tauri::async_runtime::spawn_blocking(move || {
+        let _ = run_kit("prepare", "--viewer", &jobs, set.as_deref(), &["--prepare"], paks, |_| {});
+    })
+    .await
+    .map_err(|e| e.to_string())
+}
+
 /// The game's own skin of a mesh, no mod mounted (the viewer's Default skin), exported once as default-<mesh>.3d
 /// (the kit's --viewer --target, preview_fixes/viewer_lobby.py). Returns its key; the kit's steps go out as
 /// mod-viewer-stage like a mod's export. An export from before model.json v2 is made again.
@@ -317,7 +350,7 @@ pub async fn generate_default_viewer(app: AppHandle, target: String, state: Stat
     let model: serde_json::Value = std::fs::read(previews_dir().join(format!("{key}.3d")).join("model.json")).ok()
         .and_then(|b| serde_json::from_slice(&b).ok()).unwrap_or_default();
     let has_physics = model["lobby"] != true || physics_current(&previews_dir().join(format!("{key}.3d")));
-    if model["v"].as_u64().unwrap_or(0) >= 2 && has_physics {
+    if model["v"].as_u64().unwrap_or(0) >= 2 && has_physics && !hangs(&model) {
         let _ = std::fs::write(previews_dir().join(format!("{key}.3d")).join("used"), b""); // opened now: prune keeps it
         return Ok(key);
     }
@@ -460,6 +493,15 @@ pub(crate) fn texcheck_reasons(mod_paths: &[String]) -> Vec<(String, String)> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn only_spider_mans_stand_idle_hangs() {
+        let m = |target: &str, anim: &str| serde_json::json!({ "target": target, "idle": { "anim": anim } });
+        assert!(hangs_upside_down(&m("/Game/Marvel/Characters/1036/1036001/Meshes/SK_1036_1036001", "/Game/Marvel/Characters/1036/1036001/Animations/HeroDetails/Lobby_Stand_Idle")));
+        assert!(!hangs_upside_down(&m("/Game/Marvel/Characters/1036/1036001/Meshes/SK_1036_1036001", "/Game/Marvel/Characters/1036/1036001/Animations/HeroDetails/Lobby_Half_Idle")));
+        assert!(!hangs_upside_down(&m("/Game/Marvel/Characters/1026/1026001/Meshes/SK_1026_1026001", "/Game/Marvel/Characters/1026/1026001/Animations/HeroDetails/Lobby_Stand_Idle")));
+        assert!(!hangs_upside_down(&serde_json::json!({})));
+    }
 
     #[test]
     fn viewer_files_stay_inside() {

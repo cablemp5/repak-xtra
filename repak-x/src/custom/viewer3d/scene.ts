@@ -27,7 +27,7 @@ export type Viewer = { dispose: () => void; reset: () => void; cosmic: boolean; 
  *  physics and sounds) stops on the frame it is on, the view still turns (Options > Pause idle). lost: resolves when the
  *  GPU device is lost (a driver reset), the view then draws nothing more. */
 
-const FPS = 30
+const FPS = 60
 /** One light of the hero's lobby rig (<skin>_HeroDetail_LightBP, the character lighting channel; the kit's rig.json)
  *  converted the way the game's scene export does: intensity in three's units (Unreal's / PI), linear color, a three
  *  quaternion whose local +X is where the light shines, position in meters from the stand, spot cones in degrees. */
@@ -44,8 +44,6 @@ const RIG: RigLight[] = [
   { name: 'Fill_Light', kind: 'spot', color: [1, 1, 1], intensity: 3.1830988, castShadow: false, quaternion: [-0.71785927, -0.12873343, 0.27938402, -0.62454015], position: [-1.6799382, 2.418698, 1.9985989], range: 20, innerConeAngle: 0, outerConeAngle: 60 },
   { name: 'Rim_Light_01', kind: 'directional', color: [1, 0.7304609, 0.30946895], intensity: 3.1830988, castShadow: true, quaternion: [0.013449855, 0.43816805, 0.26260704, -0.85957277], sourceAngle: 0.5357, specularScale: 0.5 },
 ]
-// The gallery's character_Shadow_Light: shadow only (the floor's fake shadow at 0.7), fixed in the world, not turned
-const SHADOW_LIGHT = { position: [0.5239688, 1.3131104, 1.181713], quaternion: [-0.23610854, 0.42524, -0.29488605, 0.8224755], opacity: 0.7 }
 // The start view: the game viewer's free orbit (toward (0, 1, 0), 60 degrees across at 16:9 or wider), from 4.3 m
 // instead of its 3 so the whole model and its feet fit
 // The game's Hero Profile camera stands 0.454 m to the hero's left at 3.315 m (HG_Stand): the start view keeps that
@@ -305,37 +303,20 @@ export async function createViewer(host: HTMLElement, key: string, still: boolea
       if (o.userData.outlineFrom) outlineShell(kit, o, o.userData.outlineFrom)
     })
     window.addEventListener(OUTLINE_EVENT, onOutline)
-    // the stage, centered on where the model stands: a soft pool of light that fades out with no edge, a dark contact
-    // shadow under the feet so the model stands on it, and the shadow light's cast shadow, as soft as the pool it
-    // falls on: drawn from a small map (its blur is a few texels, so a 2048 px map's was half a centimeter, a cutout
-    // pasted on the floor), lighter than the contact shadow, and gone well before the pool's edge. shortcut: the
-    // pool, contact and cast strengths are picked by eye, the lobby's own floor meshes are not exported
-    const sun = new THREE.DirectionalLight(0xffffff, 0.01)
-    sun.position.fromArray(SHADOW_LIGHT.position)
-    sun.quaternion.fromArray(SHADOW_LIGHT.quaternion)
-    sun.add(sun.target)
-    sun.target.position.set(1, 0, 0)
-    shadowed(sun, 0.5357, 0)
-    const r = Math.max(1.2, fit.radius * 2.6)
-    Object.assign(sun.shadow.camera, { left: -r, right: r, top: r, bottom: -r }) // a box the floor's size
-    sun.shadow.mapSize.set(256, 256)
-    sun.shadow.radius = 2
-    scene.add(sun)
-    const disc = new THREE.CircleGeometry(r, 128)
+    // the stage: one soft shadow under the model and nothing else. It only ever darkens the floor (black, its alpha
+    // falling to nothing at the disc's edge with no step), so there is no lit pool to read as a brighter ring and no
+    // cast shadow map to show its box. shortcut: a blob the model's footprint wide, not the model's own outline
+    const r = Math.max(0.5, fit.radius * 1.15)
+    const disc = new THREE.CircleGeometry(r, 64)
     disc.rotateX(-Math.PI / 2)
     const d = length(uv().sub(0.5)).mul(2) // 0 at the center, 1 at the edge
-    const pool = float(1).sub(smoothstep(0, 1, d)).pow(2).mul(0.18)
-    const floorMat = new THREE.MeshBasicNodeMaterial({ transparent: true, depthWrite: false })
-    floorMat.colorNode = vec4(0.82, 0.82, 0.82, pool)
-    const contactMat = new THREE.MeshBasicNodeMaterial({ transparent: true, depthWrite: false })
-    contactMat.colorNode = vec4(0, 0, 0, float(1).sub(smoothstep(0, 0.22, d)).pow(1.5).mul(0.5))
-    const shadowMat = new THREE.ShadowNodeMaterial({ transparent: true, depthWrite: false })
-    shadowMat.colorNode = vec4(0, 0, 0, float(1).sub(smoothstep(0.25, 0.85, d)).mul(0.75))
-    shadowMat.lightsNode = lights([sun])
-    const floor = new THREE.Mesh(disc, floorMat), contact = new THREE.Mesh(disc, contactMat), catcher = new THREE.Mesh(disc, shadowMat)
-    catcher.receiveShadow = true
-    for (const [i, m] of [floor, contact, catcher].entries()) { m.position.set(0, fit.floor + i * 0.0005, 0); m.renderOrder = i - 3; scene.add(m) }
-    owned.push(disc, floorMat, contactMat, shadowMat)
+    const shadowMat = new THREE.MeshBasicNodeMaterial({ transparent: true, depthWrite: false })
+    shadowMat.colorNode = vec4(0, 0, 0, float(1).sub(smoothstep(0, 1, d)).pow(2).mul(0.6))
+    const blob = new THREE.Mesh(disc, shadowMat)
+    blob.position.set(0, fit.floor + 0.0005, 0)
+    blob.renderOrder = -1
+    scene.add(blob)
+    owned.push(disc, shadowMat)
     const up = new THREE.Vector3(0, 1, 0)
     const follow = () => {
       const turn = Math.atan2(camera.position.x, camera.position.z) - START_TURN // none at the start view

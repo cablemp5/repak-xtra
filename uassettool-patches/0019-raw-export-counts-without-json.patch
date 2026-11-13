@@ -1,0 +1,45 @@
+diff --git a/src/UAssetTool/Program.cs b/src/UAssetTool/Program.cs
+--- a/src/UAssetTool/Program.cs
++++ b/src/UAssetTool/Program.cs
+@@ -2942,6 +2942,8 @@
+                 // Additional CLI-equivalent operations for parity
+                 "dump" => DumpAssetJson(request.FilePath, request.UsmapPath),
+                 "skeletal_mesh_info" => GetSkeletalMeshInfoJson(request.FilePath, request.UsmapPath),
++                // repakxtra: how many exports of each file the tool could not read (0019)
++                "batch_raw_export_counts" => RawExportCountsJson(request.FilePaths, request.UsmapPath),
+                 "to_json" or "batch_to_json" => ToJsonJson(request.FilePath, request.FilePaths, request.UsmapPath, request.OutputPath, request.Compact, request.BasePath),
+                 "compact_json" => ToJsonJson(request.FilePath, request.FilePaths, request.UsmapPath, request.OutputPath, compact: true, basePath: request.BasePath),
+                 "from_json" or "batch_from_json" => FromJsonJson(request.FilePath, request.FilePaths, request.OutputPath, request.UsmapPath, request.BasePath),
+@@ -8236,6 +8238,32 @@
+         }
+     }
+     
++    // repakxtra: for each file that loads, how many of its exports the tool kept as raw bytes, as "count<TAB>path"
++    // lines in the message. The app's read-back check before packing asked for the whole JSON of every rebuilt file
++    // (100 MB for a mod's 400 materials, serialized, written, and parsed again) only to count the RawExport entries
++    // in it. The files load exactly as batch_to_json loads them (the same mappings, the same preload of referenced
++    // assets), and a file that does not load has no line, as it had no JSON
++    private static UAssetResponse RawExportCountsJson(List<string>? filePaths, string? usmapPath)
++    {
++        if (filePaths == null || filePaths.Count == 0)
++            return new UAssetResponse { Success = false, Message = "file_paths is required" };
++        Usmap? mappings = LoadMappings(usmapPath);
++        var lines = new System.Collections.Concurrent.ConcurrentBag<string>();
++        Parallel.ForEach(filePaths, new ParallelOptions { MaxDegreeOfParallelism = Environment.ProcessorCount }, fp =>
++        {
++            try
++            {
++                var asset = LoadAssetWithMappings(fp, mappings);
++                PreloadReferencedAssetsForSchemas(asset);
++                int raw = 0;
++                foreach (var export in asset.Exports) if (export.GetType().Name.Contains("RawExport")) raw++;
++                lines.Add(raw + "\t" + fp);
++            }
++            catch (Exception) { }
++        });
++        return new UAssetResponse { Success = true, Message = string.Join("\n", lines) };
++    }
++
+     private static UAssetResponse ToJsonJson(string? filePath, List<string>? filePaths, string? usmapPath, string? outputPath, bool compact = false, string? basePath = null)
+     {
+         // Batch mode: file_paths provided → parallel processing
