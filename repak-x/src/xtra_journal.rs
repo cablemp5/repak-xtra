@@ -16,6 +16,16 @@ pub struct Plan {
     pub trashed: Vec<PathBuf>,
     /// each rename, in order (from, to)
     pub renames: Vec<(PathBuf, PathBuf)>,
+    /// each rename's file as it was (size, modified ms), set by begin: a rename is undone only for that same file, so a
+    /// swap that undid itself before the note went never moves a restored original again
+    #[serde(default)]
+    pub ids: Vec<Option<(u64, u64)>>,
+}
+
+/// A file's size and modified time (ms): kept by a rename, so it names the file wherever it moved.
+fn id(p: &Path) -> Option<(u64, u64)> {
+    let m = std::fs::metadata(p).ok()?;
+    Some((m.len(), m.modified().ok()?.duration_since(std::time::UNIX_EPOCH).ok()?.as_millis() as u64))
 }
 
 fn dir() -> PathBuf {
@@ -41,12 +51,14 @@ fn begin_in(dir: &Path, plan: &Plan) -> Result<Open, String> {
     std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
     let path = dir.join(format!("{}.json", uuid::Uuid::new_v4()));
     let mut f = std::fs::File::create(&path).map_err(|e| e.to_string())?;
-    f.write_all(&serde_json::to_vec(plan).map_err(|e| e.to_string())?).and_then(|_| f.sync_all()).map_err(|e| format!("Could not note the swap before it starts: {e}"))?;
+    let ids = plan.renames.iter().map(|(from, _)| id(from)).collect();
+    let noted = Plan { trash: plan.trash.clone(), trashed: plan.trashed.clone(), renames: plan.renames.clone(), ids };
+    f.write_all(&serde_json::to_vec(&noted).map_err(|e| e.to_string())?).and_then(|_| f.sync_all()).map_err(|e| format!("Could not note the swap before it starts: {e}"))?;
     Ok(Open(path))
 }
 
-/// Puts back every swap a closed or crashed run cut short: each rename undone, newest first, where its new name exists
-/// and its old one is free, then each file it sent to Recently deleted back where it was. Run at start, before the
+/// Puts back every swap a closed or crashed run cut short: each rename undone, newest first, where its new name holds
+/// the file it moved and its old one is free, then each file it sent to Recently deleted back where it was. Run at start, before the
 /// staging folders are swept (an update's files may still sit in one). Returns what could not be put back.
 pub fn recover() -> Vec<String> {
     recover_in(&dir())
@@ -60,8 +72,10 @@ fn recover_in(dir: &Path) -> Vec<String> {
             let _ = std::fs::remove_file(&path); // cut short while it was written: the swap never started
             continue;
         };
-        for (from, to) in plan.renames.iter().rev() {
-            if to.exists() && !from.exists() {
+        for (i, (from, to)) in plan.renames.iter().enumerate().rev() {
+            // only the file that rename moved (its size and time): never one put back there since
+            let moved = plan.ids.get(i).copied().flatten().is_some_and(|was| id(to) == Some(was));
+            if moved && !from.exists() {
                 if let Err(e) = std::fs::rename(to, from) {
                     stuck.push(format!("{} could not go back to {} ({e})", to.display(), from.display()));
                 }
@@ -98,7 +112,7 @@ mod tests {
         std::fs::write(&orig, b"original").unwrap();
         std::fs::write(&tmp, b"update").unwrap();
         std::fs::write(&old_other, b"older broken copy").unwrap();
-        let plan = Plan { trash: Some(trash.clone()), trashed: vec![old_other.clone()], renames: vec![(orig.clone(), broken.clone()), (tmp.clone(), orig.clone())] };
+        let plan = Plan { trash: Some(trash.clone()), trashed: vec![old_other.clone()], renames: vec![(orig.clone(), broken.clone()), (tmp.clone(), orig.clone())], ..Default::default() };
         // finished: the journal goes with the handle
         drop(begin_in(&j, &plan).unwrap());
         assert_eq!(std::fs::read_dir(&j).unwrap().count(), 0);
@@ -112,6 +126,13 @@ mod tests {
         assert_eq!(std::fs::read(&tmp).unwrap(), b"update", "the update back to its temporary name (swept later)");
         assert_eq!(std::fs::read(&old_other).unwrap(), b"older broken copy", "the replaced file is back");
         assert!(!broken.exists() && std::fs::read_dir(&j).unwrap().count() == 0);
+        // cut short after the swap undid itself (its temporary files deleted, the original back): nothing moves
+        std::mem::forget(begin_in(&j, &plan).unwrap());
+        std::fs::remove_file(&tmp).unwrap();
+        assert!(recover_in(&j).is_empty());
+        assert_eq!(std::fs::read(&orig).unwrap(), b"original", "a restored original is not taken for the update");
+        assert!(!tmp.exists());
+        std::fs::write(&tmp, b"update").unwrap();
         // cut short before anything moved: nothing changes
         std::mem::forget(begin_in(&j, &plan).unwrap());
         assert!(recover_in(&j).is_empty());

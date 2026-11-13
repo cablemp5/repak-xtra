@@ -767,7 +767,7 @@ fn place(source: &Path, staged_base: &Path, turn_off_original: bool, keep_name: 
         })
         .filter(|(from, to)| from != to)
         .collect();
-    let plan = crate::xtra_journal::begin(&crate::xtra_journal::Plan { trash: trash.clone(), trashed: existing.clone(), renames: originals.iter().cloned().chain(finals.iter().cloned()).collect() });
+    let plan = crate::xtra_journal::begin(&crate::xtra_journal::Plan { trash: trash.clone(), trashed: existing.clone(), renames: originals.iter().cloned().chain(finals.iter().cloned()).collect(), ..Default::default() });
     let plan = match plan {
         Ok(p) => p,
         Err(e) => {
