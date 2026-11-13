@@ -364,6 +364,12 @@ def unpack_ahead(work, cfg, entries):
             shutil.rmtree(repacked, ignore_errors=True)
             tmp.rename(repacked)
     on_threads(one, todo, 6)
+    # mount() trims the kept ones to the 20 newest only when it unpacks one itself: here, never this run's own
+    mine = {kept_at(e) for e in entries if obfuscated(e[1])}
+    old = sorted((d for d in (WORK.parent / "cache" / "repacked").iterdir() if d.is_dir() and not d.name.endswith(".tmp") and d not in mine),
+                 key=lambda d: d.stat().st_mtime, reverse=True)
+    for d in old[max(0, 20 - len(mine)):]:
+        shutil.rmtree(d, ignore_errors=True)
     stage("mount")
 
 

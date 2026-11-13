@@ -91,7 +91,8 @@ function update() {
         && a.effect?.getComputedTiming().iterations === Infinity && !target?.matches(':hover')) { a.pause(); loops.add(a) }
     })
   } else {
-    videos.forEach(v => { if (v.isConnected) v.play().catch(() => undefined) })
+    // one scrolled out of view while focus was away waits for the view instead (inView)
+    videos.forEach(v => { if (!v.isConnected) return; if (outside.has(v)) away.add(v); else v.play().catch(() => undefined) })
     loops.forEach(a => { if (a.playState === 'paused') a.play() })
     thaw()
     videos.clear()
@@ -108,13 +109,20 @@ document.addEventListener('load', e => { if (isIdle() && e.target instanceof HTM
 // A looping video plays only while it is in view (or about to be). Every card of the Loadouts grid stays mounted, so
 // 29 of 31 animated covers played off screen: each a decoder and a layer redrawn 60 times a second, and a scroll of
 // the grid spent 6.5 ms of every 6.9 ms frame sorting layers (.agent/perf/layers.mjs, trace-summary.mjs, 2026-11-12)
-const away = new WeakSet<HTMLVideoElement>() // paused for being out of view
+const away = new WeakSet<HTMLVideoElement>() // paused for being out of view: plays again when it comes into view
+const outside = new WeakSet<HTMLVideoElement>() // out of view as of the observer's last report
 const seen = new WeakSet<HTMLVideoElement>()
 const inView = new IntersectionObserver(entries => {
   for (const e of entries) {
     const v = e.target as HTMLVideoElement
-    if (!e.isIntersecting) { if (!v.paused) { away.add(v); v.pause() } }
-    else if (away.delete(v) && !isIdle()) v.play().catch(() => undefined)
+    if (!e.isIntersecting) {
+      outside.add(v)
+      if (!v.paused) { away.add(v); v.pause() }
+    } else {
+      outside.delete(v)
+      // into view while the window is in the background: it plays when focus returns (update)
+      if (away.delete(v)) { if (isIdle()) videos.add(v); else v.play().catch(() => undefined) }
+    }
   }
 }, { rootMargin: '200px' })
 
