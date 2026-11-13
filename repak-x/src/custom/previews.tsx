@@ -18,6 +18,7 @@ import { animatedUrls, coverStills, isIdle } from './idlePause'
 import { smallClipAway, smallCopyAway } from './thumbWorker'
 import { koPreview } from './ko/koPreview'
 import { verdictOf } from './brokenMods'
+import { APP_NAME } from './edition'
 import { fixInVfxWindow } from './vfx/handoff'
 import { KO_BEAT } from './ko/render'
 import { Rotate3DButton, Viewer3D, shows3d, use3dPossible } from './viewer3d/Rotate3D'
@@ -110,7 +111,7 @@ let run = { id: '', total: 0, made: 0, none: 0, failed: 0, stopping: false, summ
 let runPaths = new Map<string, string>() // the run's mods by preview key, for the failure toast
 let version = 0
 const listeners = new Set<() => void>()
-const notify = () => { version++; listeners.forEach(l => l()) }
+const notify = () => { version++; listeners.forEach(l => l()); saveLeft() }
 const subscribe = (l: () => void) => { listeners.add(l); return () => listeners.delete(l) }
 
 /** Reads which previews exist. After a run it also drops the other-form images (<key>@2) the generator deleted, since
@@ -184,6 +185,7 @@ const warnListeners = new Set<(key: string) => void>()
 listen<string>('mod-preview-warn', e => { if (active && !run.quiet) warnListeners.forEach(l => l(e.payload)) }).catch(() => undefined)
 listen('mod-previews-busy', () => { // the generator refused: another one holds its lock. Nothing starts until done
   if (!active) return
+  leftPending = unfinished()
   run.busy = BUSY
   for (const k of [...pending, ...(run.set ? [run.set] : []), ...queue.flatMap(keysOf)]) outcome.set(k, BUSY)
   pending.clear()
@@ -217,7 +219,7 @@ function finish(ok: boolean) {
     failureListeners.forEach(f => f({ name: run.name, failed, setFailed: run.setResult === 'failed', stale }))
   }
   play(run.busy ? 'warning' : stoppedEarly ? 'close' : run.made && !failed && run.setResult !== 'failed' ? 'ready' : run.made ? 'warning' : 'error')
-  batchDone++
+  if (!run.busy) batchDone++
   notify()
   syncPreviewList()
   startNext()
@@ -491,6 +493,43 @@ export function usePreviewUrl(key: string | undefined, thumb = false) {
   return cached ?? (shown.key === key && rev !== undefined ? shown.url : null)
 }
 
+// Only the main window owns the journal. An interrupted job repeats, but finished jobs stay finished.
+const LEFT_KEY = 'repakxtra.previewQueue'
+type Left = { jobs: Job[]; done: number }
+let current: QueuedJob | null = null
+let leftArmed = false
+let leftSaved: string | undefined
+let leftPending: Left | null = null
+function readLeft(text: string | null): Left | null {
+  try {
+    const value = JSON.parse(text ?? 'null')
+    if (!value || !Number.isSafeInteger(value.done) || value.done < 0 || !Array.isArray(value.jobs) || !value.jobs.length) return null
+    if (!value.jobs.every((j: Job) => j && Array.isArray(j.paths) && j.paths.length > 0 && j.paths.every(p => typeof p === 'string' && p.length > 0)
+      && typeof j.name === 'string' && (j.set === undefined || typeof j.set === 'string')
+      && [j.force, j.show, j.quiet].every(v => v === undefined || typeof v === 'boolean'))) return null
+    return value
+  } catch { return null }
+}
+function unfinished(): Left {
+  return { jobs: (active && current && !run.stopping ? [current, ...queue] : [...queue])
+    .filter(j => !j.quiet).map(({ paths, set, name, force, show }) => ({ paths, set, name, force, show })), done: batchDone }
+}
+function saveLeft() {
+  if (!leftArmed) return
+  const left = leftPending ?? unfinished()
+  const text = left.jobs.length ? JSON.stringify(left) : ''
+  if (text === leftSaved) return
+  try {
+    if (text) localStorage.setItem(LEFT_KEY, text); else localStorage.removeItem(LEFT_KEY)
+    leftSaved = text
+  } catch { /* Retry on the next progress event if storage is temporarily unavailable. */ }
+}
+function armLeft() {
+  if (leftArmed) return
+  try { leftPending = readLeft(localStorage.getItem(LEFT_KEY)) } catch { /* storage unavailable */ }
+  leftArmed = true
+}
+
 const running = () => active
 /** The run going now: done of total counts its mods (a loadout's combined render is not one of them). */
 const doneOf = () => Math.min(run.total - pending.size + 1, run.total)
@@ -499,6 +538,16 @@ const doneOf = () => Math.min(run.total - pending.size + 1, run.total)
  *  or null (started or queued; a queued job that later fails to start reports through the summary and its keys). */
 export const generatePreviews = (job: Job): Promise<string | null> => {
   const q: QueuedJob = { ...job, id: jobId(job) }
+  if (leftPending && !running()) {
+    batchDone = leftPending.done
+    for (const j of leftPending.jobs) {
+      const id = jobId(j)
+      if (!queue.some(x => x.id === id)) queue.push({ ...j, id })
+    }
+    leftPending = null
+    if (!queue.some(x => x.id === q.id)) queue.push(q)
+    return start(queue.shift()!)
+  }
   if (!running()) return start(q)
   if (!queue.some(x => x.id === q.id)) { queue.push(q); notify() }
   return Promise.resolve(null)
@@ -506,6 +555,7 @@ export const generatePreviews = (job: Job): Promise<string | null> => {
 
 /** A start that was refused or threw: this job and everything queued behind it get the reason; nothing else starts. */
 const refuse = (job: Job, reason: string) => {
+  leftPending = unfinished()
   active = false
   pending.clear()
   for (const j of [job, ...queue]) keysOf(j).forEach(k => outcome.set(k, reason))
@@ -521,6 +571,7 @@ const start = async (job: QueuedJob): Promise<string | null> => {
   const jobs = [...new Map(job.paths.map(p => [nameKey(p), [p.replace(/[/\\][^/\\]+$/, ''), nameKey(p)] as [string, string]])).values()]
   if (jobs.length === 0) return null
   active = true
+  current = job
   jobs.forEach(([, k]) => { pending.add(k); outcome.delete(k) })
   if (job.set) outcome.delete(job.set)
   runPaths = new Map(job.paths.map(p => [nameKey(p), p]))
@@ -632,7 +683,7 @@ export async function generateAllLoadouts(loadouts: { id: string; name: string; 
 
 /** Stops the run now (the generator is ended mid-render) and drops everything queued behind it. */
 export const stopPreviews = () => stop()
-const stop = () => { queue.length = 0; run.stopping = true; notify(); invoke('cancel_mod_previews').catch(() => undefined) }
+const stop = () => { leftPending = null; queue.length = 0; run.stopping = true; notify(); invoke('cancel_mod_previews').catch(() => undefined) }
 const unqueue = (id: string) => {
   const i = queue.findIndex(q => q.id === id)
   if (i >= 0) { queue.splice(i, 1); notify() }
@@ -659,12 +710,32 @@ export function usePreviewFailureToast(alert: ReturnType<typeof useAlert>) {
         action: { label: 'Open logs', onClick: () => { alert.dismissAlert(id); window.dispatchEvent(new Event('repakxtra-open-logs')) } },
       })
     }
+    armLeft()
+    const resume = () => {
+      if (!leftPending || !available || running() || run.busy || run.summary) return
+      const left = leftPending
+      leftPending = null
+      batchDone = left.done
+      // Stage the whole batch before starting, so the first save cannot drop the remaining jobs.
+      for (const j of left.jobs) {
+        const id = jobId(j)
+        if (!queue.some(q => q.id === id)) queue.push({ ...j, id })
+      }
+      startNext()
+      const n = left.jobs.length
+      const id = alert.info('Previews resumed', `${left.done ? `${plural(left.done, 'preview job')} finished before ${APP_NAME} closed. ` : ''}Resuming ${plural(n, 'remaining job')}. The one that was running starts again.`, {
+        duration: 10000, action: { label: 'Stop them', onClick: () => { alert.dismissAlert(id); stop() } },
+      })
+    }
+    const unsubscribeResume = subscribe(resume)
+    resume()
+    saveLeft()
     const warn = (key: string) => alert.warning('Preview may not match the game', key.startsWith(previewSetKey(''))
       ? `A mod in ${run.name} is encrypted with a key other than the game's, so the loadout's preview was made without it.`
       : `${key} is encrypted with a key other than the game's, so its files could not be read for a preview.`, { duration: 15000 })
     failureListeners.add(show)
     warnListeners.add(warn)
-    return () => { failureListeners.delete(show); warnListeners.delete(warn) }
+    return () => { unsubscribeResume(); failureListeners.delete(show); warnListeners.delete(warn) }
   }, [alert])
 }
 

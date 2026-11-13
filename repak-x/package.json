@@ -6,7 +6,7 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "test:unit": "node scripts/run-asserts.mjs && node scripts/check-loadout-warnings.mjs",
+    "test:unit": "node scripts/run-asserts.mjs && node scripts/check-loadout-warnings.mjs && node scripts/check-preview-queue.mjs",
     "test:release-notes": "node scripts/check-release-notes.mjs"
   },
   "dependencies": {
