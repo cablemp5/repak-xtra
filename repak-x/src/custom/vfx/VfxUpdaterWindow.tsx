@@ -218,9 +218,7 @@ function Row({ mod, rowKey, loadouts, run, needs, partial, waits, made, picked, 
             <span className="vf-pill-label">{statusText(run.report)}{run.report.status === 'fixed' ? ` in ${took(run.report.ms)}` : ''}</span>
             <ChevronDown size={12} className="vf-caret" aria-hidden="true" />
           </button>
-        : status && (running && step
-          ? <span className="vf-pill is-running"><span className="vf-pill-label"><SwapText text={`Step ${step} of ${STEPS.length}`} /></span></span>
-          : <span className={`vf-status is-${status}`}>{STATUS[status]}</span>)}
+        : status && !(running && step) && <span className={`vf-status is-${status}`}>{STATUS[status]}</span>/* running: the bar and its line say it */}
       {running && step ? (
         <div className="vf-progress">
           <div className="vf-bar" role="progressbar" aria-valuenow={step} aria-valuemin={0} aria-valuemax={STEPS.length} aria-label={`${mod.name} progress`}>

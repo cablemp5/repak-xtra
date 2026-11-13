@@ -114,10 +114,6 @@ button.vf-loadouts:focus-visible { outline: 2px solid var(--accent-primary); out
 .vf-step { margin: 8px 0 0; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 8px; font-size: 13px; color: var(--text-secondary); }
 /* a long message cuts off with an ellipsis, never past the row */
 .vf-step-sub { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-variant-numeric: tabular-nums; }
-.vf-pill.is-running { height: 20px !important; padding: 0 8px !important; font-size: 11px !important; cursor: default; color: color-mix(in srgb, var(--accent-primary), white 35%) !important; background: color-mix(in srgb, var(--accent-primary), transparent 84%) !important;
-  font-variant-numeric: tabular-nums; }
-.vf-pill.is-running:hover { filter: none; }
-[data-theme="light"] .vf-pill.is-running { color: color-mix(in srgb, var(--accent-primary), black 25%) !important; }
 
 /* a mod's report, under its row */
 .vf-row-panel { flex-basis: 100%; }

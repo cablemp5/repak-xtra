@@ -3068,6 +3068,7 @@ html[data-motion="off"] .ct-pop, html[data-motion="off"] .ct-btn svg { animation
 /* Launcher (Settings > General): the picked launcher gets the selected fill the app's other switches use (All, On, Off).
    SettingsPanel.css gave it the panel color, which is the track's own color in black themes */
 .segmented-control .segment-btn { transition: background-color 150ms ease, color 150ms ease !important; }
+.segmented-control .segment-btn:hover { border-color: transparent !important; }   /* no accent outline from App.css button:hover */
 .segmented-control .segment-btn.active { background: var(--bg-lighter) !important; border-color: transparent !important; box-shadow: none !important; color: var(--text-primary) !important; }
 
 /* ---------- the game's own icons (custom/icons/rivals.tsx) ---------- */
