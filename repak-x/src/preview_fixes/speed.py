@@ -172,7 +172,12 @@ def warm_exporter(cfg):
                 shared_exporter(CUE, text)
         except Exception as e:
             print(f"# exporter warm-up: {e}", file=sys.stderr, flush=True)
-    threading.Thread(target=go, daemon=True).start()
+    t = threading.Thread(target=go, daemon=True)
+    _WARMING.append(t)
+    t.start()
+
+
+_WARMING = []   # warm_exporter's threads: joined before the run hands its exporters back (close_shared_exporters)
 
 
 def _shared_exporter(exe, text):
@@ -283,6 +288,8 @@ def close_exporters():
 
 
 def close_shared_exporters():
+    for t in _WARMING:   # one still starting would be cut off by the run's end and ended by its keeper, not kept
+        t.join(120)
     for s in _SHARED.values():
         try:
             s["server"][0].stdin.close()

@@ -196,7 +196,11 @@ listen('mod-previews-busy', () => { // the generator refused: another one holds 
 // only for a run the backend took from us (launched): the done of a run that was going before ours (the last session's,
 // stopped by a pickup) came while ours read its KO mods, and ended ours as failed
 let launched = false
-listen<boolean>('mod-previews-done', e => { if (launched) finish(e.payload) }).catch(() => undefined)
+// a done that arrives while this window's start is still being answered (a run with nothing to render ends that fast) is
+// kept and taken once the backend's yes comes, or the run stayed active and the queue stuck
+let asking = false
+let earlyDone: boolean | null = null
+listen<boolean>('mod-previews-done', e => { if (launched) finish(e.payload); else if (asking) earlyDone = e.payload }).catch(() => undefined)
 /** A run's end: the kit's done event, or the KO renderer's when the kit had nothing to do (ok: it ran through). */
 function finish(ok: boolean) {
   if (!active) return // a window that did not start this run (Asset Explorer, VFX Updater) stays quiet
@@ -515,8 +519,9 @@ let retryAt = 0
 let tries = 0
 const RETRY_MS = 4000
 const TRIES = 30 // two minutes, then it waits for the next start of the app
+let gaveUp = false // the last try was refused: the batch stays saved for the next start of the app, nothing tries this session
 function retryLater() {
-  if (++tries >= TRIES) { resuming = false; return } // kept saved for the next start
+  if (++tries >= TRIES) { resuming = false; gaveUp = true; return }
   retryAt = Date.now() + RETRY_MS
   setTimeout(notify, RETRY_MS + 50)
   notify()
@@ -627,7 +632,14 @@ const start = async (job: QueuedJob): Promise<string | null> => {
   }
   run.step = undefined
   try {
-    if (await invoke<boolean>('generate_mod_previews', { jobs: kit, set: job.set ?? null, force: Boolean(job.force) })) { launched = true; return null }
+    asking = true
+    earlyDone = null
+    const took = await invoke<boolean>('generate_mod_previews', { jobs: kit, set: job.set ?? null, force: Boolean(job.force) }).finally(() => { asking = false })
+    if (took) {
+      launched = true
+      if (earlyDone !== null) finish(earlyDone)
+      return null
+    }
     return refuse(job, 'Another preview run is still going.')
   } catch (e) {
     return refuse(job, String(e))
@@ -736,7 +748,7 @@ export function usePreviewFailureToast(alert: ReturnType<typeof useAlert>) {
     armLeft()
     let told = false // one toast for the whole pickup, however many tries it takes
     const resume = () => {
-      if (!leftPending || !available || running() || Date.now() < retryAt) return
+      if (!leftPending || !available || running() || gaveUp || Date.now() < retryAt) return
       if (!resuming && (run.busy || run.summary)) return // a batch this session started and ended is not picked up again
       if (!resuming) { resuming = true; tries = 0; void invoke('cancel_mod_previews').catch(() => undefined) }
       const left = leftPending

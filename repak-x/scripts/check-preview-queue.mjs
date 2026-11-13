@@ -8,7 +8,7 @@ const source = readFileSync(new URL('../src/custom/previews.tsx', import.meta.ur
 const ast = ts.createSourceFile('previews.tsx', source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX)
 const names = new Set(`queue active batchDone run runPaths version listeners notify subscribe current leftArmed leftSaved leftPending LEFT_KEY
 readLeft unfinished saveLeft armLeft running generatePreviews refuse start startNext finish stop usePreviewFailureToast
-resuming retryAt tries RETRY_MS TRIES retryLater launched`.split(/\s+/))
+resuming retryAt tries RETRY_MS TRIES retryLater launched asking earlyDone gaveUp`.split(/\s+/))
 const declarations = ast.statements.filter(n => names.has(n.name?.text) || n.declarationList?.declarations.some(d => names.has(d.name.text)))
 assert.equal(declarations.length, names.size, 'Every queue declaration must be exercised')
 const code = ts.transpileModule(declarations.map(n => n.getText(ast).replace(/^export /, '')).join('\n'), {
@@ -17,14 +17,14 @@ const code = ts.transpileModule(declarations.map(n => n.getText(ast).replace(/^e
 const KEY = 'repakxtra.previewQueue'
 const storage = new Map()
 const job = n => ({ paths: [`C:/zz/${n}.pak`], name: n, force: true })
-function session(available = true) {
+function session(available = true, early = false) {
   const calls = [], toasts = [], cleanups = []
   const context = vm.createContext({
     console, Date, setTimeout: () => 0, pending: new Set(), outcome: new Map(), failureListeners: new Set(), warnListeners: new Set(), koKeys: new Set(),
     available, FAILED: 'failed', SET_FAILED: 'set failed', APP_NAME: 'test', KO_KEYS: 'ko',
     localStorage: { getItem: k => storage.get(k) ?? null, setItem: (k, v) => storage.set(k, v), removeItem: k => storage.delete(k) },
     jobId: j => j.set ?? j.paths.join(), nameKey: p => p.split('/').at(-1), keysOf: j => j.paths,
-    koPreview: async () => false, invoke: async (command, args) => { calls.push({ command, args }); return true },
+    koPreview: async () => false, invoke: async (command, args) => { calls.push({ command, args }); if (early && command === 'generate_mod_previews') vm.runInContext('if (asking) earlyDone = true', context); return true },
     play() {}, showPreviewCover() {}, verdictOf() {}, syncPreviewList() {},
     useEffect: fn => cleanups.push(fn()), plural: (n, word) => `${n} ${word}`, previewSetKey: n => `loadout-${n}`,
     alert: { info: (...args) => { toasts.push(args); return 1 }, dismissAlert() {}, error() {}, warning() {} },
@@ -102,6 +102,24 @@ s.run('pending.clear(); run.made = 1; finish(true)')
 await s.flush()
 assert.equal(s.run('resuming'), false, 'a pickup that ran is over')
 s.run('pending.clear(); run.made = 1; finish(true)')
+storage.delete(KEY)
+// A run that ends before the backend's yes reaches us (nothing to render): its done is kept and taken, the run is not stuck
+s = session(true, true)
+s.mount()
+await s.run(`generatePreviews(${JSON.stringify(job('fast'))})`)
+await s.flush()
+assert.equal(s.run('running()'), false, 'a done that came before the reply ends the run')
+// After the last try a picked-up batch stays saved and nothing more is tried this session
+storage.set(KEY, JSON.stringify({ jobs: [job('a')], done: 1 }))
+s = session()
+s.mount()
+await s.flush()
+s.run("tries = TRIES - 1; resuming = true; refuse(current, 'still running')")
+const after = s.calls.filter(c => c.command === 'generate_mod_previews').length
+s.run('retryAt = 0; notify()')
+await s.flush()
+assert.equal(s.calls.filter(c => c.command === 'generate_mod_previews').length, after, 'no try after the last')
+assert.deepEqual(saved().jobs.map(j => j.name), ['a'], 'kept for the next start')
 storage.delete(KEY)
 for (const bad of ['{', '{"jobs":[{}],"done":0}', '{"jobs":[],"done":-1}', '{"jobs":[{"paths":[2],"name":"x"}],"done":0}']) {
   storage.set(KEY, bad)

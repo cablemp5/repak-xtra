@@ -227,6 +227,11 @@ fn run_kit(who: &'static str, extra: &str, jobs: &[(String, String)], set: Optio
 /// Anything else holding it (a preview run, a kit install) is answered at once.
 pub(crate) fn reserve_waiting(who: &'static str) -> Result<crate::xtra_previews::Hold, &'static str> {
     use std::sync::atomic::Ordering;
+    // the background prepare (prepare_mod_viewer): the kit now or not at all, never ahead of a click waiting for it and
+    // never stopping a texture check
+    if who == "prepare" {
+        return if WAITERS.load(Ordering::SeqCst) > 0 { Err("prepare") } else { crate::xtra_previews::reserve(who) };
+    }
     // someone else (a click) is waiting: the texture check steps aside instead of taking its next batch first
     if who == "texcheck" && WAITERS.load(Ordering::SeqCst) > 0 {
         return Err("texcheck");
@@ -254,7 +259,7 @@ pub(crate) fn reserve_waiting(who: &'static str) -> Result<crate::xtra_previews:
             }
             // the default skin exported in the background behind an open 3D view (Rotate3D.tsx): the click waits its
             // turn instead of answering "The 3D model is being prepared"
-            Err("viewer") if who != "texcheck" && std::time::Instant::now() < until => std::thread::sleep(std::time::Duration::from_millis(200)),
+            Err("viewer" | "prepare") if who != "texcheck" && std::time::Instant::now() < until => std::thread::sleep(std::time::Duration::from_millis(200)),
             other => {
                 if stopped {
                     let _ = std::fs::remove_file(&stop); // only the Stop this click wrote, before its own run starts
@@ -326,7 +331,7 @@ pub async fn prepare_mod_viewer(paths: Vec<String>, set: Option<String>, state: 
     let jobs = jobs_of(&paths);
     let paks = paks_of(&state);
     tauri::async_runtime::spawn_blocking(move || {
-        let _ = run_kit("viewer", "--viewer", &jobs, set.as_deref(), &["--prepare"], paks, |_| {});
+        let _ = run_kit("prepare", "--viewer", &jobs, set.as_deref(), &["--prepare"], paks, |_| {});
     })
     .await
     .map_err(|e| e.to_string())
