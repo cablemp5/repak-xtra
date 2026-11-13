@@ -127,6 +127,9 @@ export function CardMedia({ p, l, className = '', title, onClick, onRemoveImage,
   const src = cover === 'image' ? own : cover === 'capture' ? shot : cover === 'preview' ? generated : undefined
   const video = cover === 'image' && l.mediaType === 'video' ? ownUrl : undefined
   const [warm] = useState(src) // already cached when the card mounted: shown at once, without the blur-in
+  // the picture that has loaded, kept in state: the class revealOnLoad adds by hand is dropped by the next render that
+  // changes className (pv-kit once the boosted copy is known), which left loaded pictures invisible until a hover
+  const [loaded, setLoaded] = useState<string | null>(null)
   const state = usePreviewState(previewSetKey(l.id))
   const working = state && (cover === 'preview' || cover === null) ? state : null // a card showing another source stays put
   const stage = usePreviewStage(working?.kind === 'running')
@@ -236,8 +239,8 @@ export function CardMedia({ p, l, className = '', title, onClick, onRemoveImage,
             ? l.mediaBeat ? <BeatVideo src={video} beat={l.mediaBeat} card /> : <LoopClip src={video} />
             : <CarouselSlide slide={slides.length > 1 ? at : 0} dir={dir}>
                 {live ? null : isLoopClip(src) ? <LoopClip key={src} src={src} /> : isVideoPreview(src) ? <BeatVideo key={src} src={src} beat={KO_BEAT} card /> : null}
-                {(live || !isVideoPreview(src)) && <img key={src} src={live?.url ?? src} alt="" className={`${cover === 'preview' && slide?.key && !isKoPreview(slide.key) && !isBoosted(live?.url ?? src) ? 'pv-kit' : ''}${src === warm || isDecoded(src) ? ' is-loaded' : ''}`} decoding="async" crossOrigin="anonymous"
-                  onLoad={e => { revealOnLoad(e); predecode(e.currentTarget); if (audible && live && hovering.current && e.currentTarget.src === live.url) playEmoteSound(audible, live.seconds) }} />}
+                {(live || !isVideoPreview(src)) && <img key={src} src={live?.url ?? src} alt="" className={`${cover === 'preview' && slide?.key && !isKoPreview(slide.key) && !isBoosted(live?.url ?? src) ? 'pv-kit' : ''}${src === warm || isDecoded(src) || loaded === (live?.url ?? src) ? ' is-loaded' : ''}`} decoding="async" crossOrigin="anonymous"
+                  onLoad={e => { revealOnLoad(e); setLoaded(e.currentTarget.getAttribute('src')); predecode(e.currentTarget); if (audible && live && hovering.current && e.currentTarget.src === live.url) playEmoteSound(audible, live.seconds) }} />}
               </CarouselSlide>}
       </button>
       {/* before and after, once the kit has the hero's vanilla render (before the arrows, so they stay on top) */}
@@ -363,8 +366,9 @@ function LoopClip({ src }: { src: string }) {
 function SlideImage({ k, thumb }: { k: string; thumb: boolean }) {
   const src = usePreviewUrl(k, thumb)
   const [warm] = useState(src)
+  const [loaded, setLoaded] = useState<string | null>(null) // as CardMedia's
   return !src ? <span /> : isLoopClip(src) ? <LoopClip src={src} /> : isVideoPreview(src) ? <BeatVideo src={src} beat={KO_BEAT} card />
-    : <img src={src} alt="" className={`${isKoPreview(k) || isBoosted(src) ? '' : 'pv-kit'}${src === warm || isDecoded(src) ? ' is-loaded' : ''}`} onLoad={revealOnLoad} crossOrigin="anonymous" />
+    : <img src={src} alt="" className={`${isKoPreview(k) || isBoosted(src) ? '' : 'pv-kit'}${src === warm || isDecoded(src) || loaded === src ? ' is-loaded' : ''}`} onLoad={e => { revealOnLoad(e); setLoaded(src) }} crossOrigin="anonymous" />
 }
 
 /** How many of a loadout's installed mods are on: green all, yellow some, red none. */
