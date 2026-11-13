@@ -836,6 +836,9 @@ html[data-motion="off"] .lo-screen { animation: none; }
 /* Loadout cards: mods list, media, actions */
 .lo-sep { margin: 0 8px; opacity: 0.6; }
 .lo-card-image video { width: 100%; height: 100%; object-fit: cover; display: block; }
+/* a hovered emote card's restarted clip (loadoutBits.tsx live): over the card's clip until it has loaded, then alone,
+   with no blur-in, so a restart never shows an empty frame */
+.lo-card-image img.is-restart { position: absolute; inset: 0; transition: none !important; }
 /* a card's clip (loadoutBits.tsx LoopClip): the video is never rendered, its frames are drawn on the canvas over the still
    (idlePause.ts). Out of view the canvas goes too and the still stays */
 .lo-card-image video[data-poster], .lo-card-image canvas.lo-clip.is-away { display: none; }
@@ -3345,9 +3348,9 @@ html[data-toasts-held] .toast-container { display: none; }   /* the welcome flow
   --stack-peek: 12px;
   --stack-spread-gap: 8px;
   --stack-depth-scale: 0.06;
-  --stack-depth-fade: 0.4;
-  --stack-depth1-blur: 1px;
-  --stack-depth2-blur: 2px;
+  --stack-depth-fade: 0;   /* repakxtra: the toasts behind stay solid and sharp (cable, 2026-11-13: was 0.4, 1px, 2px) */
+  --stack-depth1-blur: 0px;
+  --stack-depth2-blur: 0px;
   --stack-ease: cubic-bezier(0.22, 1, 0.36, 1);
 }
 .t-stack-banner {

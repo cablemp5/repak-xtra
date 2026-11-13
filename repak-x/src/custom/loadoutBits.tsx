@@ -9,6 +9,7 @@ import { useMediaUrl } from './loadoutMedia'
 import { COVERS, type Cover, type Loadout, type Mod, captureKey, coverFills, displayName, flipMods, memberName, modKey, modsByKey, nameKey, patchLoadout, pickCover } from './loadoutStore'
 import { ModName, ordinal } from './modName'
 import { predecode, revealOnLoad, SwapText } from './motion'
+import { isIdle } from './idlePause'
 import { BeatVideo, cachedPreviewUrl, clipStill, formKeys, hasPreview, isBoosted, isDecoded, isKoPreview, isLoopClip, isVideoPreview, noPreviewPossible, previewMade, previewSetKey, previewsListed, readyPreview, useCovers, usePreviewStage, usePreviewState, usePreviewUrl, usePreviewVersion } from './previews'
 import { isEmoteAnim, playEmoteSound, stopEmoteSound, useEmoteSound, webpSeconds } from './emoteSound'
 import { useVerdict } from './brokenMods'
@@ -169,7 +170,8 @@ export function CardMedia({ p, l, className = '', title, onClick, onRemoveImage,
     setRestart(r => { if (r) setTimeout(() => URL.revokeObjectURL(r.url), 30000); return null })
   }
   const startRestart = () => {
-    if (!hovering.current || !audible || !src || !slideKey || document.documentElement.classList.contains('is-dragging-card')) return
+    // not while another window has focus: the pointer can rest on a card behind it, and no sound should play then
+    if (!hovering.current || !audible || !src || !slideKey || isIdle() || document.documentElement.classList.contains('is-dragging-card')) return
     const key = slideKey
     fetch(cachedPreviewUrl(key) ?? src).then(r => r.arrayBuffer()).then(buf => { // the animated picture itself, not the card's video of it
       if (!hovering.current || shownKey.current !== key) return // paged on, or left, while it loaded
@@ -238,9 +240,9 @@ export function CardMedia({ p, l, className = '', title, onClick, onRemoveImage,
           : video
             ? l.mediaBeat ? <BeatVideo src={video} beat={l.mediaBeat} card /> : <LoopClip src={video} />
             : <CarouselSlide slide={slides.length > 1 ? at : 0} dir={dir}>
-                {live ? null : isLoopClip(src) ? <LoopClip key={src} src={src} /> : isVideoPreview(src) ? <BeatVideo key={src} src={src} beat={KO_BEAT} card /> : null}
-                {(live || !isVideoPreview(src)) && <img key={src} src={live?.url ?? src} alt="" className={`${cover === 'preview' && slide?.key && !isKoPreview(slide.key) && !isBoosted(live?.url ?? src) ? 'pv-kit' : ''}${src === warm || isDecoded(src) || loaded === (live?.url ?? src) ? ' is-loaded' : ''}`} decoding="async" crossOrigin="anonymous"
-                  onLoad={e => { revealOnLoad(e); setLoaded(e.currentTarget.getAttribute('src')); predecode(e.currentTarget); if (audible && live && hovering.current && e.currentTarget.src === live.url) playEmoteSound(audible, live.seconds) }} />}
+                {live && loaded === live.url ? null : isLoopClip(src) ? <LoopClip key={src} src={src} /> : isVideoPreview(src) ? <BeatVideo key={src} src={src} beat={KO_BEAT} card /> : null}
+                {(live || !isVideoPreview(src)) && <img key={src} src={live?.url ?? src} alt="" className={`${cover === 'preview' && slide?.key && !isKoPreview(slide.key) && !isBoosted(live?.url ?? src) ? 'pv-kit' : ''}${src === warm || isDecoded(src) || loaded === src || (live && loaded === live.url) ? ' is-loaded' : ''}${live ? ' is-restart' : ''}`} decoding="async" crossOrigin="anonymous"
+                  onLoad={e => { revealOnLoad(e); setLoaded(e.currentTarget.getAttribute('src')); predecode(e.currentTarget); if (audible && live && hovering.current && !isIdle() && e.currentTarget.src === live.url) playEmoteSound(audible, live.seconds) }} />}
               </CarouselSlide>}
       </button>
       {/* before and after, once the kit has the hero's vanilla render (before the arrows, so they stay on top) */}
