@@ -47,7 +47,10 @@ pub fn adopt(path: &Path) -> Option<PathBuf> {
         return None;
     }
     let off = path.with_file_name(format!("{stem}.bak_repak"));
-    if path.with_file_name(real).exists() || off.exists() || fs::rename(path, &off).is_err() {
+    // a side file whose real name is taken (a stray X.utoc): the set stays whole and off, never the new main file and
+    // payload beside someone else's index
+    let taken = |ext: &str| path.with_file_name(format!("{stem}.{ext}.off")).is_file() && path.with_file_name(format!("{stem}.{ext}")).exists();
+    if path.with_file_name(real).exists() || off.exists() || taken("utoc") || taken("ucas") || fs::rename(path, &off).is_err() {
         return None; // the same mod is already here, on or off: the .off copy stays as it is
     }
     side("utoc");
@@ -197,6 +200,11 @@ mod tests {
         assert_eq!(adopt(&p("C.utoc.off")), None);
         assert!(p("C.utoc").is_file(), "a side file with no .pak.off gets its name back");
         assert_eq!(adopt(&p("D.pak")), None);
+        for f in ["E.pak.off", "E.utoc.off", "E.ucas.off", "E.utoc"] {
+            fs::write(p(f), f).unwrap();
+        }
+        assert_eq!(adopt(&p("E.pak.off")), None);
+        assert!(p("E.pak.off").is_file() && p("E.ucas.off").is_file() && !p("E.bak_repak").exists() && !p("E.ucas").exists(), "a set with a taken side name stays whole");
     }
 
     #[test]

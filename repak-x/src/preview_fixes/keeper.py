@@ -78,8 +78,20 @@ tmp.write_text(json.dumps({"port": server.getsockname()[1], "token": token, "pid
 os.replace(tmp, state)
 born = since = time.time()
 clean = True
+
+
+def mine():
+    """Whether the state file is still this keeper's. Removed, it ends. Written again by the next run's keeper before
+    this one looked (the app removes it without waiting), it ends too, and leaves that keeper's files alone: it used to
+    stay on beside it, or remove its state and end it as well."""
+    try:
+        return json.loads(state.read_text(encoding="utf-8")).get("token") == token
+    except (OSError, ValueError):
+        return False
+
+
 try:
-    while child.poll() is None and state.exists() and time.time() - since < idle:
+    while child.poll() is None and mine() and time.time() - since < idle:
         try:
             conn, _ = server.accept()
         except socket.timeout:
@@ -122,7 +134,8 @@ try:
             break
 finally:
     try:
-        state.unlink()
+        if mine():
+            state.unlink()
     except OSError:
         pass
     try:
@@ -137,6 +150,7 @@ finally:
     except Exception:
         pass
     try:
-        alive.unlink()
+        if alive.read_text(encoding="utf-8") == str(os.getpid()):
+            alive.unlink()
     except OSError:
         pass

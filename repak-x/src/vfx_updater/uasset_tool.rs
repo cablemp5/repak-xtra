@@ -827,6 +827,9 @@ fn stage_allowed_assets(input_dir: &Path, allowed: &[String]) -> Result<(PathBuf
             // repakxtra: a hard link, not a copy: the packer only reads this folder, and nothing writes the update's
             // files again before it is deleted (a copy where a link cannot be made)
             let to = dest_dir.join(name);
+            if to.exists() {
+                continue; // staged by an asset whose name starts this one's (Foo and Foo.Bar): a copy onto its own link fails
+            }
             if fs::hard_link(&path, &to).is_err() {
                 fs::copy(&path, &to).map_err(|e| format!("[VFX] Failed to stage {}: {}", path.display(), e))?;
             }

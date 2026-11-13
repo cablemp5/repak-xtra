@@ -330,6 +330,9 @@ fn stage_as(from: &Path, to: &Path, rels: &[String], fresh: bool, link: bool) ->
             if src.exists() {
                 let dst = to.join(format!("{r}.{x}"));
                 std::fs::create_dir_all(dst.parent().unwrap_or(to)).map_err(|e| e.to_string())?;
+                if link && dst.exists() {
+                    continue; // named twice in `rels`: already linked, and a copy onto its own link fails
+                }
                 if !link || std::fs::hard_link(&src, &dst).is_err() {
                     std::fs::copy(&src, &dst).map_err(|e| format!("{}: {e}", src.display()))?;
                 }
@@ -994,6 +997,18 @@ pub async fn xtra_vfx_niagara(window: Window, game_paks: String, usmap_path: Str
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn a_file_named_twice_is_linked_once() {
+        let dir = tempfile::tempdir().unwrap();
+        let (from, to) = (dir.path().join("from"), dir.path().join("to"));
+        std::fs::create_dir_all(&from).unwrap();
+        std::fs::write(from.join("MI_A.uasset"), b"asset").unwrap();
+        // without the skip, the second pass copied the file onto its own hard link, which Windows refuses
+        stage_links(&from, &to, &["MI_A".to_string(), "MI_A".to_string()]).unwrap();
+        assert_eq!(std::fs::read(to.join("MI_A.uasset")).unwrap(), b"asset");
+        assert_eq!(std::fs::read(from.join("MI_A.uasset")).unwrap(), b"asset", "the source is untouched");
+    }
 
     #[test]
     fn an_old_layout_found_under_an_earlier_build_still_holds() {
