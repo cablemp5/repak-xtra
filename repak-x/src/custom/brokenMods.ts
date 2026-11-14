@@ -64,6 +64,11 @@ export const verdictsChanged = () => emit(VERDICTS_CHANGED).catch(() => {})
 export const VERDICTS_RESCAN = 'xtra-verdicts-rescan'
 export const rescanVerdicts = () => emit(VERDICTS_RESCAN, []).catch(() => {})
 export const rescanForced = (force: string[]) => emit(VERDICTS_RESCAN, force).catch(() => {})
+/** The mods of a Mod Updater Scan that stopped with mods left: Resume (and the window's focus) scans them again. Any
+ *  other run (Refresh list, a game update, a new USMAP) scans every mod and drops them. */
+let stoppedScope: string[] = []
+/** The header's Resume: the stopped run again, only its mods when it was a Mod Updater Scan. */
+export const resumeScan = () => { stoppedScope.forEach(p => forced.add(norm(p))); return rescanVerdicts() } // never `fresh`: what it read stays read
 /** Mods a manual Check asked for: checked first, even when the Mod Updater made them, until a run finishes with them. */
 let forced = new Set<string>()
 /** Of those, the ones whose check records the next run drops first (in the run: a scan in flight would write them back). */
@@ -187,7 +192,7 @@ export function useBrokenWatch(mods: { path: string; modified_date?: number; fil
       // runs take turns (queued), so this one's end is never another's. One the library outdated is not "paused":
       // the new list's own run follows
       // a run that stopped first (the game, a held scan, an old USMAP) keeps a manual Check's mods for the next one
-      .then(finished => { unfinished = !finished; if (!finished) ticked.forEach(p => forced.add(norm(p))); scanEnded(finished || !live, finished); void invoke('xtra_scan_release').catch(() => {}); return finished })
+      .then(finished => { unfinished = !finished; stoppedScope = finished ? [] : ticked; scanEnded(finished || !live, finished); void invoke('xtra_scan_release').catch(() => {}); return finished })
     let unfinished = false
     // one run waiting its turn is enough: a focus, a Rescan and the game update notice asking meanwhile all get that one
     let waiting: Promise<boolean> | null = null
@@ -200,7 +205,7 @@ export function useBrokenWatch(mods: { path: string; modified_date?: number; fil
     // only a run that stopped with mods left goes on when the window is back (the game, an update or a check took
     // over: xtra_vfx.rs background_may_run). Nothing changed, nothing runs. A game update is gameUpdate.ts's to start
     let lastResume = 0
-    const resume = () => { if (unfinished && !scanHeld() && Date.now() - lastResume > 30_000) { lastResume = Date.now(); void full() } }
+    const resume = () => { if (unfinished && !scanHeld() && Date.now() - lastResume > 30_000) { lastResume = Date.now(); stoppedScope.forEach(p => forced.add(norm(p))); void full() } }
     window.addEventListener('focus', resume)
     const again = listen(VERDICTS_CHANGED, () => { void check() })
     // a Refresh list or Resume: checks the header paused or cancelled run again

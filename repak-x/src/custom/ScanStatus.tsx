@@ -6,7 +6,7 @@
 // (Goal-Gradient Effect). A paused run stays listed until it is done (Zeigarnik Effect).
 import { useEffect, useRef, useState } from 'react'
 import { AlertTriangle, Eye } from 'lucide-react'
-import { rescanVerdicts } from './brokenMods'
+import { resumeScan } from './brokenMods'
 import { holdScan, progressLine, scanLeft, stageEnd, useScanRun } from './scanProgress'
 import { leftText } from './eta'
 import { GlideFill } from './GlideFill'
@@ -63,7 +63,7 @@ export default function ScanStatus() {
                   <span className="lo-gen-stop"><span className="stop-glyph" aria-hidden="true" />Cancel</span></button>
               </>
             : <>
-                <button type="button" role="menuitem" className="xtra-item" onClick={() => { setOpen(false); void rescanVerdicts() }}
+                <button type="button" role="menuitem" className="xtra-item" onClick={() => { setOpen(false); void resumeScan() }}
                   title="Scan the mods left now">
                   <span className="lo-gen-stop"><span className="play-glyph" aria-hidden="true" />Resume</span></button>
                 <button type="button" role="menuitem" className="xtra-item run-stop-btn" onClick={() => { setOpen(false); void holdScan('cancelled') }}
