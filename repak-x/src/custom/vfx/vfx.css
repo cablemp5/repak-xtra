@@ -39,6 +39,13 @@
 /* Needs an update: its name takes its count's yellow. Updated: its name and count take the Updated pill's green */
 .vf-grp.is-needs .vf-grp-name { color: #f5d342; }
 [data-theme="light"] .vf-grp.is-needs .vf-grp-count, [data-theme="light"] .vf-grp.is-needs .vf-grp-name { color: #574800; }
+/* Failed: its name and count in the Library's Ban risk tag's orange (theme.css .risk-badge.is-ban) */
+.vf-grp.is-failed .vf-grp-count { color: #f59a42; background: color-mix(in srgb, #f59a42, transparent 86%); }
+.vf-grp.is-failed .vf-grp-name { color: #f59a42; }
+[data-theme="light"] .vf-grp.is-failed .vf-grp-count, [data-theme="light"] .vf-grp.is-failed .vf-grp-name { color: #9a5200; }
+/* Updating: the Update button's blue */
+.vf-grp.is-busy .vf-grp-count { color: var(--accent-primary); background: color-mix(in srgb, var(--accent-primary), transparent 86%); }
+.vf-grp.is-busy .vf-grp-name { color: var(--accent-primary); }
 .vf-grp.is-done .vf-grp-count { color: #3ecf6e; background: color-mix(in srgb, #3ecf6e, transparent 88%); }
 .vf-grp.is-done .vf-grp-name { color: #3ecf6e; }
 [data-theme="light"] .vf-grp.is-done .vf-grp-count, [data-theme="light"] .vf-grp.is-done .vf-grp-name { color: #166236; }
@@ -57,7 +64,7 @@
 
 /* a mod's row, as compact as the Library's: the whole name ticks it, the loadouts holding it, its badges and state at the
    right, then (full width) progress or report */
-.vf-rows > .vf-row { flex-wrap: wrap; min-height: 40px; padding: 0 12px; gap: 8px; color: var(--text-primary); }
+.vf-rows > .vf-row { flex-wrap: wrap; min-height: 40px; padding: 0 12px; gap: 0 8px; color: var(--text-primary); }   /* no row gap: a closed report (a line of its own, 0 tall) left an Updated row 8px taller than the rest */
 .vf-pick { flex: 1; min-width: 0; min-height: 40px; display: flex !important; align-items: center; gap: 12px !important; cursor: pointer; }
 .vf-pick .repakx-checkbox-label { min-width: 0; flex: 1; display: flex; }
 .vf-row-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; font-weight: 600; color: var(--text-primary); }
@@ -104,7 +111,7 @@ button.vf-loadouts:focus-visible { outline: 2px solid var(--accent-primary); out
 
 /* running: the app's thin progress bar (the update dialog's), the step and what it is on */
 /* running: under the name (lined up with it, past the tick), the app's thin bar, then one line of what it is doing */
-.vf-progress { flex-basis: 100%; min-width: 0; margin-top: -8px; padding: 0 0 12px 28px; }   /* close under the name: the tick row is 40px tall, the name sits in its middle */
+.vf-progress { flex-basis: 100%; min-width: 0; padding: 0 0 12px 28px; }   /* close under the name: the tick row is 40px tall, the name sits in its middle */
 .vf-bar { height: 4px; border-radius: 999px; overflow: hidden; background: var(--bg-lighter); }
 /* a plain fill: it keeps moving through a long step by itself (GlideFill.tsx), so it still reads as working */
 .vf-bar i { display: block; height: 100%; background: var(--accent-primary); }
@@ -114,7 +121,7 @@ button.vf-loadouts:focus-visible { outline: 2px solid var(--accent-primary); out
 
 /* a mod's report, under its row */
 .vf-row-panel { flex-basis: 100%; }
-.vf-report { padding: 2px 0 8px; display: flex; flex-direction: column; align-items: flex-start; gap: 12px; }
+.vf-report { padding: 10px 0 8px; display: flex; flex-direction: column; align-items: flex-start; gap: 12px; }
 .vf-note { margin: 0; font-size: 13px; line-height: 1.5; color: var(--text-secondary); overflow-wrap: anywhere; text-wrap: pretty; }
 .vf-note code { font: 12px var(--font-mono); color: var(--text-primary); }
 .vf-warnings { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 4px; align-self: stretch; }

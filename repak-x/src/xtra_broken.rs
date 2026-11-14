@@ -702,6 +702,10 @@ struct Checked {
     /// outdated because its material instances are in an older property layout (whatever its date says)
     #[serde(default)]
     old_layout: bool,
+    /// an update read every animation in it in today's layout (xtra_mi_layout.rs told each one) and found nothing to
+    /// rewrite: the date rule for animations made before the game update stops flagging it
+    #[serde(default)]
+    anims_told: bool,
 }
 
 fn checked_store() -> PathBuf {
@@ -806,7 +810,7 @@ fn remember_checked(store: &Path, utoc: &Path, game_updated: u64, outdated: bool
         all.retain(|k, _| !k.strip_prefix(key.as_str()).is_some_and(|rest| rest.is_empty() || rest.starts_with('|')));
     }
     let parser = crate::xtra_vfx::parser_id();
-    all.insert(decoder_key(utoc, parser), Checked { unknown, parser: parser.to_string(), size, modified, game: game_updated, outdated, material_layout: true, old_layout });
+    all.insert(decoder_key(utoc, parser), Checked { unknown, parser: parser.to_string(), size, modified, game: game_updated, outdated, material_layout: true, old_layout, anims_told: false });
     save_checked(store, &all)
 }
 
@@ -829,10 +833,21 @@ pub(crate) fn record_check(mods_dir: &Path, utoc: &Path, outdated: bool, old_lay
 }
 
 /// An update of `mod_path` said Nothing to update: Needs VFX update stops flagging it until the mod or the game changes.
+/// `anims_told`: the update's layout pass told every file's layout and none needed rewriting, its animations included.
 #[tauri::command(async)]
-pub fn xtra_vfx_no_update(mod_path: String, state: State<'_, Arc<Mutex<AppState>>>) -> Result<(), String> {
+pub fn xtra_vfx_no_update(mod_path: String, anims_told: Option<bool>, state: State<'_, Arc<Mutex<AppState>>>) -> Result<(), String> {
     let mods_dir = state.lock().unwrap().game_path.clone();
-    record_check(&mods_dir, &Path::new(&mod_path).with_extension("utoc"), false, false)
+    let utoc = Path::new(&mod_path).with_extension("utoc");
+    record_check(&mods_dir, &utoc, false, false)?;
+    if anims_told == Some(true) {
+        let _one = CHECKED_WRITING.lock().unwrap_or_else(|e| e.into_inner());
+        let (store, mut all) = (checked_store(), load_checked(&checked_store()));
+        if let Some(c) = all.get_mut(&decoder_key(&utoc, crate::xtra_vfx::parser_id())) {
+            c.anims_told = true;
+            save_checked(&store, &all)?;
+        }
+    }
+    Ok(())
 }
 
 /// Drops every record of `utocs` (checked_key, any decoder) from the JSON store at `store`. How many went.
@@ -908,6 +923,12 @@ pub async fn xtra_broken_mods(mod_paths: Vec<String>, state: State<'_, Arc<Mutex
                 .iter()
                 .chain(partial.iter())
                 .any(|fixed| !fixed.eq_ignore_ascii_case(&stem) && installed_mods.contains(&base(&path.with_file_name(format!("{fixed}.pak")))))
+                // an older update (<name>_UPDATED) whose own update took the mod's name (<name>, made here for this game):
+                // each run made <name> again and left this one flagged, back under Needs an update with nothing said
+                || crate::xtra_vfx::update_base_stem(&stem).is_some_and(|b| {
+                    let newer = path.with_file_name(format!("{b}.pak"));
+                    installed_mods.contains(&base(&newer)) && crate::xtra_stamp::of_in(&stamps, &newer).is_some_and(|s| s.game_updated >= game_updated)
+                })
         };
         // a partial update whose original was kept: once the USMAP matches the game, the original's Niagara files can be
         // carried over too (xtra_niagara.rs), and updating the partial one starts from its original
@@ -978,7 +999,7 @@ pub async fn xtra_broken_mods(mod_paths: Vec<String>, state: State<'_, Arc<Mutex
                     cleared: found == Some(false),
                     has_blueprint: details.has_blueprint,
                     installed,
-                    anims_moved,
+                    anims_moved: anims_moved && !record.is_some_and(|c| c.anims_told && !c.outdated && c.unknown.is_none()),
                     old_layout: details.category == "VFX" && crate::xtra_niagara::known_old_layout(&path, &niagara_layouts),
                     layout: crate::xtra_layout::found_now(&layouts, &path.with_extension("utoc"), game_updated, &usmap_id),
                 };

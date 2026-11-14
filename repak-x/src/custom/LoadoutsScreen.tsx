@@ -124,9 +124,9 @@ export function ViewTabs() {
   useEffect(() => { if (view === 'nexus' || (!ko && view === 'ko')) setView('library') }, [ko, view]) // a view another edition saved
   return (
     <div className={`view-tabs${ko ? '' : ' is-two'}`} role="tablist" aria-label="View" data-tour="view-tabs">
-      <button type="button" role="tab" aria-selected={view === 'home'} onClick={() => { openLoadout(null); setView('home') }} title="Loadouts and new mods (L)">Loadouts</button>
+      <button type="button" role="tab" aria-selected={view === 'home'} onClick={() => { openLoadout(null); setView('home') }} title="Loadouts and new mods" data-hotkey="L">Loadouts</button>
       <button type="button" role="tab" aria-selected={view === 'library'} onClick={() => setView('library')}
-        title="Every mod, with filters and folders (L)">Library</button>
+        title="Every mod, with filters and folders" data-hotkey="L">Library</button>
       {ko && <button type="button" role="tab" aria-selected={view === 'ko'} onClick={() => setView('ko')} title="Recolor a hero's KO prompt">KO Editor</button>}
     </div>
   )

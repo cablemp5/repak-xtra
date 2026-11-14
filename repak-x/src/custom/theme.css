@@ -964,13 +964,20 @@ html[data-motion="off"] .lo-screen { animation: none; }
 }
 .shortcut-row:hover { background: transparent !important; }
 .shortcut-action { font-size: 13px; color: var(--text-primary); text-align: right; }
-.shortcuts-modal kbd, .cp-modal kbd {   /* the capture dialog's keys too */
+.shortcuts-modal kbd, .cp-modal kbd, .global-tooltip kbd, .search-wrapper kbd {   /* the capture dialog's keys, a tooltip's shortcut and the search's / too */
   display: inline-block; min-width: 22px; padding: 1px 8px; text-align: center;
   font-family: var(--font-primary) !important; font-size: 11px; font-weight: 600;
   color: var(--text-primary); background: var(--bg-light); border: 1px solid rgba(255, 255, 255, 0.1);
   border-bottom-width: 2px; border-radius: 5px; box-shadow: none;
 }
 .shortcuts-modal .key-separator, .cp-modal .key-separator { margin: 0 4px; color: var(--text-secondary); font-size: 11px; }
+/* a button's shortcut after its tooltip text (data-hotkey, useGlobalTooltips.ts): the keys stay together on one line */
+.tooltip-keys { display: inline-flex; align-items: center; gap: 4px; margin-left: 8px; white-space: nowrap; vertical-align: 1px; }
+.tooltip-keys .key-separator { margin: 0; color: var(--text-secondary); font-size: 11px; }   /* margin 0: the 4px gap alone, as the F1 list's keys */
+.global-tooltip:has(> .tooltip-keys) { width: max-content; }   /* measured before it is placed: sized to its words and keys (to 350px), never wrapped by the window's right edge */
+/* the Library search's / key, shown while the field is empty and not in use (pressing / focuses it, hotkeys.ts) */
+.search-wrapper .search-kbd { flex: none; margin-right: 4px; pointer-events: none; }
+.search-wrapper:focus-within .search-kbd { display: none; }
 .shortcuts-footer { font-size: 12px; color: var(--text-secondary); }
 /* Rows size to their cards: overflow-clipped cards let auto rows shrink to fit the screen and overlap */
 .lo-grid { grid-auto-rows: max-content; }
@@ -2847,7 +2854,14 @@ html[data-motion="off"] .vfx-dot { animation: none; }
 /* dark theme: the menus' surface and edge */
 :root:not([data-theme="light"]) .bulk-actions-toolbar { background: var(--bg-dark) !important; border-color: rgba(255, 255, 255, 0.09) !important; }
 /* room under the last rows for the bar, always there: adding it only while the bar shows moved the rows near the end */
-.center-panel .mod-list-grid { padding-bottom: 72px !important; }
+.center-panel .mod-list-grid { padding-bottom: 8px !important; }
+/* room under the last row for the selection bar, only while it shows (a Library with nothing selected ends at its last row) */
+.center-panel .mod-list-grid.has-selection { padding-bottom: 72px !important; }
+/* the end of the list: a wheel past it nudges the list up and lets it spring back (the toggle's overshoot ease). No
+   transitions.dev recipe covers an end-of-list bounce, so these two steps stay this small */
+@keyframes lib-end-bounce { 40% { transform: translateY(-10px); } }
+.mod-list-grid.is-end-bounce { animation: lib-end-bounce var(--toggle-dur) var(--toggle-ease); }
+html[data-motion="off"] .mod-list-grid.is-end-bounce { animation: none; }
 .bulk-actions-toolbar .custom-dropdown-menu { top: auto !important; bottom: calc(100% + 12px) !important; }
 .bulk-actions-toolbar .selection-info, .bulk-actions-toolbar .bulk-controls { display: flex; align-items: center !important; gap: 4px !important;
   margin: 0 !important; padding: 0 !important; border: none !important; }

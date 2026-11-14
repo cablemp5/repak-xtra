@@ -31,7 +31,8 @@ export default function InstallButton({ onAddFiles, onAddFolder }: { onAddFiles:
   return (
     <div className="install-btn" ref={wrap} data-tour="add-mod-btn">
       <button type="button" className="install-btn-main" data-tour="install-btn" onClick={() => choose(false)}
-        title="Install mods (Ctrl+O). You can also drop .pak, .zip, .rar or .7z files anywhere on the window">
+        data-hotkey="Ctrl+O"
+        title="Install mods. You can also drop .pak, .zip, .rar or .7z files anywhere on the window">
         <GrInstall size={16} /> Install
       </button>
       <button type="button" className="install-btn-more" aria-haspopup="menu" aria-expanded={open} aria-label="More ways to install"

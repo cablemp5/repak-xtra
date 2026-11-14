@@ -1,18 +1,21 @@
 // repakxtra: after a game update, a strip above Home and the Library while VFX mods were made for the game files it
-// changed (xtra_broken.rs "vfx" verdicts, the Needs VFX update badge). Update VFX mods hands them all to the VFX Updater, which
-// fixes them at once and moves the originals to Recently deleted. Not now hides the mods already shown, until the game
+// changed (xtra_broken.rs "vfx" verdicts, the Needs VFX update badge). Update mods hands them all to the Mod Updater ticked,
+// its Update button ready (the user starts it). While the updater runs the strip stays, its count falling by one for each
+// mod done, and its button brings the updater forward. Not now hides the mods already shown, until the game
 // changes or a waiting repair becomes available. A newly flagged mod brings the strip back. It also listens for each
 // fix the VFX window makes and swaps the original for the fix in every loadout, so a loadout turns on the fixed mod.
 import { useEffect, useRef, useState } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
-import { AlertTriangle, RefreshCw } from 'lucide-react'
+import { AlertTriangle, ExternalLink, RefreshCw } from 'lucide-react'
 import { needsUpdater, useBrokenVersion, verdictOf } from '../brokenMods'
 import { modKey, nameKey, openLoadout, renameModKey } from '../loadoutStore'
 import { renameSource } from '../nexusSource'
 import { useUiPref } from '../uiPrefs'
 import { useScanRun } from '../scanProgress'
-import { FIXED_EVENT, OPEN_LOADOUT_EVENT, fixInVfxWindow, utocOf, type Fixed } from './handoff'
+import { FIXED_EVENT, OPEN_LOADOUT_EVENT, fixInVfxWindow, openVfxWindow, utocOf, type Fixed } from './handoff'
+import { onRunChange, runLock } from './prefs'
+import { Num } from '../motion'
 import './vfx.css'
 
 type Mod = { path: string; utoc_path?: string | null; modified_date?: number; file_size?: number }
@@ -47,14 +50,24 @@ export const noticeDetail = (n: number, ready: number, waiting: number, off = 0)
   + (off ? ` ${off === n ? (n === 1 ? 'It' : 'They') : off} cannot be rebuilt here, so Update turns ${off === 1 ? 'it' : 'them'} off.` : '')
 
 export default function VfxNotice({ mods, reload }: { mods: Mod[]; reload: () => void }) {
-  useBrokenVersion()
   const shown = useUiPref('broken') // Settings can hide problem badges, this goes with them
   // a run of the checks can still clear or change a quick check's May crash (a new install's date rule): the strip waits for its end
   const checking = useScanRun().running
   const [updated, setUpdated] = useState(0)
   const [dismissed, setDismissed] = useState(() => localStorage.getItem(DISMISSED))
   // the same mods as the Mod Updater's Needs an update: one that may crash and is on counts too (Update turns it off)
-  const stale = mods.filter(m => needsUpdater(m.path, verdictOf(m.path)))
+  // a run of the Mod Updater, and the originals it fixed meanwhile: they leave the count at once, not at the next check
+  const [running, setRunning] = useState(false)
+  const [done, setDone] = useState<Set<string>>(new Set())
+  const stale = mods.filter(m => needsUpdater(m.path, verdictOf(m.path)) && !done.has(modKey(m.path)))
+  const version = useBrokenVersion()
+  const clearDone = useRef(false) // the run ended: the next check's answers replace the ones counted down
+  useEffect(() => { if (clearDone.current) { clearDone.current = false; setDone(new Set()) } }, [version])
+  useEffect(() => {
+    void runLock().then(l => setRunning(Boolean(l)))
+    return onRunChange(l => { setRunning(Boolean(l)); if (!l) clearDone.current = true })
+  }, [])
+  const wasShown = useRef(false) // once shown it stays through the checks an update's reloads start
   const reloadRef = useRef(reload)
   reloadRef.current = reload
 
@@ -65,6 +78,7 @@ export default function VfxNotice({ mods, reload }: { mods: Mod[]; reload: () =>
   // each fix: the loadouts that held the original hold the fix (only when the original was replaced, not kept beside it)
   useEffect(() => {
     const un = listen<Fixed>(FIXED_EVENT, e => {
+      if (e.payload?.from) { const k = modKey(e.payload.from); setDone(d => new Set(d).add(k)) }
       if (e.payload?.swap) {
         renameModKey(modKey(e.payload.from), modKey(e.payload.to))
         renameSource(nameKey(e.payload.from), nameKey(e.payload.to), nameKey(e.payload.original ?? e.payload.from)) // its Nexus source on both copies
@@ -91,17 +105,24 @@ export default function VfxNotice({ mods, reload }: { mods: Mod[]; reload: () =>
   const waiting = n - ready.length
   const keys = stale.map(m => noticeModKey(m, Boolean(verdictOf(m.path)?.usmapWait)))
   const seen = JSON.stringify([updated, ...keys])
-  if (!shown || checking || !n || !updated || noticeDismissed(dismissed, updated, keys)) return null
+  const hidden = !shown || !n || !updated || noticeDismissed(dismissed, updated, keys)
+  if (hidden) wasShown.current = false
+  if (hidden || (checking && !running && !wasShown.current)) return null
+  wasShown.current = true
   const when = new Date(updated * 1000).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
   return (
     <div className="vfx-notice" role="status">
       <AlertTriangle size={20} className="vfx-notice-icon" aria-hidden="true" />
       {/* the risk first as a headline, the counts below it (Von Restorff, progressive disclosure) */}
-      <p><strong className="vfx-notice-head">{noticeHead(n, when)}</strong>{noticeDetail(n, ready.length, waiting, stale.filter(m => verdictOf(m.path)?.kind === 'risky').length)}</p>
+      <p><strong className="vfx-notice-head"><Num id="vfx-notice-n" value={n} />{noticeHead(n, when).slice(String(n).length)}</strong>{noticeDetail(n, ready.length, waiting, stale.filter(m => verdictOf(m.path)?.kind === 'risky').length)}</p>
       <button type="button" className="lo-text-btn" onClick={() => { localStorage.setItem(DISMISSED, seen); setDismissed(seen) }}
         title="Hide these warnings until another mod needs an update, the game changes, or a waiting repair becomes available">Not now</button>
-      {ready.length > 0 && <button type="button" className="btn-primary" onClick={() => fixInVfxWindow(ready.map(m => m.utoc_path || utocOf(m.path)), true)}>
-        <RefreshCw size={14} aria-hidden="true" />{waiting ? `Update ${ready.length === 1 ? '1 mod' : `${ready.length} mods`}` : 'Update mods'}</button>}
+      {running
+        ? <button type="button" className="btn-primary" onClick={() => void openVfxWindow()} title="The Mod Updater is updating mods: bring its window to the front">
+            <ExternalLink size={14} aria-hidden="true" />Open Mod Updater</button>
+        : ready.length > 0 && <button type="button" className="btn-primary" onClick={() => fixInVfxWindow(ready.map(m => m.utoc_path || utocOf(m.path)), false)}
+            title="Open the Mod Updater with these mods ticked, ready to update">
+            <RefreshCw size={14} aria-hidden="true" />{waiting ? `Update ${ready.length === 1 ? '1 mod' : `${ready.length} mods`}` : 'Update mods'}</button>}
     </div>
   )
 }

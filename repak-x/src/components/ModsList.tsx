@@ -634,8 +634,11 @@ export default function ModsList({
             <div
                 key={viewMode}
                 ref={gridRef}
-                className={`mod-list-grid view-${viewMode} ${mods.length === 0 ? 'empty' : ''}`}
+                className={`mod-list-grid view-${viewMode} ${mods.length === 0 ? 'empty' : ''}${selectedMods.size ? ' has-selection' : ''}`}
                 style={{ overflowY: 'auto', height: '100%' }}
+                // repakxtra: a wheel past the end bounces the list (theme.css lib-end-bounce), so the end reads as the end
+                onWheel={e => { const g = e.currentTarget; if (e.deltaY > 0 && g.scrollTop + g.clientHeight >= g.scrollHeight - 1 && document.documentElement.dataset.motion !== 'off') g.classList.add('is-end-bounce') }}
+                onAnimationEnd={e => { if (e.target === e.currentTarget) e.currentTarget.classList.remove('is-end-bounce') }}
             >
                 {mods.length === 0 ? (
                     emptyState ?? (

@@ -38,6 +38,18 @@ export const repairedPaths = (r: VfxReport): string[] =>
  *  Any of them may be the one that crashes the game, so no candidate with them goes in without a review. */
 export const uncheckedAssets = (r: Pick<VfxReport, 'counts' | 'assets'>) => r.counts.unreadable + r.assets.filter(a => a.kind === 'failed').length
 
+/** A failure another try with the same tools and USMAP would not fix (its pill says Unsupported or ambiguous). Not a
+ *  cancel, a wait for a newer USMAP, a lost connection, the game updating mid-run, a decrypt, or a tool that stopped on
+ *  an unexpected problem (a layout check that threw included): those keep Try again and leave the mod as it is. */
+export const unsupportedFailure = (r: Pick<VfxReport, 'status' | 'error'>) =>
+  r.status === 'failed' && (/without the game's class names/.test(r.error ?? '') // that extract was already read again one-shot (xtra_uat_cli.rs)
+    || !/^(Not updated yet|Stopped on an unexpected problem|Not decrypted|Could not turn it off)|internet|game updated|could not be encrypted|layout could not be checked/i.test(r.error ?? ''))
+
+/** A failure that may pass on another try (a tool that stopped, a layout check that threw): the mod keeps Try again
+ *  once, and the same mod failing this way a second time counts as unsupported (the Mod Updater keeps the count). */
+export const repeatableFailure = (r: Pick<VfxReport, 'status' | 'error'>) =>
+  r.status === 'failed' && /^Stopped on an unexpected problem|layout could not be checked/i.test(r.error ?? '')
+
 export const repairOutcome = (r: VfxReport) => {
   if (r.status !== 'fixed') return 'Unsupported or ambiguous'
   if (incompleteAssets(r)) return 'Partially updated'
@@ -196,6 +208,7 @@ async function rebuild(o: FixOptions): Promise<VfxReport> {
   const report: VfxReport = { mod: o.modPath, name: stem(o.modPath).replace(/(_\d+)?_P$/i, ''), status: 'failed', assets: [], warnings: [],
     counts: { updated: 0, same: 0, added: 0, passed: 0, left: 0, ownGame: 0, unreadable: 0, changes: 0, relaid: 0 }, ms: 0, steps: [] }
   let step = 0, stepAt = t0
+  let layoutsTold = false // the layout pass told every file it was given (animations too) and none is unreadable
   const enter = (n: number) => {
     if (o.cancelled?.()) throw new Cancelled()
     const now = performance.now()
@@ -252,6 +265,7 @@ async function rebuild(o: FixOptions): Promise<VfxReport> {
     const re = older.length ? await invoke<{ files: string[]; failed: string[]; unread: string[]; untold: string[]; complete: boolean; oldBuild: number | null; noUsmap: boolean }>('xtra_vfx_relayout', { modPath: src, gamePaks: o.gamePaksPath, usmapPath: o.usmapPath, modExtract: dirs.modExtract, files: older, stageDir: dirs.stage })
       .catch(e => { warn(`Could not check its material layout (${e}).`); return undefined }) : null
     check()
+    layoutsTold = re === null || Boolean(re && re.complete && !re.unread.length)
     re?.files.forEach(f => relaid.add(assetKey(f)))
     report.counts.relaid = re?.files.length ?? 0
     // not checked, or in the old layout and not rewritten: passed on as they are they can crash the game, so the mod stays
@@ -659,7 +673,7 @@ async function rebuild(o: FixOptions): Promise<VfxReport> {
     if (runId) await invoke('xtra_vfx_run_done', { runId }).catch(() => {})
     // here, where the early returns pass too: Needs VFX update stops flagging it until the mod or the game changes (xtra_broken.rs)
     // not when its materials were rewritten: the original stays installed in the old layout and still needs turning off
-    if (report.status === 'nothing' && !report.counts.relaid) await invoke('xtra_vfx_no_update', { modPath: o.modPath }).catch(e => log(`Could not note that it needs nothing: ${e}`, 'warning'))
+    if (report.status === 'nothing' && !report.counts.relaid) await invoke('xtra_vfx_no_update', { modPath: o.modPath, animsTold: layoutsTold }).catch(e => log(`Could not note that it needs nothing: ${e}`, 'warning'))
     for (const modPath of repairedPaths(report)) {
       // the original: kept off by xtra_safe_off.rs first (Turn on anyway still works), so a later switch-on warns
       if (modPath !== report.placed!.fixed && !await invoke('xtra_vfx_turn_off', { modPath, reason: 'Its update replaced it. It was made for an older game build and can crash the game.' }).then(() => true, () => false)) continue
@@ -694,6 +708,12 @@ if (import.meta.env.DEV) {
   console.assert(repairOutcome({ ...sample, warnings: ['lost parameter'], reviewed: true }) === 'Updated after review', 'an accepted candidate says it was reviewed')
   console.assert(repairOutcome({ ...sample, warnings: ['lost parameter'] }) === 'Updated', 'with review off it is just Updated')
   console.assert(repairOutcome({ ...sample, status: 'failed' }) === 'Unsupported or ambiguous', 'failed is never repaired')
+  console.assert(unsupportedFailure({ status: 'failed', error: 'Not updated: none of its materials or blueprints could be rebuilt. Check the USMAP in Advanced, then try again.' })
+    && !unsupportedFailure({ status: 'failed', error: 'Stopped on an unexpected problem: x.' }) && !unsupportedFailure({ status: 'failed', error: 'Not updated yet. Waits.' })
+    && !unsupportedFailure({ status: 'failed', error: 'Not updated: x. Check the internet connection, then try again.' }) && !unsupportedFailure({ status: 'cancelled' }) && repeatableFailure({ status: 'failed', error: 'Stopped on an unexpected problem: x.' })
+
+    && !repeatableFailure({ status: 'failed', error: 'Not updated yet. Waits.' }) && !repeatableFailure({ status: 'failed', error: 'Not updated: x. Check the internet connection, then try again.' })
+    && !unsupportedFailure({ status: 'failed', error: 'Not updated: its material layout could not be checked. The mod was not changed. Check the USMAP in Advanced, then try again.' }), 'only a lasting failure is unsupported')
   console.assert(assetKey('A/MI_Body.uasset') !== assetKey('B/MI_Body.uasset'), 'same basename keeps distinct repair identities')
   console.assert(fixedName('C:/m/BlueColoredVFX_9999999_P.utoc') === 'BlueColoredVFX_UPDATED_9999999_P', 'fixed name drops the priority')
   console.assert(fixedName('C:/m/A b_UPDATED_9999999_P.utoc') === 'A_b_UPDATED_V2_9999999_P', 'an update of an update is its next version')

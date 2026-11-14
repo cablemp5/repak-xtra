@@ -38,9 +38,12 @@ pub fn cache_stamps() {
     println!("cargo:rustc-env=REPAKXTRA_ASSETS_LOGIC={:016x}", fnv(&(assets.concat() + &native)));
 }
 
+/// A file without its lines marked `// stamp:skip`: code that cannot change what a cache holds (a request field only
+/// packing uses), so a build that adds such lines (another edition) keeps every stamp and shares the saved caches.
 fn whole(file: &str) -> String {
     println!("cargo:rerun-if-changed={file}");
-    std::fs::read_to_string(file).unwrap_or_else(|e| panic!("{file}: {e}"))
+    let text = std::fs::read_to_string(file).unwrap_or_else(|e| panic!("{file}: {e}"));
+    text.split_inclusive('\n').filter(|l| !l.contains("// stamp:skip")).collect()
 }
 
 /// A file up to its tests module (the last item in each), so a test edit leaves the stamp alone.
@@ -72,12 +75,14 @@ fn without(text: &str, start: &str) -> String {
 }
 
 /// The native reader's inputs. The submodule's commit is read from git's own record of it, so a checkout without the
-/// submodule (CI's Rust tests) still builds, with "none" in its place.
+/// submodule (CI's Rust tests) still builds, with "none" in its place. Only the patches that change how files are read:
+/// not the folder's notes, nor a `-packaging.patch` (it changes how a mod is written, which no cache holds).
 fn native_reader_text() -> String {
     let mut text = whole("../uasset_toolkit/uasset_app/src/lib.rs");
     let patches = Path::new("../uassettool-patches");
     println!("cargo:rerun-if-changed={}", patches.display());
-    let mut names: Vec<_> = std::fs::read_dir(patches).into_iter().flatten().flatten().map(|e| e.path()).collect();
+    let mut names: Vec<_> = std::fs::read_dir(patches).into_iter().flatten().flatten().map(|e| e.path())
+        .filter(|p| p.extension().is_some_and(|x| x == "patch") && !p.to_string_lossy().ends_with("-packaging.patch")).collect();
     names.sort();
     for p in names {
         text.push_str(&std::fs::read_to_string(&p).unwrap_or_default());

@@ -22,6 +22,18 @@ export const verdictLabel = (kind: Verdict['kind']) => (kind === 'broken' ? 'Bro
  *  shortcut: by file name, a mod named exactly like Projectiles.pak is skipped too (Add .utoc still takes it). */
 export const skipsUpdater = (path: string) =>
   /[\\/]\.repakxtra-builtin[\\/]/i.test(path) || /^(!project[a-z]+(-repacked)?(_\d+)?(_p)?|project[a-z]+(-repacked)?)$/i.test(path.split(/[\\/]/).pop()!.replace(/\.[^.]+$/, ''))
+/** A mod the Mod Updater could not update (unsupportedFailure in vfx/pipeline.ts), renamed <name>_UNSUPPORTED and
+ *  turned off: the Mod Updater lists it under Failed, and nothing counts it as needing an update (Update can still
+ *  retry it from there). Pure. */
+const stemOf = (path: string) => path.split(/[\\/]/).pop()!.replace(/\.(pak|bak_repak|utoc|ucas)$/i, '')
+export const isUnsupported = (path: string) => /_unsupported(?=_|$)/i.test(stemOf(path))
+/** The name rename_mod takes (no priority suffix) for this mod: marked _UNSUPPORTED, or with that mark taken off. Pure. */
+export const unsupportedName = (path: string, on: boolean) => {
+  const bare = stemOf(path).replace(/(_\d+_P)+$/i, '').replace(/_unsupported(?=_|$)/ig, '')
+  return on ? `${bare}_UNSUPPORTED` : bare
+}
+/** The verdicts the app shows: not an encrypted mod's while Keep mods encrypted is on, nor a Failed mod's Needs update. */
+export const keptVerdict = (v: { path: string; kind: string; reason: string }) => !keepsEncrypted(v) && !(v.kind === 'vfx' && isUnsupported(v.path))
 /** What the Library's notice and the Mod Updater's Needs an update both count: a mod that needs an update, or one that
  *  may crash and is on (Update turns it off), never one it skips. */
 export const needsUpdater = (path: string, v?: { kind: string }, on = !/\.bak_repak$/i.test(path)) =>
@@ -86,7 +98,7 @@ export function useBrokenWatch(mods: { path: string; modified_date?: number; fil
     const check = () => {
       const turn = ++checkSeq
       return Promise.all([invoke<Verdict[]>('xtra_broken_mods', { modPaths: paths }), invoke<{ path: string; partial: boolean; current: boolean }[]>('xtra_made_mods', { modPaths: paths }).catch(() => [])])
-        .then(([r, m]) => { if (live && turn === checkSeq) { verdicts = new Map(r.filter(v => !keepsEncrypted(v)).map(v => [norm(v.path), v])); made = new Map(m.map(x => [norm(x.path), x])); version++; listeners.forEach(l => l()) } return true })
+        .then(([r, m]) => { if (live && turn === checkSeq) { verdicts = new Map(r.filter(keptVerdict).map(v => [norm(v.path), v])); made = new Map(m.map(x => [norm(x.path), x])); version++; listeners.forEach(l => l()) } return true })
         // the badges so far stay (the game runs and its file list is not read yet, or the call failed)
         .catch(e => { console.warn('[brokenMods] check failed', e); return false })
     }
@@ -213,5 +225,7 @@ if (import.meta.env.DEV) {
     && !skipsUpdater('C:/G/~mods/Project Hail Mary Skin_9999999_P.pak') && !skipsUpdater('C:/G/~mods/A_9999999_P.pak'), 'loaders and built-ins only')
   console.assert(updateBeside('a_broken_9999999_p') === 'a_9999999_p' && updateBeside('a_original_9999999_p') === 'a_partial_9999999_p'
     && updateBeside('broken_glass_9999999_p') === 'broken_glass_9999999_p', 'the update beside a renamed original')
+  console.assert(isUnsupported('C:/m/Cool_UNSUPPORTED_9999999_P.bak_repak') && isUnsupported('C:/m/Cool_UNSUPPORTED_UPDATED_9999999_P.pak') && !isUnsupported('C:/m/Unsupported Skin_9999999_P.pak'), 'the Failed mark')
+  console.assert(unsupportedName('C:/m/Cool_9999999_P.pak', true) === 'Cool_UNSUPPORTED' && unsupportedName('C:/m/Cool_UNSUPPORTED_UPDATED_9999999_P.pak', false) === 'Cool_UPDATED', 'mark and unmark')
   console.assert(needsUpdater('a.pak', { kind: 'risky' }) && !needsUpdater('a.bak_repak', { kind: 'risky' }) && needsUpdater('a.bak_repak', { kind: 'vfx' }) && !needsUpdater('a.pak', { kind: 'broken' }), 'needs the updater')
 }

@@ -62,12 +62,22 @@ export const useGlobalTooltips = () => {
       else target.removeAttribute('aria-describedby');
     };
 
-    const createTooltip = (text: string, targetRect: DOMRect): HTMLDivElement => {
+    // repakxtra: `hotkey` (the target's data-hotkey, "Ctrl+Shift+R") follows the text as keycaps, as the F1 sheet draws them
+    const createTooltip = (text: string, targetRect: DOMRect, hotkey?: string): HTMLDivElement => {
       const tooltip = document.createElement('div');
       tooltip.className = 'global-tooltip';
       tooltip.id = TOOLTIP_ID;
       tooltip.setAttribute('role', 'tooltip');
       tooltip.textContent = text;
+      if (hotkey) {
+        const keys = document.createElement('span');
+        keys.className = 'tooltip-keys';
+        hotkey.split('+').forEach((k, i) => {
+          if (i) keys.append(Object.assign(document.createElement('span'), { className: 'key-separator', textContent: '+' }));
+          keys.append(Object.assign(document.createElement('kbd'), { textContent: k }));
+        });
+        tooltip.append(keys);
+      }
       tooltip.style.visibility = 'hidden'; // Hide while measuring
       document.body.appendChild(tooltip);
 
@@ -75,7 +85,9 @@ export const useGlobalTooltips = () => {
       tooltip.offsetHeight;
 
       // Position tooltip
-      const tooltipRect = tooltip.getBoundingClientRect();
+      // repakxtra: its layout size, not getBoundingClientRect: the entrance starts at scale(0.92), so the box read 8% narrow
+      // and a tooltip near the window's edge grew past it once shown
+      const tooltipRect = { width: tooltip.offsetWidth, height: tooltip.offsetHeight };
       const viewportWidth = window.innerWidth;
 
       // Default to top placement
@@ -153,9 +165,10 @@ export const useGlobalTooltips = () => {
       showTimeout = setTimeout(() => {
         if (currentTarget !== target || !target.isConnected) return;
         removeTooltip();
-        activeTooltip = createTooltip(title, target.getBoundingClientRect());
-        // A name that already says it (taken from the title, or the same aria-label): no description that repeats it
-        if (!target.hasAttribute('data-tooltip-label') && target.getAttribute('aria-label') !== title) {
+        activeTooltip = createTooltip(title, target.getBoundingClientRect(), target.dataset.hotkey);
+        // A name that already says it (taken from the title, or the same aria-label): no description that repeats it,
+        // unless the tooltip adds the shortcut
+        if ((!target.hasAttribute('data-tooltip-label') && target.getAttribute('aria-label') !== title) || target.dataset.hotkey) {
           target.setAttribute('aria-describedby', withToken(target.getAttribute('aria-describedby'), TOOLTIP_ID, true));
         }
         // The target can unmount under the tooltip (a dialog closing on Enter): take the tooltip with it

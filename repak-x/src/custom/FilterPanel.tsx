@@ -117,7 +117,7 @@ export default function FilterPanel(p: Props) {
       <div className="fp-head">
         <span className="fp-title">Filters</span>
         {active > 0 && (
-          <button type="button" className="fp-clear" onClick={() => { p.setSelectedCharacters(new Set()); p.setSelectedCategories(new Set()) }}>
+          <button type="button" className="fp-clear" title="Clear the hero and type filters" data-hotkey="X" onClick={() => { p.setSelectedCharacters(new Set()); p.setSelectedCategories(new Set()) }}>
             Clear {active}
           </button>
         )}
