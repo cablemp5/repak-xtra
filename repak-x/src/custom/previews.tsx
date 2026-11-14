@@ -400,16 +400,26 @@ function loadUrl(key: string, rev: number): Promise<string | null | undefined> {
  *  a preview made again never gets an old clip. Any trouble with the storage: made as before, not kept. */
 const CLIPS = 'repakxtra-clips-2' // 2: the color in BT.601 video range (thumbWorker.ts toI420), clips kept before are made again
 const CLIPS_MOST = 300 // past this many, the 50 kept longest ago go
+/** How wide a card's clip is made: the card's own width on this screen, in steps of 32 px, to the stills' 400 at
+ *  most (and 400 when no card is on screen to measure). Every clip in view is decoded on one thread of the WebView (measured: 20 playing got 36 frames a second each,
+ *  40 got 20), and a 400 px clip on a 228 px card decoded three times the pixels shown, so a wide window's 17 clips
+ *  each lost 10 of their 60 frames a second (2026-11-14).
+ *  shortcut: read when the clip is made, a card zoom changed later keeps its clips until the next launch makes them again. */
+const clipWidth = () => {
+  const card = document.querySelector('.lo-card-image')?.clientWidth ?? 0
+  return card ? Math.min(THUMB_W, Math.ceil(card * devicePixelRatio / 32) * 32) : THUMB_W
+}
 async function keptClip(blob: Blob, boost: string): Promise<Blob | null> {
   let cache: Cache | undefined, name = ''
+  const width = clipWidth()
   try {
     const sha = new Uint8Array(await crypto.subtle.digest('SHA-1', await blob.arrayBuffer()))
-    name = `/clip/${[...sha].map(x => x.toString(16).padStart(2, '0')).join('')}-${THUMB_W}-${encodeURIComponent(boost)}`
+    name = `/clip/${[...sha].map(x => x.toString(16).padStart(2, '0')).join('')}-${width}-${encodeURIComponent(boost)}`
     cache = await caches.open(CLIPS)
     const hit = await cache.match(name)
     if (hit) return await hit.blob()
   } catch { cache = undefined }
-  const clip = await smallClipAway(blob, THUMB_W, boost)
+  const clip = await smallClipAway(blob, width, boost)
   if (clip && cache) {
     const c = cache
     void c.put(name, new Response(clip, { headers: { 'content-type': clip.type || 'video/webm' } }))

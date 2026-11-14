@@ -208,6 +208,7 @@ async function rebuild(o: FixOptions): Promise<VfxReport> {
   const report: VfxReport = { mod: o.modPath, name: stem(o.modPath).replace(/(_\d+)?_P$/i, ''), status: 'failed', assets: [], warnings: [],
     counts: { updated: 0, same: 0, added: 0, passed: 0, left: 0, ownGame: 0, unreadable: 0, changes: 0, relaid: 0 }, ms: 0, steps: [] }
   let step = 0, stepAt = t0
+  let layoutsTold = false // the layout pass told every file it was given (animations too) and none is unreadable
   const enter = (n: number) => {
     if (o.cancelled?.()) throw new Cancelled()
     const now = performance.now()
@@ -264,6 +265,7 @@ async function rebuild(o: FixOptions): Promise<VfxReport> {
     const re = older.length ? await invoke<{ files: string[]; failed: string[]; unread: string[]; untold: string[]; complete: boolean; oldBuild: number | null; noUsmap: boolean }>('xtra_vfx_relayout', { modPath: src, gamePaks: o.gamePaksPath, usmapPath: o.usmapPath, modExtract: dirs.modExtract, files: older, stageDir: dirs.stage })
       .catch(e => { warn(`Could not check its material layout (${e}).`); return undefined }) : null
     check()
+    layoutsTold = re === null || Boolean(re && re.complete && !re.unread.length)
     re?.files.forEach(f => relaid.add(assetKey(f)))
     report.counts.relaid = re?.files.length ?? 0
     // not checked, or in the old layout and not rewritten: passed on as they are they can crash the game, so the mod stays
@@ -671,7 +673,7 @@ async function rebuild(o: FixOptions): Promise<VfxReport> {
     if (runId) await invoke('xtra_vfx_run_done', { runId }).catch(() => {})
     // here, where the early returns pass too: Needs VFX update stops flagging it until the mod or the game changes (xtra_broken.rs)
     // not when its materials were rewritten: the original stays installed in the old layout and still needs turning off
-    if (report.status === 'nothing' && !report.counts.relaid) await invoke('xtra_vfx_no_update', { modPath: o.modPath }).catch(e => log(`Could not note that it needs nothing: ${e}`, 'warning'))
+    if (report.status === 'nothing' && !report.counts.relaid) await invoke('xtra_vfx_no_update', { modPath: o.modPath, animsTold: layoutsTold }).catch(e => log(`Could not note that it needs nothing: ${e}`, 'warning'))
     for (const modPath of repairedPaths(report)) {
       // the original: kept off by xtra_safe_off.rs first (Turn on anyway still works), so a later switch-on warns
       if (modPath !== report.placed!.fixed && !await invoke('xtra_vfx_turn_off', { modPath, reason: 'Its update replaced it. It was made for an older game build and can crash the game.' }).then(() => true, () => false)) continue

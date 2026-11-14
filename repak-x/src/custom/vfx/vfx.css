@@ -43,6 +43,9 @@
 .vf-grp.is-failed .vf-grp-count { color: #f59a42; background: color-mix(in srgb, #f59a42, transparent 86%); }
 .vf-grp.is-failed .vf-grp-name { color: #f59a42; }
 [data-theme="light"] .vf-grp.is-failed .vf-grp-count, [data-theme="light"] .vf-grp.is-failed .vf-grp-name { color: #9a5200; }
+/* Updating: the Update button's blue */
+.vf-grp.is-busy .vf-grp-count { color: var(--accent-primary); background: color-mix(in srgb, var(--accent-primary), transparent 86%); }
+.vf-grp.is-busy .vf-grp-name { color: var(--accent-primary); }
 .vf-grp.is-done .vf-grp-count { color: #3ecf6e; background: color-mix(in srgb, #3ecf6e, transparent 88%); }
 .vf-grp.is-done .vf-grp-name { color: #3ecf6e; }
 [data-theme="light"] .vf-grp.is-done .vf-grp-count, [data-theme="light"] .vf-grp.is-done .vf-grp-name { color: #166236; }

@@ -251,7 +251,7 @@ function Row({ mod, rowKey, loadouts, run, needs, partial, waits, made, picked, 
 /** A group of mods that folds away to its heading, as a collection does on the Loadouts screen. Its heading holds the
  *  fold, the name and count, and Select all / Clear for the group. */
 function Group({ title, count, tone, open, onFold, all, none, busy, onPick, children }: {
-  title: string; count: number; tone?: 'needs' | 'failed' | 'done'; open: boolean; onFold: () => void; all: boolean; none: boolean; busy: boolean; onPick: (on: boolean) => void; children: React.ReactNode
+  title: string; count: number; tone?: 'needs' | 'failed' | 'busy' | 'done'; open: boolean; onFold: () => void; all: boolean; none: boolean; busy: boolean; onPick: (on: boolean) => void; children: React.ReactNode
 }) {
   return (
     <section className={`vf-grp${tone ? ` is-${tone}` : ''}${open ? '' : ' is-folded'}`}>
@@ -839,7 +839,8 @@ export function VfxUpdaterPanel() {
   const isAdded = (m: Mod) => !updatedNow(m) && !updatingNow(m) && !isUnsupported(m.path) && addedKeys.has(norm(m.utoc)) // chosen by hand, above the rest
   // every mod that needs an update, whatever its kind (VFX, UI, material, or May crash to turn off), with any that ran
   // this session and did not update
-  const first = (m: Mod) => !updatedNow(m) && !updatingNow(m) && !isAdded(m) && !isUnsupported(m.path) && Boolean(needsOf(m) || runs[norm(m.utoc)])
+  // one a run found Nothing to update for is no longer flagged: it goes back to All mods, its result still on its row
+  const first = (m: Mod) => !updatedNow(m) && !updatingNow(m) && !isAdded(m) && !isUnsupported(m.path) && Boolean(needsOf(m) || (runs[norm(m.utoc)] && runs[norm(m.utoc)].status !== 'nothing'))
   const group = (id: string, title: string, ms: Mod[], count = ms.length) => {
     const keys = ms.map(m => norm(m.utoc))
     return { id, title, mods: ms, count, keys, all: keys.length > 0 && keys.every(k => picked.has(k)), none: !keys.some(k => picked.has(k)) }
@@ -951,7 +952,7 @@ export function VfxUpdaterPanel() {
           : shown.length === 0
             ? (loadError && !needle ? null : <p className="lp-empty">{needle || hero ? `No mods match${needle ? ` “${q.trim()}”` : ''}${hero ? ` for ${hero}` : ''}.` : 'No VFX mods in the mods folder. VFX mods and mods with material instances (MI_ files) appear here. Add .utoc takes any other mod.'}</p>)
             : <div className="vf-groups">{groups.map(g => g.mods.length > 0 && (
-              <Group key={g.id} title={g.title} count={g.count} tone={g.id === 'needs' ? 'needs' : g.id === 'failed' ? 'failed' : g.id === 'updated' ? 'done' : undefined} busy={busy} all={g.all} none={g.none}
+              <Group key={g.id} title={g.title} count={g.count} tone={g.id === 'needs' ? 'needs' : g.id === 'failed' ? 'failed' : g.id === 'updating' ? 'busy' : g.id === 'updated' ? 'done' : undefined} busy={busy} all={g.all} none={g.none}
                 open={Boolean(needle || hero) || !foldedIds.includes(g.id)} onFold={() => fold(g.id)} onPick={on => userPick(g.keys, on)}>
                 <ul className="mod-rows vf-rows">
                   {g.mods.map(m => {

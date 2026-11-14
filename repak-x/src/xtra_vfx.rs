@@ -563,6 +563,14 @@ fn is_update(stem: &str) -> bool {
     update_version(split_priority(stem).0).1.is_some()
 }
 
+/// The stem an update named by fixed_stem was made from (`A_UPDATED_V2_9999999_P` gives `A_9999999_P`), None for any other.
+/// With Names set to keep the mod's name, updating `A_UPDATED` writes `A` and leaves `A_UPDATED` where it was.
+pub(crate) fn update_base_stem(stem: &str) -> Option<String> {
+    let (b, p) = split_priority(stem);
+    let (name, version) = update_version(b);
+    version.map(|_| format!("{name}{p}"))
+}
+
 /// `<name>_UPDATED_9999999_P` for a mod's file stem: the name without its priority suffix, spaces as underscores. An
 /// update of an update is its next version: `<name>_UPDATED_V2_9999999_P`, then V3, so each one is kept apart.
 pub(crate) fn fixed_stem(stem: &str) -> String {
@@ -1422,6 +1430,9 @@ mod tests {
         assert_eq!(broken_stem("Plain"), "Plain_BROKEN");
         assert_eq!(unbroken_stem("BlueColoredVFX_BROKEN_9999999_P"), "BlueColoredVFX_9999999_P");
         assert_eq!(unbroken_stem("BlueColoredVFX_9999999_P"), "BlueColoredVFX_9999999_P");
+        assert_eq!(update_base_stem("A_UPDATED_V2_9999999_P").as_deref(), Some("A_9999999_P"));
+        assert_eq!(update_base_stem("A_UPDATED_9999999_P").as_deref(), Some("A_9999999_P"));
+        assert_eq!(update_base_stem("A_9999999_P"), None);
     }
 
     #[test]
