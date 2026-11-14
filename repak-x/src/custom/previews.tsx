@@ -14,6 +14,7 @@ import { type Loadout, coverFills, displayName, memberName, modKey, nameKey, pat
 import { revealOnLoad } from './motion'
 import { EGG_MS, stepEgg, stepText } from './previewStages'
 import { ordinal, plural } from './modName'
+import { blend, forText, learn, leftText, typical } from './eta'
 import { animatedUrls, coverStills, isIdle } from './idlePause'
 import { smallClipAway, smallCopyAway } from './thumbWorker'
 import { koPreview } from './ko/koPreview'
@@ -105,6 +106,12 @@ window.addEventListener('repakxtra-loadouts-kept', e => {
 window.addEventListener('repakxtra-loadouts-gone', e => dropLoadoutPreviews((e as CustomEvent<string[]>).detail.map(id => `loadout-${id}`)))
 let active = false // a run was accepted and its done event has not arrived yet
 let batchDone = 0  // jobs finished since the queue was last empty, for Home's "3 of 21"
+// The batch's own pace, for its time left (previewLeft): when it started and how many mods its finished jobs had
+let batchStart = 0, batchMods = 0, runStart = 0
+// shortcut: one time per mod for every kind (a loadout's combined render counts across its mods), the batch's own pace
+// corrects it for a batch of slow emotes. Upgrade to a time per kind if a mixed batch's first estimate reads far off
+const PREVIEW_MS = 20_000 // before this PC has finished 3 runs: the old "about 20 seconds per mod"
+const perMod = () => typical('preview') ?? PREVIEW_MS
 type SetResult = 'ok' | 'none' | 'failed' | undefined
 let run = { id: '', total: 0, made: 0, none: 0, failed: 0, stopping: false, summary: '', set: undefined as string | undefined, name: '', setResult: undefined as SetResult, busy: '',
   show: false, step: undefined as string | undefined, quiet: false }
@@ -229,11 +236,13 @@ function finish(ok: boolean) {
     failureListeners.forEach(f => f({ name: run.name, failed, setFailed: run.setResult === 'failed', stale }))
   }
   play(run.busy ? 'warning' : stoppedEarly ? 'close' : run.made && !failed && run.setResult !== 'failed' ? 'ready' : run.made ? 'warning' : 'error')
-  if (!run.busy) batchDone++
+  // a run that went through teaches this PC's time per mod (KO prompts and unchanged mods take no time: they count too)
+  if (!stopped && !run.busy && run.total > 0 && run.made + run.none > 0) { const ms = (Date.now() - runStart) / run.total; if (ms >= 2000) learn('preview', ms) } // under 2 s a mod: kept unchanged, not rendered
+  if (!run.busy) { batchDone++; batchMods += run.total }
   notify()
   syncPreviewList()
   startNext()
-  if (!running()) batchDone = 0
+  if (!running()) { batchDone = 0; batchMods = 0; batchStart = 0 }
 }
 
 export const usePreviewVersion = () => useSyncExternalStore(subscribe, () => version)
@@ -614,6 +623,8 @@ const start = async (job: QueuedJob): Promise<string | null> => {
   jobs.forEach(([, k]) => { pending.add(k); outcome.delete(k) })
   if (job.set) outcome.delete(job.set)
   runPaths = new Map(job.paths.map(p => [nameKey(p), p]))
+  runStart = Date.now()
+  if (!batchStart) batchStart = runStart
   run = { id: job.id, total: jobs.length, made: 0, none: 0, failed: 0, stopping: false, summary: '', set: job.set, name: job.name, setResult: undefined, busy: '',
     show: Boolean(job.show), step: undefined, quiet: Boolean(job.quiet) }
   notify()
@@ -697,13 +708,24 @@ const queuedText = () => {
   return sets === queue.length ? plural(sets, 'loadout') : sets === 0 ? plural(queue.length, 'selection') : `${queue.length} preview jobs`
 }
 
+/** The batch's time left in ms (the run going now and the queue): this PC's time per mod from finished runs, blended with
+ *  the batch's own pace once a mod is done. */
+const previewLeft = (now = Date.now()) => {
+  const done = batchMods + run.total - pending.size
+  const left = pending.size + queue.reduce((n, j) => n + new Set(j.paths.map(nameKey)).size, 0)
+  const live = done > 0 && batchStart ? (now - batchStart) / done : undefined
+  return left * (blend(perMod(), live, done / (done + left)) ?? perMod())
+}
+
 /** The run going now and how many wait behind it (Home's status line); null when idle. */
 export function usePreviewBatch() {
   usePreviewVersion()
   if (!running()) return null
   return { name: run.name, done: doneOf(), total: run.total, left: queue.length, leftText: queuedText(), stopping: run.stopping,
-    job: batchDone + 1, jobs: batchDone + 1 + queue.length }
+    job: batchDone + 1, jobs: batchDone + 1 + queue.length, timeLeft: run.stopping ? '' : leftText(previewLeft()) }
 }
+/** "about 4 minutes" for `mods` mods not started yet, at this PC's pace. */
+export const previewsTake = (mods: number) => forText(mods * perMod())
 
 /** The last run's result line ("4 made · 1 failed"), kept until the next run starts or it is dismissed. */
 export function usePreviewSummary() {
@@ -716,12 +738,19 @@ export const dismissPreviewSummary = () => { run.summary = ''; notify() }
  *  loadouts with no preview yet; `all`: every one, rendered again even when nothing changed. A card already showing its
  *  image, capture or text keeps showing it (showPreviewCover). Returns how many, or the reason the first could not
  *  start (then nothing is queued). */
-export async function generateAllLoadouts(loadouts: { id: string; name: string; on: string[] }[], mods: { path: string }[], which: 'missing' | 'all' = 'all') {
+type LoadoutList = { id: string; name: string; on: string[] }[]
+const loadoutJobs = (loadouts: LoadoutList, mods: { path: string }[], which: 'missing' | 'all') => {
   const byKey = new Map(mods.map(m => [modKey(m.path), m.path]))
-  const jobs = loadouts
+  return loadouts
     .filter(l => which === 'all' || !loadoutHasPreview(l))
     .map(l => ({ paths: l.on.map(k => byKey.get(displayName(k))).filter((x): x is string => Boolean(x)), set: previewSetKey(l.id), name: l.name, force: which === 'all' }))
     .filter(j => j.paths.length > 0)
+}
+/** "about 12 minutes" for Generate all previews' `which`, at this PC's pace. */
+export const loadoutsTake = (loadouts: LoadoutList, mods: { path: string }[], which: 'missing' | 'all') =>
+  previewsTake(loadoutJobs(loadouts, mods, which).reduce((n, j) => n + new Set(j.paths.map(nameKey)).size, 0))
+export async function generateAllLoadouts(loadouts: LoadoutList, mods: { path: string }[], which: 'missing' | 'all' = 'all') {
+  const jobs = loadoutJobs(loadouts, mods, which)
   const started = jobs.map(generatePreviews) // all asked for in this tick: the first starts, the rest queue behind it
   const error = (await Promise.all(started)).find(Boolean) ?? null
   return { count: error ? 0 : jobs.length, error }
@@ -890,7 +919,7 @@ export function GeneratePreviewsButton({ paths, set, name, className = 'btn-ghos
     if (stopOnly) return stopBtn
     return (
       <span className="run-group">
-        <span className={`${className} is-running`} role="status">
+        <span className={`${className} is-running`} role="status" title={run.stopping ? undefined : leftText(previewLeft())}>
           {run.stopping ? 'Stopping…' : <Shimmer text={`Generating ${doneOf()} of ${run.total}`} />}
         </span>
         {stopBtn}
@@ -915,7 +944,7 @@ export function GeneratePreviewsButton({ paths, set, name, className = 'btn-ghos
   }
   return (
     <button type="button" className={className} disabled={n === 0} onClick={() => ask(alert, job)}
-      title={run.summary ? `Last run: ${run.summary}` : again ? `Render this loadout's previews again (about 20 seconds per mod)` : `Render previews for these ${n} mods (about 20 seconds each)`}>
+      title={run.summary ? `Last run: ${run.summary}` : again ? `Render this loadout's previews again (${previewsTake(n)})` : `Render previews for these ${n} mods (${previewsTake(n)})`}>
       <WandSparkles size={16} />
       <span className="bulk-btn-label">{text}</span>
       {n > 0 && <span className="bulk-num">{n}</span>}

@@ -9,6 +9,7 @@
 import { useEffect, useSyncExternalStore } from 'react'
 import { emit, listen } from '@tauri-apps/api/event'
 import { invoke } from '@tauri-apps/api/core'
+import { blend, learn, typical } from './eta'
 
 export type ScanStep = { step: 'effects' | 'materials' | 'blueprints' | 'meshes'; at: number; total: number; path: string }
 /** Sent when a full run of the checks ends (finished, stopped for the game, or failed) */
@@ -27,8 +28,18 @@ const SHOW_AFTER_MS = 1500
 /** `pct`: the whole run's progress as shown, which only rises in a run (a scan that counts again from 0 never lowers it). */
 /** `stage`: the step the run is on, of `weights` (what each step weighs). `mods`: how many mods it scans. `counting`:
  *  the mods read now belong to that step (false before the first, while a manual Check's mods go first). */
-export type ScanRun = { running: boolean; shown: boolean; paused: boolean; last: ScanStep | null; read: number; held: 'paused' | 'cancelled' | null; stage: number; weights: number[]; mods: number; counting: boolean; pct: number }
-let run: ScanRun = { running: false, shown: false, paused: false, last: null, read: 0, held: null, stage: 0, weights: [1], mods: 0, counting: false, pct: 0 }
+/** `started`: when the run began (ms), for its time left (scanLeft). */
+export type ScanRun = { running: boolean; shown: boolean; paused: boolean; last: ScanStep | null; read: number; held: 'paused' | 'cancelled' | null; stage: number; weights: number[]; mods: number; counting: boolean; pct: number; started: number }
+let run: ScanRun = { running: false, shown: false, paused: false, last: null, read: 0, held: null, stage: 0, weights: [1], mods: 0, counting: false, pct: 0, started: 0 }
+const units = (weights: number[]) => weights.reduce((a, w) => a + w, 0)
+/** The run's time left in ms: this PC's time per unit of work (a mod read by one step) from finished runs, and the run's
+ *  own pace once it is 2% in. undefined when neither is known yet. */
+export const scanLeft = (r: ScanRun, now = Date.now()) => {
+  const per = typical('scan-unit')
+  const prior = per === undefined ? undefined : per * units(r.weights) * (1 - r.pct / 100)
+  const live = r.pct >= 2 && r.started ? (now - r.started) * (100 - r.pct) / r.pct : undefined
+  return blend(prior, live, r.pct / 100)
+}
 const listeners = new Set<() => void>()
 const set = (next: Partial<ScanRun>) => {
   run = { ...run, ...next }
@@ -56,7 +67,7 @@ const showSoon = () => {
   showTimer = window.setTimeout(() => { showTimer = undefined; if (run.running) set({ shown: true }) }, SHOW_AFTER_MS)
 }
 /** brokenMods.ts: a run of the checks starts, reading the game's files first (step 0). */
-export const scanStarted = () => { set({ running: true, last: null, read: 0, stage: 0, weights: [1], mods: 0, counting: false, pct: 0 }); run.pct = 0; showSoon() }
+export const scanStarted = () => { set({ running: true, last: null, read: 0, stage: 0, weights: [1], mods: 0, counting: false, pct: 0, started: Date.now() }); run.pct = 0; showSoon() }
 /** brokenMods.ts: what the run's steps weigh and how many mods it scans, known before its first step counts. */
 export const scanPlan = (weights: number[], mods: number) => set({ weights, mods })
 /** brokenMods.ts: step `stage` of `weights` starts (its mods are counted from 0), in a run that scans `mods` mods.
@@ -67,6 +78,8 @@ export const scanStage = (stage: number, weights: number[], mods: number, count?
 }
 /** brokenMods.ts: the run ended. `finished`: false when it stopped with mods left to read, or failed. */
 export const scanEnded = (finished: boolean) => {
+  // a whole run teaches the time per unit (the dev copy is a debug build, several times slower than the app)
+  if (finished && run.started && run.mods > 0 && !import.meta.env.DEV) learn('scan-unit', (Date.now() - run.started) / units(run.weights))
   set({ running: false, paused: !finished && run.held !== 'cancelled' })
   window.dispatchEvent(new Event(SCAN_DONE))
   void emit(SCAN_DONE).catch(() => {}) // and the Mod Updater window, which follows the run (its Scan starts one)

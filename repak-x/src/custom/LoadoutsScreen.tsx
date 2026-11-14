@@ -19,7 +19,7 @@ import { type Spot, playFlip, snapshotCards, useCardDrag } from './cardDrag'
 import { prepareMedia, putMedia } from './loadoutMedia'
 import { plural } from './modName'
 import { type OnOff, OnOffFilter, readOnOff } from './ModStateFilter'
-import { PreviewsUnavailable, dismissPreviewSummary, generateAllLoadouts, loadoutHasPreview, stopPreviews, usePreviewFailureToast, usePreviewsAvailable, usePreviewBatch, usePreviewStage, usePreviewSummary, usePreviewVersion } from './previews'
+import { PreviewsUnavailable, dismissPreviewSummary, generateAllLoadouts, loadoutHasPreview, loadoutsTake, stopPreviews, usePreviewFailureToast, usePreviewsAvailable, usePreviewBatch, usePreviewStage, usePreviewSummary, usePreviewVersion } from './previews'
 import {
   type Loadout, type Mod, OTHER, OTHER_LABEL, addGroup, captureKey, changesToTurnOff, changesToTurnOn, deleteGroup, displayName, groupKey,
   inGroup, isActive, modKey, moveGroup, moveLoadout, movedBeside, nextLoadoutName, openLoadout, patchLoadout, placeLoadout, placed, readLoadouts, renameGroup,
@@ -587,7 +587,7 @@ function LoadoutsHome(p: LoadoutProps) {
             </button>
             {genMenu && batch && (
               <div className="xtra-menu lo-gen-menu" role="menu">
-                <div className="lo-gen-status" role="status"><b>{batch.name}</b><span>{stage || 'Starting…'}</span></div>
+                <div className="lo-gen-status" role="status"><b>{batch.name}</b><span>{stage || 'Starting…'}</span>{batch.timeLeft && <span>{batch.timeLeft}</span>}</div>
                 <button type="button" role="menuitem" className="xtra-item run-stop-btn" disabled={batch.stopping} onClick={() => { setGenMenu(false); stopPreviews() }}
                   title={batch.left ? 'Stop now and clear the queue' : 'Stop now'}>
                   <span className="lo-gen-stop"><span className="stop-glyph" aria-hidden="true" />{batch.stopping ? 'Stopping…' : batch.left ? 'Stop all' : 'Stop'}</span>
@@ -597,10 +597,10 @@ function LoadoutsHome(p: LoadoutProps) {
             {genMenu && !batch && (
               <div className="xtra-menu lo-gen-menu" role="menu">
                 <button type="button" role="menuitem" className="xtra-item" disabled={withPreview === loadouts.length} onClick={() => generate('missing')}>
-                  <span>Only the ones without a preview</span><small>{loadouts.length - withPreview}</small>
+                  <span>Only the ones without a preview</span><small>{loadouts.length - withPreview}{withPreview < loadouts.length && ` · ${loadoutsTake(loadouts, p.mods, 'missing')}`}</small>
                 </button>
                 <button type="button" role="menuitem" className="xtra-item" onClick={() => generate('all')}>
-                  <span>Regenerate every loadout</span><small>{loadouts.length}</small>
+                  <span>Regenerate every loadout</span><small>{loadouts.length} · {loadoutsTake(loadouts, p.mods, 'all')}</small>
                 </button>
               </div>
             )}
