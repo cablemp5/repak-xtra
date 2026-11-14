@@ -23,9 +23,12 @@ $uat = 'target\uassettool\UAssetTool.dll'
 $cli = 'target\uassettool-cli\UAssetTool.exe'
 # either one missing (a publish that failed halfway), or older than a patch (a new or changed fix)
 $stale = { param($f) -not (Test-Path $f) -or (Get-ChildItem uassettool-patches\*.patch | Where-Object LastWriteTime -gt (Get-Item $f).LastWriteTime) }
-# or built before the source stamp the app keys its mod checks on (UAssetTool.source, uassettool-patches\apply.ps1)
-if ((& $stale $uat) -or (& $stale $cli) -or -not (Test-Path target\uassettool-cli\UAssetTool.source)) {
-    . .\uassettool-patches\apply.ps1 # with repakxtra's fixes, as build.ps1 builds it
+# or with no source stamp (the app keys its mod checks on it, uassettool-patches\apply.ps1), or built from another patch
+# set (the other edition: a patch it has and this one lacks changes no timestamp here)
+. .\uassettool-patches\apply.ps1 # with repakxtra's fixes, as build.ps1 builds it
+$src = 'target\uassettool-cli\UAssetTool.source'
+$was = if (Test-Path $src) { @(("$(Get-Content -Raw $src)".Trim()) -split "`r?`n") } else { @() }
+if ((& $stale $uat) -or (& $stale $cli) -or $was[0] -ne (Get-UatSourceId)) {
     Use-UatPatches {
         Remove-Item UAssetToolRivals\src\UAssetTool\obj, UAssetToolRivals\src\UAssetTool\bin -Recurse -Force -ErrorAction SilentlyContinue
         dotnet publish UAssetToolRivals/src/UAssetTool/UAssetToolNative.csproj -c Release -r win-x64 -p:DebugType=none -p:DebugSymbols=false -o target/uassettool
@@ -36,7 +39,7 @@ if ((& $stale $uat) -or (& $stale $cli) -or -not (Test-Path target\uassettool-cl
         if ($LASTEXITCODE -ne 0) { throw 'The UAssetTool command line did not build.' }
     }
     Write-UatSource
-}
+} elseif ($was.Count -eq 1) { Write-UatSource } # a stamp from before its second line, the read id the app keys its checks on
 # repak-x\build.rs copies these only when it reruns, which an incremental dev build skips: put them beside the debug exe
 New-Item -ItemType Directory -Force target\debug\data | Out-Null
 Copy-Item target\uassettool\UAssetTool.dll target\debug\ -Force
