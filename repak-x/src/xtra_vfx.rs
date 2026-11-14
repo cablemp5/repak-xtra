@@ -811,6 +811,7 @@ fn place(source: &Path, staged_base: &Path, turn_off_original: bool, keep_name: 
         if stuck.is_empty() {
             format!("{msg} The mod is as it was.")
         } else {
+            plan.keep(); // the next start tries again
             format!("{msg} Some files could not be put back: {}.", stuck.join(". "))
         }
     };

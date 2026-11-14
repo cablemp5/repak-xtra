@@ -90,19 +90,22 @@ pub fn replace_all_retiring(moves: &[(PathBuf, PathBuf)], retire: &[PathBuf]) ->
 }
 
 fn replace_with(moves: &[(PathBuf, PathBuf)], old: &[&PathBuf], dir: &Path) -> Result<Option<String>, String> {
+    // true: every file is back
     let put_back = |done: &[&PathBuf]| {
-        for d in done.iter().rev() {
-            let _ = crate::xtra_trash::put_back(dir, d);
-        }
+        let back = done.iter().rev().fold(true, |ok, d| crate::xtra_trash::put_back(dir, d).is_ok() && ok);
         crate::xtra_trash::release_if_empty(dir);
+        back
     };
     // noted first, so a crash in between puts every file back at the next start (xtra_journal.rs)
-    let _plan = crate::xtra_journal::begin(&crate::xtra_journal::Plan { trash: Some(dir.to_path_buf()), trashed: old.iter().map(|p| p.to_path_buf()).collect(), renames: moves.to_vec(), ..Default::default() })?;
+    let plan = crate::xtra_journal::begin(&crate::xtra_journal::Plan { trash: Some(dir.to_path_buf()), trashed: old.iter().map(|p| p.to_path_buf()).collect(), renames: moves.to_vec(), ..Default::default() })?;
     if let Err((d, e)) = crate::xtra_trash::discard_all(dir, &old.iter().map(|p| p.as_path()).collect::<Vec<_>>()) {
         return Err(format!("Could not move the old {} aside: {}", d.display(), e));
     }
     if let Err(e) = move_all(moves) {
-        put_back(old);
+        // move_all names the files it could not put back: the plan stays for the next start then
+        if !put_back(old) || e.contains("could not be put back") {
+            plan.keep();
+        }
         return Err(e);
     }
     Ok(dir.file_name().map(|n| n.to_string_lossy().to_string()))

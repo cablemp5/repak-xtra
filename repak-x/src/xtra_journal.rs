@@ -61,11 +61,20 @@ fn dir() -> PathBuf {
 }
 
 /// The plan on disk while a swap runs: dropped (the file removed) when the swap finished or undid itself.
-pub struct Open(PathBuf);
+pub struct Open(PathBuf, std::cell::Cell<bool>);
+
+impl Open {
+    /// An undo that could not put every file back: the plan stays, so the next start tries again.
+    pub fn keep(&self) {
+        self.1.set(true);
+    }
+}
 
 impl Drop for Open {
     fn drop(&mut self) {
-        let _ = std::fs::remove_file(&self.0);
+        if !self.1.get() {
+            let _ = std::fs::remove_file(&self.0);
+        }
     }
 }
 
@@ -82,7 +91,7 @@ fn begin_in(dir: &Path, plan: &Plan) -> Result<Open, String> {
     let ids = plan.renames.iter().map(|(from, _)| id(from)).collect();
     let noted = Plan { trash: plan.trash.clone(), trashed: plan.trashed.clone(), renames: plan.renames.clone(), ids };
     f.write_all(&serde_json::to_vec(&noted).map_err(|e| e.to_string())?).and_then(|_| f.sync_all()).map_err(|e| format!("Could not note the swap before it starts: {e}"))?;
-    Ok(Open(path))
+    Ok(Open(path, Default::default()))
 }
 
 /// Puts back every swap a closed or crashed run cut short: each rename undone, newest first, where its new name holds
@@ -93,8 +102,9 @@ pub fn recover() -> Vec<String> {
 }
 
 fn recover_in(dir: &Path) -> Vec<String> {
-    let mut stuck = Vec::new();
+    let mut all = Vec::new();
     for e in std::fs::read_dir(dir).into_iter().flatten().flatten() {
+        let mut stuck = Vec::new();
         let path = e.path();
         let Some(plan) = std::fs::read(&path).ok().and_then(|b| serde_json::from_slice::<Plan>(&b).ok()) else {
             let _ = std::fs::remove_file(&path); // cut short while it was written: the swap never started
@@ -120,9 +130,13 @@ fn recover_in(dir: &Path) -> Vec<String> {
             crate::xtra_trash::release_if_empty(t);
         }
         log::warn!("[swap journal] put back a swap that was cut short: {}", path.display());
-        let _ = std::fs::remove_file(&path);
+        // a file that could not go back (locked, say) keeps the plan for the next start
+        if stuck.is_empty() {
+            let _ = std::fs::remove_file(&path);
+        }
+        all.extend(stuck);
     }
-    stuck
+    all
 }
 
 #[cfg(test)]
@@ -171,5 +185,19 @@ mod tests {
         assert!(recover_in(&j).is_empty());
         assert_eq!(std::fs::read(&orig).unwrap(), b"original");
         assert_eq!(std::fs::read(&tmp).unwrap(), b"update");
+        // a file that cannot go back yet (its folder gone): the plan stays, and the next start puts it back
+        let (gone, aside) = (d.path().join("gone"), mods.join("B_BROKEN.utoc"));
+        std::fs::create_dir_all(&gone).unwrap();
+        std::fs::write(gone.join("B.utoc"), b"b").unwrap();
+        let plan = Plan { renames: vec![(gone.join("B.utoc"), aside.clone())], ..Default::default() };
+        std::mem::forget(begin_in(&j, &plan).unwrap());
+        std::fs::rename(gone.join("B.utoc"), &aside).unwrap();
+        std::fs::remove_dir(&gone).unwrap();
+        assert_eq!(recover_in(&j).len(), 1);
+        assert_eq!(std::fs::read_dir(&j).unwrap().count(), 1, "kept for the next start");
+        std::fs::create_dir_all(&gone).unwrap();
+        assert!(recover_in(&j).is_empty());
+        assert_eq!(std::fs::read(gone.join("B.utoc")).unwrap(), b"b");
+        assert_eq!(std::fs::read_dir(&j).unwrap().count(), 0);
     }
 }
