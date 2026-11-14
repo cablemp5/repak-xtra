@@ -156,10 +156,11 @@ window.addEventListener('scroll', () => settleIn(150), { capture: true, passive:
 // on the page cost a scroll its frames however it was handled: 31 of them made 62 layers (every repaint sorted 99), and
 // even two playing in view held the whole window at 72 frames a second of 144 while nothing else moved, so each scroll
 // began at that pace (2026-11-13). A canvas leaves the window at full rate.
-// Each frame is drawn as the video presents it (requestVideoFrameCallback, which a video that is not rendered still
-// fires), so every clip shows each of its frames at its own rate. A draw each screen frame keyed on currentTime ran
-// ahead of the frame shown and skipped some: a 60 a second clip reached its canvas at 50, a 37 a second one jittered
-// (2026-11-14)
+// Every screen frame each playing clip's current frame is drawn again, whether or not it changed: a video that is not
+// rendered updates its frame only when asked for it (the draw asks), so nothing else says when a new one is there.
+// Keyed on currentTime the draw ran ahead of the frame and skipped some (a 60 a second clip reached its canvas at 50).
+// On requestVideoFrameCallback the frames came late whenever the page was busy: 229 of 2,984 skipped and gaps to
+// 167 ms in a 5 s scroll, 27 late ones at rest (2026-11-14)
 const canvasOf = (v: HTMLVideoElement) => (v.previousElementSibling instanceof HTMLCanvasElement ? v.previousElementSibling : null)
 const paint = (v: HTMLVideoElement) => {
   const c = canvasOf(v)
@@ -167,17 +168,24 @@ const paint = (v: HTMLVideoElement) => {
   if (c.width !== v.videoWidth || c.height !== v.videoHeight) { c.width = v.videoWidth; c.height = v.videoHeight }
   const g = c.getContext('2d')
   if (!g) return
-  g.clearRect(0, 0, c.width, c.height) // a video with transparency: the frame before must not show through
+  g.globalCompositeOperation = 'copy' // a video with transparency: the frame before must not show through
   g.drawImage(v, 0, 0)
   if (!c.classList.contains('is-drawn')) c.classList.add('is-drawn') // from now its still is hidden (theme.css)
 }
-const framed = new WeakSet<HTMLVideoElement>() // asked for its frames: each one asks for the next (a paused clip presents none)
-const follow = (v: HTMLVideoElement) => {
-  if (framed.has(v)) return
-  framed.add(v)
-  const next = () => { if (v.isConnected) { paint(v); v.requestVideoFrameCallback(next) } else framed.delete(v) }
-  v.requestVideoFrameCallback(next)
+const clips = new Set<HTMLVideoElement>() // the videos drawn onto a canvas (data-poster), looping or not
+let drawing = 0
+const draw = () => {
+  drawing = 0
+  let any = false
+  for (const v of clips) {
+    if (!v.isConnected) { clips.delete(v); continue }
+    if (v.paused) continue // out of view, or the window is in the background (settle, update)
+    any = true
+    paint(v)
+  }
+  if (any) drawing = requestAnimationFrame(draw) // ends with the last clip that plays
 }
+const follow = (v: HTMLVideoElement) => { clips.add(v); if (!drawing) drawing = requestAnimationFrame(draw) }
 // a clip that is not playing still shows where it stands: its first frame once loaded, the frame a seek lands on
 for (const type of ['loadeddata', 'seeked']) document.addEventListener(type, e => {
   if (e.target instanceof HTMLVideoElement && e.target.dataset.poster !== undefined) paint(e.target)
