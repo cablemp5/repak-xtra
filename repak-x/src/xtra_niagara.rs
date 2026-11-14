@@ -131,6 +131,15 @@ fn walk(m: &Value, g: &Value, path: &str, c: &mut Ctx) -> Result<(), Reject> {
             if go.get("Name").and_then(Value::as_str) == Some("CachedScriptVMId") && mo.get("Name") == go.get("Name") {
                 return Ok(());
             }
+            // a script's compiled program: the game's own, never carried (a mod recolors the values a program reads, not
+            // the program). One of another length was compiled to another shape, so the tables beside it (its literals)
+            // may sit elsewhere: the file is not carried. The same length: the game's stays, and its tables are carried
+            if go.get("Name").and_then(Value::as_str) == Some("ByteCode") && mo.get("Name") == go.get("Name") {
+                return match (numbers(m), numbers(g)) {
+                    (Some(a), Some(b)) if a == b => Ok(()),
+                    _ => Err(shape(format!("{path} is a script the game compiled to another length"))),
+                };
+            }
             if mo.get("$type") != go.get("$type") {
                 return Err(shape(format!("{path} has another type")));
             }
@@ -169,6 +178,18 @@ fn walk(m: &Value, g: &Value, path: &str, c: &mut Ctx) -> Result<(), Reject> {
         _ if m == g => Ok(()),
         // a property that is not a list of numbers: its old value cannot be found in the file to carry it
         _ => Err(Reject { shape: false, why: format!("{path} changed outside a value table") }),
+    }
+}
+
+/// How many bytes the first value table inside `v` holds (a script's bytecode is one).
+fn numbers(v: &Value) -> Option<usize> {
+    if let Some(b) = primitive_bytes(v) {
+        return Some(b.len());
+    }
+    match v {
+        Value::Array(a) => a.iter().find_map(numbers),
+        Value::Object(o) => o.values().find_map(numbers),
+        _ => None,
     }
 }
 

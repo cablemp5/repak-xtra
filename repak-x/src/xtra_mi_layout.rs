@@ -287,7 +287,8 @@ pub(crate) async fn relayout(usmap: &str, mod_extract: &Path, rels: &[String], o
         lap("decode with older mappings and compare");
     }
     // old_first: what no older USMAP read is read with today's after all (a file already in today's layout)
-    if old_first && !pending.is_empty() {
+    // (only when an older USMAP was had and did not read them: with none to ask, today's reading proves nothing)
+    if old_first && read_any && !pending.is_empty() {
         let names: Vec<String> = pending.iter().map(|(r, _)| r.clone()).collect();
         stage_links(mod_extract, &work.join("now"), &names)?;
         to_json(usmap, &work.join("now"), &now_json, progress).await?;

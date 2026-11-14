@@ -563,6 +563,9 @@ async function rebuild(o: FixOptions): Promise<VfxReport> {
         // it points at another parent material, mesh or material than the game's: rebuilding it on the game's copy would
         // lose that, so the mod's own copy stays (a skin's material swap, a Blueprint's mesh)
         const extra = uncarriedPackages(e.packages, json, e.params).map(k => k.split('/').pop())
+        // one cooked for an older game build keeps that build's shader data, which the game may draw gray: said, so the
+        // report and a review show it
+        if (relaid.has(key) || [...relaid].some(k => key.endsWith('/' + k))) warn(`${stem(p)}: kept with its own parent material and the shader data of an older game build. It may show gray in the game.`)
         swapped++; own.push(p); asset(p, 'passed', `Kept as it was: it uses ${extra.slice(0, 2).join(', ')}${extra.length > 2 ? ` and ${extra.length - 2} more` : ''} where the game's file does not, which an update cannot carry.`)
       }
       else {
