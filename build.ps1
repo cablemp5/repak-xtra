@@ -82,7 +82,7 @@ if ($SkipTools) {
     }
     # Both editions build into the same folders from different patch sets: reuse only tools built from this one
     $stamp = Get-Content -Raw -LiteralPath target\uassettool\UAssetTool.source -ErrorAction SilentlyContinue
-    if ("$stamp".Trim() -ne (Get-UatSourceId)) { throw 'The built tools come from another source (the other edition, or older patches). Build once without -SkipTools.' }
+    if ((("$stamp".Trim()) -split "`r?`n")[0] -ne (Get-UatSourceId)) { throw 'The built tools come from another source (the other edition, or older patches). Build once without -SkipTools.' }
 } else {
 # A fresh folder each time, so no file of another edition's or an older build is copied into this one
 Remove-Item target\uassettool, target\uassettool-cli -Recurse -Force -ErrorAction SilentlyContinue

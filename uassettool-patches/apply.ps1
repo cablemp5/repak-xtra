@@ -36,7 +36,16 @@ function Get-UatSourceId {
     $bytes = [Security.Cryptography.SHA256]::Create().ComputeHash([Text.Encoding]::UTF8.GetBytes($parts -join "`n"))
     -join ($bytes | ForEach-Object { $_.ToString('x2') })
 }
+# Its second line: the same without the patches that only change how a mod is packed (*-packaging.patch). The app keys
+# its mod checks on that line (xtra_vfx.rs tools_id), so builds that read files the same way (the two editions of one
+# version) share them. build.ps1 -SkipTools compares the first line, which still tells the editions apart.
+function Get-UatReadId {
+    $sub = Join-Path $PSScriptRoot '..\UAssetToolRivals'
+    $parts = @(git -C $sub rev-parse HEAD) + @(Get-ChildItem (Join-Path $PSScriptRoot '*.patch') | Where-Object Name -notlike '*-packaging.patch' | Sort-Object Name | ForEach-Object { "$($_.Name) $((Get-FileHash $_.FullName).Hash)" })
+    $bytes = [Security.Cryptography.SHA256]::Create().ComputeHash([Text.Encoding]::UTF8.GetBytes($parts -join "`n"))
+    -join ($bytes | ForEach-Object { $_.ToString('x2') })
+}
 function Write-UatSource {
-    $id = Get-UatSourceId
+    $id = "$(Get-UatSourceId)`n$(Get-UatReadId)"
     foreach ($dir in @('target\uassettool', 'target\uassettool-cli')) { [IO.File]::WriteAllText((Join-Path (Join-Path $PSScriptRoot '..') "$dir\UAssetTool.source"), $id) }
 }

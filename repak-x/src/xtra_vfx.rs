@@ -315,7 +315,8 @@ pub(crate) const TOOL_SOURCE: &str = "UAssetTool.source";
 /// mod again (216 mods, about an hour of CPU at each switch, 2026-11-04). A real change to the tools changes the source.
 fn tools_id(tools: &[PathBuf]) -> Result<String, String> {
     if let Some(stamp) = tools.iter().find_map(|t| std::fs::read_to_string(t.with_file_name(TOOL_SOURCE)).ok()).filter(|s| !s.trim().is_empty()) {
-        return Ok(format!("source {}", stamp.trim()));
+        // its last line: how the tools read files (apply.ps1 Get-UatReadId), the same for both editions of one version
+        return Ok(format!("source {}", stamp.trim().lines().last().unwrap_or_default().trim()));
     }
     use sha2::{Digest, Sha256};
     let mut h = Sha256::new();
