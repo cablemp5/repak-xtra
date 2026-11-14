@@ -239,15 +239,16 @@ async function rebuild(o: FixOptions): Promise<VfxReport> {
     // without its class and the game crashes on it, so this run reads the original that update put in Recently deleted
     // instead (from). 'moved': it names a class a game update moved, which the extract repoints, so it counts as
     // rewritten below and is packed
-    const classMarks = (modPath: string) => invoke<Record<string, string> | null>('xtra_vfx_class_marks', { modPath, gamePaks: o.gamePaksPath }).then(m => m ?? {}, () => ({} as Record<string, string>))
+    // null: the container could not be listed, so nothing is known about it
+    const classMarks = (modPath: string) => invoke<Record<string, string> | null>('xtra_vfx_class_marks', { modPath, gamePaks: o.gamePaksPath }).catch(() => null)
     const damagedIn = (m: Record<string, string>) => Object.values(m).filter(v => v === 'damaged').length
-    let from = src, marks = await classMarks(src)
+    let from = src, marks = await classMarks(src) ?? {}
     const damaged = damagedIn(marks)
     if (damaged) {
       let sound: string | undefined
       for (const original of await invoke<string[]>('xtra_vfx_trashed_originals', { modPath: o.modPath }).catch(() => [] as string[])) {
         const m = await classMarks(original)
-        if (!damagedIn(m)) { sound = original; marks = m; break }
+        if (m && !damagedIn(m)) { sound = original; marks = m; break } // one that cannot be listed is not known to be sound
       }
       if (!sound) {
         report.error = `Not updated: an earlier update left ${plural(damaged, 'file')} without a game class, so the game crashes on it, and its original is no longer in Recently deleted. Install the mod again from where you got it.`
@@ -426,6 +427,13 @@ async function rebuild(o: FixOptions): Promise<VfxReport> {
       // same in the game, so it waits for the USMAP instead
       // ownGame: a Niagara file whose edits could not be carried, so the game's own plays instead of the mod's
       const missing = incompleteAssets(report)
+      // rebuilt from Recently deleted because an earlier update damaged the installed copy: an incomplete result would
+      // keep that damaged copy beside it as its original, and the next update would start from it again
+      if (from !== src && missing) {
+        report.error = `Not updated: ${plural(missing, 'file')} could not be rebuilt from its original in Recently deleted, and the installed copy crashes the game. Install the mod again from where you got it.`
+        log(report.error, 'warning')
+        return
+      }
       if (strict && (missing || report.warnings.length)) {
         report.error = `Not updated: Strict repair found ${plural(missing, 'incomplete asset')} and ${plural(report.warnings.length, 'warning')}. The mod was not changed. ${changePolicy}`
         log(report.error, 'warning')
@@ -457,10 +465,13 @@ async function rebuild(o: FixOptions): Promise<VfxReport> {
       const base = o.outputDir ? `${slash(o.outputDir)}/${fixedName(o.modPath)}` : `${dirs.stage}/fixed`
       const utoc = await invoke<string>('vfx_pack_to_iostore', { usmapPath: o.usmapPath, inputDir: dirs.finalUassets, outputBase: base, allowedAssets: manifest })
       report.output = utoc
-      // a mod that had such files is listed again once packed: none may be left that the game cannot load
-      const unsound = Object.keys(marks).length ? Object.keys(await classMarks(utoc)).length : 0
+      // a mod that had such files is listed again once packed: none may be left that the game cannot load, and a
+      // listing that fails proves nothing
+      const packed = Object.keys(marks).length ? await classMarks(utoc) : {}
+      const unsound = packed ? Object.keys(packed).length : -1
       if (unsound) {
-        report.error = `Not updated: ${plural(unsound, 'file')} of the update still ${unsound === 1 ? 'has' : 'have'} a class reference the game cannot load, so it could crash the game. The mod was not changed.`
+        report.error = unsound < 0 ? 'Not updated: the update could not be listed to check its class references, so it is not known to be safe. The mod was not changed.'
+          : `Not updated: ${plural(unsound, 'file')} of the update still ${unsound === 1 ? 'has' : 'have'} a class reference the game cannot load, so it could crash the game. The mod was not changed.`
         log(report.error, 'warning')
         return
       }
