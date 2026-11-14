@@ -92,6 +92,35 @@ struct Ctx<'a> {
     edits: usize,
     /// byte ranges already written in the game's file: two tables never land on the same bytes
     written: &'a mut Vec<std::ops::Range<usize>>,
+    /// inside a script whose compile record matches the mod's (same_program): its program's bytes are the mod's to carry
+    same_program: bool,
+}
+
+/// Whether a script's compiled program (a CachedScriptVM's Value list) was compiled to the same layout in both builds:
+/// every field but the program itself equal, and the literal table the same size (its values are carried as a table).
+/// Then each operand of the mod's program points at the same register, literal, attribute, or function in the game's,
+/// so the bytes a recolor changed (which literal a color reads) mean the same thing there.
+fn same_program(m: &Value, g: &Value) -> bool {
+    let (Some(ma), Some(ga)) = (m.as_array(), g.as_array()) else { return false };
+    let name = |v: &Value| v.get("Name").and_then(Value::as_str).map(str::to_string);
+    ma.len() == ga.len()
+        && ma.iter().zip(ga).all(|(a, b)| {
+            let n = name(b);
+            n.is_some() && name(a) == n && match n.as_deref() {
+                Some("ByteCode") => numbers(a).is_some() && numbers(a) == numbers(b),
+                Some("ScriptLiterals") => numbers(a) == numbers(b),
+                _ => strip_headers(a) == strip_headers(b),
+            }
+        })
+}
+
+/// A value without the tool's records of property numbering (OriginalUnversionedHeader, OriginalStructHeader).
+fn strip_headers(v: &Value) -> Value {
+    match v {
+        Value::Object(o) => Value::Object(o.iter().filter(|(k, _)| *k != "OriginalUnversionedHeader" && *k != "OriginalStructHeader").map(|(k, v)| (k.clone(), strip_headers(v))).collect()),
+        Value::Array(a) => Value::Array(a.iter().map(strip_headers).collect()),
+        _ => v.clone(),
+    }
 }
 
 /// The same property in both builds: name, type and element type (a table moved between properties never matches).
@@ -131,32 +160,25 @@ fn walk(m: &Value, g: &Value, path: &str, c: &mut Ctx) -> Result<(), Reject> {
             if go.get("Name").and_then(Value::as_str) == Some("CachedScriptVMId") && mo.get("Name") == go.get("Name") {
                 return Ok(());
             }
-            // a script's compiled program: the game's own, never carried (a mod recolors the values a program reads, not
-            // the program). One of another length was compiled to another shape, so the tables beside it (its literals)
-            // may sit elsewhere: the file is not carried. The same length: the game's stays, and its tables are carried
+            // a script's compiled program. Some recolors edit it: an operand repointed so a color reads another literal.
+            // Carried only when the rest of the script's compile record matches (same_program), so the operands mean the
+            // same in the game's build. Otherwise the game's stays. One of another length was compiled to another shape,
+            // so the tables beside it (its literals) may sit elsewhere: the file is not carried
             if go.get("Name").and_then(Value::as_str) == Some("ByteCode") && mo.get("Name") == go.get("Name") {
                 return match (numbers(m), numbers(g)) {
+                    (Some(a), Some(b)) if a == b && c.same_program => walk_children(mo, go, path, c),
                     (Some(a), Some(b)) if a == b => Ok(()),
                     _ => Err(shape(format!("{path} is a script the game compiled to another length"))),
                 };
             }
-            if mo.get("$type") != go.get("$type") {
-                return Err(shape(format!("{path} has another type")));
+            if go.get("Name").and_then(Value::as_str) == Some("CachedScriptVM") && mo.get("Name") == go.get("Name") {
+                let outer = c.same_program;
+                c.same_program = same_program(mo.get("Value").unwrap_or(&Value::Null), go.get("Value").unwrap_or(&Value::Null));
+                let r = walk_children(mo, go, path, c);
+                c.same_program = outer;
+                return r;
             }
-            for (k, gv) in go {
-                // the tool's record of how the file numbered its properties: layout, never a value (4042190 gave some
-                // Niagara structs a property, which moved these in every older file)
-                if k == "OriginalUnversionedHeader" || k == "OriginalStructHeader" {
-                    continue;
-                }
-                if let Some(mv) = mo.get(k) {
-                    walk(mv, gv, &format!("{path}.{k}"), c)?;
-                }
-            }
-            match mo.keys().find(|k| *k != "OriginalUnversionedHeader" && *k != "OriginalStructHeader" && !go.contains_key(*k)) {
-                Some(k) => Err(shape(format!("{path}.{k} is gone from the game's file"))),
-                None => Ok(()),
-            }
+            walk_children(mo, go, path, c)
         }
         (Value::Array(ma), Value::Array(ga)) => {
             // a struct's properties, where the game's build has ones the mod's lacks (4042190 gave every emitter's
@@ -178,6 +200,27 @@ fn walk(m: &Value, g: &Value, path: &str, c: &mut Ctx) -> Result<(), Reject> {
         _ if m == g => Ok(()),
         // a property that is not a list of numbers: its old value cannot be found in the file to carry it
         _ => Err(Reject { shape: false, why: format!("{path} changed outside a value table") }),
+    }
+}
+
+/// An object's fields, walked side by side (walk).
+fn walk_children(mo: &serde_json::Map<String, Value>, go: &serde_json::Map<String, Value>, path: &str, c: &mut Ctx) -> Result<(), Reject> {
+    if mo.get("$type") != go.get("$type") {
+        return Err(shape(format!("{path} has another type")));
+    }
+    for (k, gv) in go {
+        // the tool's record of how the file numbered its properties: layout, never a value (4042190 gave some
+        // Niagara structs a property, which moved these in every older file)
+        if k == "OriginalUnversionedHeader" || k == "OriginalStructHeader" {
+            continue;
+        }
+        if let Some(mv) = mo.get(k) {
+            walk(mv, gv, &format!("{path}.{k}"), c)?;
+        }
+    }
+    match mo.keys().find(|k| *k != "OriginalUnversionedHeader" && *k != "OriginalStructHeader" && !go.contains_key(*k)) {
+        Some(k) => Err(shape(format!("{path}.{k} is gone from the game's file"))),
+        None => Ok(()),
     }
 }
 
@@ -281,7 +324,7 @@ fn carry(mod_json: &Value, game_json: &Value, mod_bytes: &[u8], game_bytes: &[u8
                 edits += 1;
             }
         }
-        let mut c = Ctx { mod_raw, game_raw, game_at: gr.start, out: &mut out, edits: 0, written: &mut written };
+        let mut c = Ctx { mod_raw, game_raw, game_at: gr.start, out: &mut out, edits: 0, written: &mut written, same_program: false };
         walk(me.get("Data").unwrap_or(&Value::Null), ge.get("Data").unwrap_or(&Value::Null), &gp[i], &mut c)?;
         edits += c.edits;
     }
@@ -1120,6 +1163,28 @@ mod tests {
     }
     fn bytes(v: &[f32]) -> Vec<u8> {
         v.iter().flat_map(|f| f.to_le_bytes()).collect()
+    }
+
+    #[test]
+    fn a_program_edit_is_carried_only_onto_a_script_compiled_the_same_way() {
+        let table = |name: &str, v: &[u8]| json!({ "$type": "UAssetAPI.PropertyTypes.Objects.ArrayPropertyData, UAssetAPI", "ArrayType": "ByteProperty", "Name": name,
+            "Value": v.iter().map(|x| json!({ "$type": "UAssetAPI.PropertyTypes.Objects.BytePropertyData, UAssetAPI", "Value": x })).collect::<Vec<_>>() });
+        let vm = |code: &[u8], info: &[u8]| json!({ "$type": "UAssetAPI.PropertyTypes.Structs.StructPropertyData, UAssetAPI", "Name": "CachedScriptVM", "Value": [
+            { "$type": "UAssetAPI.PropertyTypes.Structs.StructPropertyData, UAssetAPI", "Name": "ByteCode", "Value": [table("Data", code)] },
+            table("DataInterfaceInfo", info),
+        ] });
+        // the game's program as it was; the mod repointed three operands (which literal R, G, and B read)
+        let (game_code, mod_code) = ([10u8, 100, 11, 108, 12, 104, 13], [10u8, 64, 11, 64, 12, 64, 13]);
+        let file = |code: &[u8], info: &[u8]| [&[1u8][..], code, info].concat();
+        let (mb, m) = (file(&mod_code, &[7, 7]), json!({ "Exports": [export(1, 9, vec![vm(&mod_code, &[7, 7])])] }));
+        let gb = file(&game_code, &[7, 7]);
+        let (out, edits) = carry(&m, &json!({ "Exports": [export(1, 9, vec![vm(&game_code, &[7, 7])])] }), &mb, &gb, false).unwrap();
+        assert_eq!((out, edits), (mb.clone(), 1), "the same compile record: the mod's program");
+        // another compile record (a data interface the game numbered differently): its operands may mean something else
+        let gb = file(&game_code, &[7, 8]);
+        let (out, edits) = carry(&m, &json!({ "Exports": [export(1, 9, vec![vm(&game_code, &[7, 8])])] }), &mb, &gb, false).unwrap();
+        assert_eq!(&out[1..8], &game_code, "the game's program stays");
+        assert_eq!(edits, 1, "only the table itself was carried");
     }
 
     #[test]
