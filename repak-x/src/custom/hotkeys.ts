@@ -113,6 +113,12 @@ window.addEventListener('keydown', e => {
   if (header) { e.preventDefault(); togglePref(header.pref, `${header.name} button`); return }
   if (e.shiftKey && key === 'i') { e.preventDefault(); togglePref('header-icons', 'Icons only'); return }
   if (dialogOpen()) return
+  // / focuses the Library's search, as F1 lists (never typed into it)
+  if (key === '/') { // the character, whatever keys type it on this layout
+    const search = document.querySelector<HTMLInputElement>('.main-search-input')
+    if (search) { e.preventDefault(); cue('select'); search.focus() }
+    return
+  }
 
   // Shift+F10 or the Menu key opens the right-click menu for the selected mod: the browser fires it on the focused
   // element, and arrow keys leave focus on the page, so focus the selected row's name first

@@ -62,12 +62,22 @@ export const useGlobalTooltips = () => {
       else target.removeAttribute('aria-describedby');
     };
 
-    const createTooltip = (text: string, targetRect: DOMRect): HTMLDivElement => {
+    // repakxtra: `hotkey` (the target's data-hotkey, "Ctrl+Shift+R") follows the text as keycaps, as the F1 sheet draws them
+    const createTooltip = (text: string, targetRect: DOMRect, hotkey?: string): HTMLDivElement => {
       const tooltip = document.createElement('div');
       tooltip.className = 'global-tooltip';
       tooltip.id = TOOLTIP_ID;
       tooltip.setAttribute('role', 'tooltip');
       tooltip.textContent = text;
+      if (hotkey) {
+        const keys = document.createElement('span');
+        keys.className = 'tooltip-keys';
+        hotkey.split('+').forEach((k, i) => {
+          if (i) keys.append(Object.assign(document.createElement('span'), { className: 'key-separator', textContent: '+' }));
+          keys.append(Object.assign(document.createElement('kbd'), { textContent: k }));
+        });
+        tooltip.append(keys);
+      }
       tooltip.style.visibility = 'hidden'; // Hide while measuring
       document.body.appendChild(tooltip);
 
@@ -153,7 +163,7 @@ export const useGlobalTooltips = () => {
       showTimeout = setTimeout(() => {
         if (currentTarget !== target || !target.isConnected) return;
         removeTooltip();
-        activeTooltip = createTooltip(title, target.getBoundingClientRect());
+        activeTooltip = createTooltip(title, target.getBoundingClientRect(), target.dataset.hotkey);
         // A name that already says it (taken from the title, or the same aria-label): no description that repeats it
         if (!target.hasAttribute('data-tooltip-label') && target.getAttribute('aria-label') !== title) {
           target.setAttribute('aria-describedby', withToken(target.getAttribute('aria-describedby'), TOOLTIP_ID, true));

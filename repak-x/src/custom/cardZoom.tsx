@@ -85,9 +85,9 @@ export function CardZoomControl() {
   }, [])
   return (
     <div className="lo-zoom" role="group" aria-label="Card size" ref={box}>
-      <button type="button" className="lo-icon" onClick={() => step(-1)} disabled={z === STEPS[0]} title="Smaller cards (Ctrl + scroll down)" aria-label="Smaller cards"><Minus size={14} /></button>
+      <button type="button" className="lo-icon" onClick={() => step(-1)} disabled={z === STEPS[0]} title="Smaller cards" data-hotkey="Ctrl+Scroll down" aria-label="Smaller cards"><Minus size={14} /></button>
       <button type="button" className="lo-zoom-value" onClick={() => step(0)} title="Card size (click for 100%, or scroll here)" aria-label={`Card size ${Math.round(z * 100)}%, click to reset`}>{Math.round(z * 100)}%</button>
-      <button type="button" className="lo-icon" onClick={() => step(1)} disabled={z === STEPS[STEPS.length - 1]} title="Bigger cards (Ctrl + scroll up)" aria-label="Bigger cards"><Plus size={14} /></button>
+      <button type="button" className="lo-icon" onClick={() => step(1)} disabled={z === STEPS[STEPS.length - 1]} title="Bigger cards" data-hotkey="Ctrl+Scroll up" aria-label="Bigger cards"><Plus size={14} /></button>
     </div>
   )
 }

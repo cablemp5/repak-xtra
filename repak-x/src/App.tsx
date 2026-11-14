@@ -3781,6 +3781,7 @@ function App() {
           <button
             className="btn-settings"
             data-tour="launch-btn"
+            data-hotkey="Ctrl+G"
             data-launch={gameRunning ? 'running' : launchSuccess ? 'done' : 'idle'}
             title={gameRunning ? "Game is currently running" : "Launch Rivals"}
             style={{
@@ -3878,7 +3879,8 @@ function App() {
             onClick={() => setPanel('settings', true)}
             className="btn-settings"
             data-tour="settings-btn"
-            title="Settings (Ctrl+,)"
+            title="Settings"
+            data-hotkey="Ctrl+,"
             aria-label="Settings" // repakxtra: icon only, named by its tooltip
           >
             <IoIosSettings size={20} />
@@ -3922,6 +3924,7 @@ function App() {
               onChange={handleSearchChange}
               className="main-search-input"
             />
+            {!localSearch && <kbd className="search-kbd" aria-hidden="true">/</kbd>}{/* repakxtra: / focuses the search (hotkeys.ts) */}
             {localSearch && (
               <button
                 type="button"
@@ -4065,7 +4068,7 @@ function App() {
                 </div>
                 <div className="header-actions" data-tour="header-actions">
                   {/* repakxtra: no Asset Explorer button and no dividers here: it opens from Tools, a mod's menu, and its details */}
-                  <button onClick={handleCheckClashes} className="btn-ghost btn-check-conflicts"
+                  <button onClick={handleCheckClashes} className="btn-ghost btn-check-conflicts" data-hotkey="C"
                     title={conflictCount ? `${conflictCount === 1 ? 'A group of enabled mods conflicts' : `${conflictCount} groups of enabled mods conflict`}: check which` : 'Check for conflicts'}>
                     <IoLayersSharp className="warning-icon" style={{ color: 'var(--accent-primary)', width: '18px', height: '18px' }} />
                     {/* repakxtra: says how many while there are any, in words, even where the label otherwise folds away (theme.css) */}
@@ -4111,7 +4114,7 @@ function App() {
                   >
                     <ViewSidebarIcon fontSize="small" style={{ transform: isRightPanelOpen ? 'none' : 'rotate(180deg)' }} />
                   </button>
-                  <button onClick={() => { void loadMods().then(rescanVerdicts) }} className="btn-ghost btn-square" title="Refresh list"> {/* repakxtra: and every update check */}
+                  <button onClick={() => { void loadMods().then(rescanVerdicts) }} className="btn-ghost btn-square" title="Refresh list" data-hotkey="Ctrl+Shift+R"> {/* repakxtra: and every update check */}
                     <RefreshIcon fontSize="small" />
                   </button>
                 </div>

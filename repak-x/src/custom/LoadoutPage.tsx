@@ -272,7 +272,7 @@ export default function LoadoutPage({ p, l, busy, onToggle, onBack, onPickMedia,
 
   return (
     <div className="lp">
-      <button type="button" className="lo-text-btn lp-back" onClick={onBack} title="Back to all loadouts (Esc)">
+      <button type="button" className="lo-text-btn lp-back" onClick={onBack} title="Back to all loadouts" data-hotkey="Esc">
         <ArrowLeft size={14} /> Loadouts
       </button>
 

@@ -286,7 +286,7 @@ export default function SmartLoadouts({ p, onBack }: { p: LoadoutProps; onBack: 
       {/* back as a loadout's page has it: its own row above the title, named */}
       <header className="sl-top">
         <div className="sl-title">
-          <button type="button" ref={backRef} className="lo-text-btn lp-back sl-back" onClick={onBack} title="Back to all loadouts (Esc)"><ArrowLeft size={14} /> Loadouts</button>
+          <button type="button" ref={backRef} className="lo-text-btn lp-back sl-back" onClick={onBack} title="Back to all loadouts" data-hotkey="Esc"><ArrowLeft size={14} /> Loadouts</button>
           <h2>Smart loadouts</h2>
           <p>{!g ? 'No mods need grouping. Mods you install that are in no loadout show up here.'
             // the point first, for someone new: one look becomes one switch
