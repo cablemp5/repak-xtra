@@ -48,7 +48,7 @@ export default function ScanStatus() {
           <div className="lo-gen-status" role="status">
             <b>{r.running ? 'Scanning mods for this game version' : 'Mod scan paused'}</b>
             <span>{status}</span>
-            {left !== undefined && <span>{leftText(left)}</span>}
+            {r.running && !stopping && <span>{left !== undefined ? leftText(left) : 'Working out the time left…'}</span>}
             {/* the whole run: the stages done and this one's share, never stepping back; a stage with no count yet creeps
                 toward its end (GlideFill) */}
             {r.running && <div className="su-bar" aria-hidden="true"><GlideFill pct={pct} next={r.last?.total ? undefined : stageEnd(r.stage, r.weights)} secs={20} /></div>}

@@ -115,7 +115,7 @@ export function useBrokenWatch(mods: { path: string; modified_date?: number; fil
     // a run the library outdated before it began checked nothing: not finished (gameUpdate.ts asks the new one instead)
     // never the Mod Updater's own updates for this game (xtra_stamp.rs): they were checked as they were made. Nor the
     // original it renamed beside one (a new path, so no record): it is off and kept, the update is what loads
-    let scanPaths = paths
+    let scanPaths = paths, list = paths
     let ticked: string[] = []
     // the four scans (vfx: the VFX and Blueprint ones, meshes: the mesh one), each followed by the badges when it found something.
     // A scan skips a mod it already checked as this file in this game, so a list can be scanned twice cheaply
@@ -159,12 +159,15 @@ export function useBrokenWatch(mods: { path: string; modified_date?: number; fil
       .then(() => first ?? check())
       .then(ok => { if (!ok) throw new Error('the first check failed') })
       .then(() => {
-        ticked = paths.filter(p => forced.has(norm(p))); scanPaths = paths.filter(p => forced.has(norm(p)) || !(made.get(norm(p))?.current || made.get(updateBeside(norm(p)))?.current))
+        // a Scan from the Mod Updater (its ticked mods, the ones that are on, or all) scans only the mods it asked for
+        ticked = paths.filter(p => forced.has(norm(p)))
+        list = ticked.length ? ticked : paths
+        scanPaths = list.filter(p => forced.has(norm(p)) || !(made.get(norm(p))?.current || made.get(updateBeside(norm(p)))?.current))
         // the run's plan, known before a manual Check's mods go first: the mods that are on, through every scan, then the
         // ones that are off (what loads in the game gets its badges soonest)
         const isOn = (p: string) => !/\.bak_repak$/i.test(p)
-        passes = [[scanPaths.filter(isOn), paths.filter(isOn)], [scanPaths.filter(p => !isOn(p)), paths.filter(p => !isOn(p))]].filter(([v, m]) => v.length || m.length)
-        scanned = paths.length
+        passes = [[scanPaths.filter(isOn), list.filter(isOn)], [scanPaths.filter(p => !isOn(p)), list.filter(p => !isOn(p))]].filter(([v, m]) => v.length || m.length)
+        scanned = list.length
         // reading the game's files and the textures weigh a few mods' worth each; a scan step weighs its mods
         weights = [Math.max(1, Math.round(scanned / 20)), ...passes.flatMap(([v, m]) => Array(5).fill(Math.max(1, v.length, m.length))), Math.max(1, Math.round(scanned / 10))]
         scanPlan(weights, scanned)
@@ -173,14 +176,12 @@ export function useBrokenWatch(mods: { path: string; modified_date?: number; fil
         return live && forget.length ? invoke('xtra_scan_forget', { modPaths: forget }).catch(e => console.warn('[brokenMods] could not clear earlier checks', e)) : undefined
       })
       .then(() => (live ? invoke('vfx_check_usmap_update', { force: false }).catch(() => null) : null))
-      // a manual Check's mods first, through all four scans, so they never wait behind the mods not checked yet
-      .then(() => (ticked.length ? scans(ticked, ticked, null).then(() => deep(ticked, null)) : undefined))
       // every mod for meshes: an update carries the original's meshes as they were, and nothing in the Mod Updater checks them
       // the passes planned above, each through every scan
       .then(() => {
         return passes.reduce<Promise<unknown>>((r, [v, m], i) => r.then(() => scans(v, m, 1 + 5 * i)).then(() => deep(v, 1 + 5 * i)), Promise.resolve())
       })
-      .then(() => textures(paths))
+      .then(() => textures(list))
       .then(() => (live ? invoke<boolean>('xtra_scan_stopped').catch(() => false) : true))
       .then(stopped => live && !stopped, e => { console.warn('[brokenMods] background scan failed', e); return false })
       // runs take turns (queued), so this one's end is never another's. One the library outdated is not "paused":

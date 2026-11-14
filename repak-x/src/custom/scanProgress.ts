@@ -38,7 +38,8 @@ export const scanLeft = (r: ScanRun, now = Date.now()) => {
   if (r.mods <= 0) return undefined // the plan is not known yet (weights is a placeholder until scanPlan)
   const per = typical('scan-unit')
   const prior = per === undefined ? undefined : per * units(r.weights) * (1 - r.pct / 100)
-  const live = r.pct >= 2 && r.started ? (now - r.started) * (100 - r.pct) / r.pct : undefined
+  // the run's own pace once it has gone 5 s and moved at all (the first steps are rough, it settles as it goes)
+  const live = r.pct > 0 && r.started && now - r.started > 5000 ? (now - r.started) * (100 - r.pct) / r.pct : undefined
   return blend(prior, live, r.pct / 100)
 }
 const listeners = new Set<() => void>()

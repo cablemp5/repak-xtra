@@ -29,15 +29,16 @@ export const blend = (prior: number | undefined, live: number | undefined, share
   return live * w + prior * (1 - w)
 }
 /** "About 4 minutes left". Pure. */
-export const leftText = (ms: number) => ms < 45_000 ? 'Less than a minute left'
+export const leftText = (ms: number) => ms < 10_000 ? 'A few seconds left'
+  : ms < 55_000 ? `About ${Math.round(ms / 10_000) * 10} seconds left`
   : ms < 90 * 60_000 ? `About ${plural(Math.max(1, Math.round(ms / 60_000)), 'minute')} left`
   : `About ${Math.round(ms / 1_800_000) / 2} hours left`
 /** "about 4 minutes" for a run not started yet. Pure. */
-export const forText = (ms: number) => leftText(ms).replace(/^About/, 'about').replace(/^Less/, 'less').replace(/ left$/, '')
+export const forText = (ms: number) => leftText(ms).replace(/^About/, 'about').replace(/^A few/, 'a few').replace(/ left$/, '')
 
 if (import.meta.env.DEV) {
   console.assert(median([5, 1, 9]) === 5 && median([1, 2]) === undefined && median('x') === undefined, 'eta median')
   console.assert(blend(100, 200, 0) === 100 && blend(100, 200, 0.3) === 200 && blend(undefined, 7, 0) === 7 && blend(8, undefined, 1) === 8, 'eta blend')
-  console.assert(leftText(10_000) === 'Less than a minute left' && leftText(4 * 60_000) === 'About 4 minutes left' && leftText(150 * 60_000) === 'About 2.5 hours left', 'eta text')
+  console.assert(leftText(5_000) === 'A few seconds left' && leftText(38_000) === 'About 40 seconds left' && leftText(4 * 60_000) === 'About 4 minutes left' && leftText(150 * 60_000) === 'About 2.5 hours left', 'eta text')
   console.assert(forText(4 * 60_000) === 'about 4 minutes', 'eta for text')
 }
