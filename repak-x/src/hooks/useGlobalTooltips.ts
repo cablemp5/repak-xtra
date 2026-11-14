@@ -164,8 +164,9 @@ export const useGlobalTooltips = () => {
         if (currentTarget !== target || !target.isConnected) return;
         removeTooltip();
         activeTooltip = createTooltip(title, target.getBoundingClientRect(), target.dataset.hotkey);
-        // A name that already says it (taken from the title, or the same aria-label): no description that repeats it
-        if (!target.hasAttribute('data-tooltip-label') && target.getAttribute('aria-label') !== title) {
+        // A name that already says it (taken from the title, or the same aria-label): no description that repeats it,
+        // unless the tooltip adds the shortcut
+        if ((!target.hasAttribute('data-tooltip-label') && target.getAttribute('aria-label') !== title) || target.dataset.hotkey) {
           target.setAttribute('aria-describedby', withToken(target.getAttribute('aria-describedby'), TOOLTIP_ID, true));
         }
         // The target can unmount under the tooltip (a dialog closing on Enter): take the tooltip with it
