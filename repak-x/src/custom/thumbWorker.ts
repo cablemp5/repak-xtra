@@ -44,8 +44,14 @@ const BT601: VideoColorSpaceInit = { matrix: 'smpte170m', primaries: 'smpte170m'
 /** An animated WebP as a looping WebM `width` px wide (its transparency kept, `boost` drawn in), for a loadout card: a
  *  video's frames are decoded off the page and put on screen by the compositor, where each frame of an animated picture
  *  is drawn again into the page's tiles (five of them cost a hard scroll 20 frames a second, so they were held still).
- *  Frame times are the picture's own, so a 60 frames a second preview plays at 60. Null when this WebView cannot (no
- *  ImageDecoder or VP8 encoder) or the picture is not animated. Color and alpha as two VP8 streams, like ko/record.ts. */
+ *  Frame times are the picture's own, up to CLIP_FPS frames a second. Null when this WebView cannot (no ImageDecoder
+ *  or VP8 encoder) or the picture is not animated. Color and alpha as two VP8 streams, like ko/record.ts. */
+/** A card clip's frames a second at most (a 60 a second preview keeps every other frame, the loadout page and a hovered
+ *  emote still play all 60). The WebView decodes every clip in view on one thread, two streams each. Measured with 17
+ *  clips in view on a 144 Hz screen (2026-11-14): at 60 each clip held a frame for 28 to 35 ms two to seven times in
+ *  6 s (70 late frames in all, 18 dropped), and hovering an emote cost the whole window 88 to 131 late frames in
+ *  3.5 s, which showed as the other cards flickering. At 30: no late or dropped frame, and 6 to 28 on a hover. */
+export const CLIP_FPS = 30
 export async function smallClip(blob: Blob, width: number, boost = ''): Promise<Blob | null> {
   if (typeof ImageDecoder === 'undefined' || typeof VideoEncoder === 'undefined') return null
   const decoder = new ImageDecoder({ data: await blob.arrayBuffer(), type: 'image/webp' })
@@ -58,6 +64,7 @@ export async function smallClip(blob: Blob, width: number, boost = ''): Promise<
     const count = decoder.tracks.selectedTrack?.frameCount ?? 0
     if (count < 2) return null
     let w = 0, h = 0, ctx: OffscreenCanvasRenderingContext2D | null = null, us = 0, lastKey = -1e9, luma = new Uint8Array(0), yuv = luma
+    let due = 0, kept = 0 // when the next frame is kept (its start, microseconds), and how many were
     for (let i = 0; i < count && !failed; i++) {
       const { image } = await decoder.decode({ frameIndex: i })
       if (!ctx) {
@@ -75,9 +82,13 @@ export async function smallClip(blob: Blob, width: number, boost = ''): Promise<
         luma = new Uint8Array(w * h * 3 / 2).fill(128)
         yuv = new Uint8Array(w * h * 3 / 2)
       }
+      const length = image.duration ?? 41_667
+      // left out: the frame before it has not shown for a CLIP_FPS-th of a second yet, so it shows on through this one
+      if (us < due - 1000) { image.close(); us += length; continue }
+      due = us + 1e6 / CLIP_FPS
+      kept++
       ctx.clearRect(0, 0, w, h)
       ctx.drawImage(image, 0, 0, w, h)
-      const length = image.duration ?? 41_667
       image.close()
       // straight (not premultiplied) color, so edges keep their color when the alpha is put back
       const rgba = ctx.getImageData(0, 0, w, h).data
@@ -97,7 +108,7 @@ export async function smallClip(blob: Blob, width: number, boost = ''): Promise<
     }
     if (failed) return null
     await Promise.all(encoders.map(e => e.flush()))
-    if (failed || made.color.length !== count || made.alpha.length !== count || made.color.some((c, i) => c.type !== made.alpha[i].type)) return null
+    if (failed || made.color.length !== kept || made.alpha.length !== kept || made.color.some((c, i) => c.type !== made.alpha[i].type)) return null
     const bytes = (c: EncodedVideoChunk) => { const b = new Uint8Array(c.byteLength); c.copyTo(b); return b }
     const frames: Frame[] = made.color.map((c, i) => ({ ms: Math.round(c.timestamp / 1000), key: c.type === 'key', color: bytes(c), alpha: bytes(made.alpha[i]) }))
     return new Blob([muxWebm(frames, w, h, Math.round(us / 1000))], { type: 'video/webm' })
