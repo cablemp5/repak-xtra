@@ -114,6 +114,7 @@ button.vf-loadouts:focus-visible { outline: 2px solid var(--accent-primary); out
 
 /* a mod's report, under its row */
 .vf-row-panel { flex-basis: 100%; }
+.vf-row-panel[data-open="false"] { margin-top: -8px; }   /* closed, it takes no row gap: an Updated row stays as tall as the others */
 .vf-report { padding: 2px 0 8px; display: flex; flex-direction: column; align-items: flex-start; gap: 12px; }
 .vf-note { margin: 0; font-size: 13px; line-height: 1.5; color: var(--text-secondary); overflow-wrap: anywhere; text-wrap: pretty; }
 .vf-note code { font: 12px var(--font-mono); color: var(--text-primary); }

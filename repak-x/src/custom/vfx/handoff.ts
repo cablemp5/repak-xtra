@@ -1,5 +1,5 @@
 // repakxtra: the main window hands mods to the VFX window (custom/vfx/VfxUpdaterWindow.tsx): the Library's "Send to VFX
-// Updater" (one mod) and the Update VFX mods notice (every flagged mod, started at once). A localStorage entry, so a window
+// Updater" (one mod) and the Update VFX mods notice (every flagged mod, ticked for its Update). A localStorage entry, so a window
 // that is still opening reads it on mount and an open one hears it through the storage event. Not a repakxtra.* key:
 // devStorage would copy it to the shared file. The VFX window answers with repakxtra:vfx-fixed events for each fix
 // (VfxNotice.tsx swaps the original for the fix in loadouts).

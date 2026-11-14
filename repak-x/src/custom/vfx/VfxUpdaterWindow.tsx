@@ -507,7 +507,7 @@ export function VfxUpdaterPanel() {
     return () => { live = false }
   }, [busy, reload, addLog])
 
-  // mods handed over by the main window: ticked (once the list is in), and updated at once from the Library's notice
+  // mods handed over by the main window: ticked (once the list is in), the Library's notice too: the user presses Update
   useEffect(() => {
     const take = (h: { paths: string[]; start: boolean }) => { if (h.paths.length) handed.current = h }
     const h = takeHandoff()
@@ -1062,7 +1062,7 @@ export function VfxUpdaterPanel() {
           </div>}
           <button type="button" className="btn-primary" disabled={busy || Boolean(lock) || !todo} title={busy ? undefined : 'Ctrl+Enter'}
             ref={el => { if (el && !busy) updateWidth.current = el.offsetWidth }} style={busy ? { minWidth: updateWidth.current } : undefined} onClick={() => run()}>
-            <RefreshCw size={14} aria-hidden="true" className={busy ? 'vf-spin' : undefined} />{busy ? 'Updating…' : todo ? `Update ${todo} ${todo === 1 ? 'mod' : 'mods'}` : 'Update'}
+            <RefreshCw size={14} aria-hidden="true" className={busy ? 'vf-spin' : undefined} />{busy ? 'Updating' : todo ? `Update ${todo} ${todo === 1 ? 'mod' : 'mods'}` : 'Update'}
           </button>
         </div>
       </footer>
