@@ -973,7 +973,7 @@ html[data-motion="off"] .lo-screen { animation: none; }
 .shortcuts-modal .key-separator, .cp-modal .key-separator { margin: 0 4px; color: var(--text-secondary); font-size: 11px; }
 /* a button's shortcut after its tooltip text (data-hotkey, useGlobalTooltips.ts): the keys stay together on one line */
 .tooltip-keys { display: inline-flex; align-items: center; gap: 4px; margin-left: 8px; white-space: nowrap; vertical-align: 1px; }
-.tooltip-keys .key-separator { color: var(--text-secondary); font-size: 11px; }
+.tooltip-keys .key-separator { margin: 0; color: var(--text-secondary); font-size: 11px; }   /* margin 0: the 4px gap alone, as the F1 list's keys */
 .global-tooltip:has(> .tooltip-keys) { width: max-content; }   /* measured before it is placed: sized to its words and keys (to 350px), never wrapped by the window's right edge */
 /* the Library search's / key, shown while the field is empty and not in use (pressing / focuses it, hotkeys.ts) */
 .search-wrapper .search-kbd { flex: none; margin-right: 4px; pointer-events: none; }
