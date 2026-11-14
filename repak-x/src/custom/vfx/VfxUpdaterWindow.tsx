@@ -23,7 +23,7 @@ import { modKey, useLoadouts } from '../loadoutStore'
 import { FIXED_EVENT, onHandoff, openLoadoutInMain, onReport, takeHandoff, takeReport, utocOf, type Fixed } from './handoff'
 import { ASK_REVIEW, KEEP_ENCRYPTED, KEEP_NAME, ORIGINALS, REPAIR_POLICY, SAFE_OFF, claimRun, readKeepEncrypted, newRunToken, onRunChange, readAskReview, readNaming, readOriginals, readRepairPolicy, readSafety, releaseRun, retireUnsafe, runLock, type Naming, type Originals, type RunLock, type Safety } from './prefs'
 import { STEPS, fixVfxMod, repairOutcome, type AssetKind, type VfxReport } from './pipeline'
-import { ENCRYPTED, keepsEncrypted, needsUpdater, rescanForced, skipsUpdater, verdictLabel, verdictsChanged } from '../brokenMods'
+import { ENCRYPTED, keepsEncrypted, needsUpdater, rescanForced, skipsUpdater, verdictsChanged } from '../brokenMods'
 import { SCAN_DONE, modLabel, type ScanStep } from '../scanProgress'
 import { HeroFilter, heroOfName } from '../heroFilter'
 import './vfx.css'
@@ -79,7 +79,7 @@ const ORIGINALS_NOTE: Record<Originals, string> = {
 /** A rivals-depot USMAP's release, from its file name (5.3.2-3939753+++depot_marvel+S10.5_release-Marvel.usmap). */
 const usmapRelease = (name?: string | null) => name?.match(/\+([^+]+?)-Marvel\.usmap$/i)?.[1]?.replace(/_/g, ' ') ?? null
 // every group and Advanced start folded each time the window opens: a run unfolds what it works on, and that is not kept
-const GROUP_IDS = ['added', 'needs', 'unknown', 'rest', 'ui', 'materials', 'updated']
+const GROUP_IDS = ['added', 'needs', 'all', 'updating', 'updated']
 const fileName = (p: string) => p.replace(/\\/g, '/').split('/').pop() ?? p
 const plural = (n: number, word: string, many = `${word}s`) => `${n.toLocaleString()} ${n === 1 ? word : many}`
 /** A folded panel's content: out of reach of Tab and screen readers (the React 18 types this app uses lack inert). */
@@ -617,9 +617,9 @@ export function VfxUpdaterPanel() {
     const token = newRunToken()
     if (!(await claimRun(token, byKey.get(todo[0])?.name))) { addLog('Another update is running. Try again when it is done.', 'warning'); return }
     myToken.current = token
-    // the run in view: a search that hides a mod clears, and Needs an update and the groups of the mods it runs unfold
+    // the run in view: a search that hides a mod clears, and Updating, where its mods move, unfolds
     if (todo.some(k => !groupOf.current.has(k))) setQ('')
-    const unfold = new Set(['needs', ...todo.map(k => groupOf.current.get(k) ?? '')])
+    const unfold = new Set(['updating'])
     setFoldedIds(f => (f.some(id => unfold.has(id)) ? f.filter(id => !unfold.has(id)) : f))
     setBusy(true); setBatch(todo); setLastTook(null); setEnded(null); cancel.current = false; approveRest.current = false
     const startedAt = performance.now()
@@ -789,35 +789,30 @@ export function VfxUpdaterPanel() {
   const needle = q.trim().toLowerCase()
   const heroes = [...new Set(list.map(m => heroOfName(m.hero)).filter(Boolean))].sort()
   const shown = list.filter(m => (!needle || m.name.toLowerCase().includes(needle) || (m.hero ?? '').toLowerCase().includes(needle)) && (!hero || heroOfName(m.hero) === hero))
-  // three groups: the mods that need an update (with any that ran this session and did not update), the ones updated this
-  // session, the rest
+  // groups: chosen files, the mods that need an update (with any that ran this session and did not update), all other
+  // mods, the ones in the run now, and the ones updated this session
   const updatedNow = (m: Mod) => runs[norm(m.utoc)]?.status === 'fixed'
+  // in the run now: waiting their turn, updating, or waiting on a review
+  const updatingNow = (m: Mod) => { const s = runs[norm(m.utoc)]?.status; return (busy && s === 'waiting') || s === 'running' || s === 'review' }
   const addedKeys = new Set(added.map(m => norm(m.utoc)))
-  const isAdded = (m: Mod) => !updatedNow(m) && addedKeys.has(norm(m.utoc)) // chosen by hand, above the rest
+  const isAdded = (m: Mod) => !updatedNow(m) && !updatingNow(m) && addedKeys.has(norm(m.utoc)) // chosen by hand, above the rest
   // every mod that needs an update, whatever its kind (VFX, UI, material, or May crash to turn off), with any that ran
-  // this session and did not update; the rest sorted by kind below
-  const first = (m: Mod) => !updatedNow(m) && !isAdded(m) && Boolean(needsOf(m) || runs[norm(m.utoc)])
+  // this session and did not update
+  const first = (m: Mod) => !updatedNow(m) && !updatingNow(m) && !isAdded(m) && Boolean(needsOf(m) || runs[norm(m.utoc)])
   const group = (id: string, title: string, ms: Mod[], count = ms.length) => {
     const keys = ms.map(m => norm(m.utoc))
     return { id, title, mods: ms, count, keys, all: keys.length > 0 && keys.every(k => picked.has(k)), none: !keys.some(k => picked.has(k)) }
   }
-  const needing = shown.filter(first)
-  const done = shown.filter(updatedNow)
-  const chosen = shown.filter(isAdded)
-  const unknown = shown.filter(m => !first(m) && !isAdded(m) && !updatedNow(m) && uncertain.has(norm(m.path)))
-  const others = shown.filter(m => !uncertain.has(norm(m.path)) && !first(m) && !updatedNow(m) && !isAdded(m))
-  groupOf.current = new Map(shown.map(m => [norm(m.utoc), updatedNow(m) ? 'updated' : isAdded(m) ? 'added' : first(m) ? 'needs' : uncertain.has(norm(m.path)) ? 'unknown' : m.ui ? 'ui' : m.materials ? 'materials' : 'rest']))
+  const groupId = (m: Mod) => (updatedNow(m) ? 'updated' : updatingNow(m) ? 'updating' : isAdded(m) ? 'added' : first(m) ? 'needs' : 'all')
+  groupOf.current = new Map(shown.map(m => [norm(m.utoc), groupId(m)]))
+  const inGroup = (id: string) => shown.filter(m => groupOf.current.get(norm(m.utoc)) === id)
+  const needing = inGroup('needs')
   const groups = [
-    group('added', 'Chosen files', chosen),
+    group('added', 'Chosen files', inGroup('added')),
     group('needs', 'Needs an update', needing, needing.filter(m => needsOf(m) && !isDone(runs[norm(m.utoc)]?.status)).length),
-    // the ones that need nothing, by kind
-    group('unknown', verdictLabel('unknown'), unknown),
-    group('rest', 'VFX mods', others.filter(m => !m.materials)),
-    // UI mods listed for their UI materials (a game update rewrote nearly all of them in 3984769)
-    group('ui', 'UI mods', others.filter(m => m.ui)),
-    // skins listed for their material instances
-    group('materials', 'Material mods', others.filter(m => m.materials && !m.ui)),
-    group('updated', 'Updated', done), // last: what is done goes below what is left to do
+    group('all', 'All mods', inGroup('all')),
+    group('updating', 'Updating', inGroup('updating')),
+    group('updated', 'Updated', inGroup('updated')), // last: what is done goes below what is left to do
   ]
   const inLoadouts = (m: Mod) => { const k = canonKey(modKey(m.path)); return loadouts.filter(l => l.on.some(x => canonKey(x) === k)).map(l => ({ id: l.id, name: l.name })) }
   const fold = (id: string) => setFoldedIds(f => (f.includes(id) ? f.filter(x => x !== id) : [...f, id]))
@@ -833,8 +828,7 @@ export function VfxUpdaterPanel() {
   const usmapMissing = !checking && (!usmap || usmapOk === false)
   const runningKey = batch.find(k => runs[k]?.status === 'running')
   const runningMod = runningKey ? (mods ?? []).find(m => norm(m.utoc) === runningKey) : undefined
-  const rest = list.filter(m => !first(m) && !isAdded(m))
-  orderRef.current = [...list.filter(isAdded), ...list.filter(first), ...rest.filter(m => !m.materials), ...rest.filter(m => m.ui), ...rest.filter(m => m.materials && !m.ui)].map(m => norm(m.utoc))
+  orderRef.current = [...list.filter(isAdded), ...list.filter(first), ...list.filter(m => !first(m) && !isAdded(m))].map(m => norm(m.utoc))
   const byUtoc = new Map((mods ?? []).map(m => [norm(m.utoc), m]))
   const times = readTimes()
   // while a batch runs: the mod in progress (its expected time less the time it has run) and the ones after it
