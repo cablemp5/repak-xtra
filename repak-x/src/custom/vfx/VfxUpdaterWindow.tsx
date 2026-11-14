@@ -22,8 +22,8 @@ import { canonKey } from '../loadoutIdentity'
 import { modKey, useLoadouts } from '../loadoutStore'
 import { FIXED_EVENT, onHandoff, openLoadoutInMain, onReport, takeHandoff, takeReport, utocOf, type Fixed } from './handoff'
 import { ASK_REVIEW, KEEP_ENCRYPTED, KEEP_NAME, ORIGINALS, REPAIR_POLICY, SAFE_OFF, claimRun, readKeepEncrypted, newRunToken, onRunChange, readAskReview, readNaming, readOriginals, readRepairPolicy, readSafety, releaseRun, retireUnsafe, runLock, type Naming, type Originals, type RunLock, type Safety } from './prefs'
-import { STEPS, fixVfxMod, repairOutcome, type AssetKind, type VfxReport } from './pipeline'
-import { ENCRYPTED, keepsEncrypted, needsUpdater, rescanForced, skipsUpdater, verdictsChanged } from '../brokenMods'
+import { STEPS, fixVfxMod, repairOutcome, unsupportedFailure, type AssetKind, type VfxReport } from './pipeline'
+import { ENCRYPTED, isUnsupported, keptVerdict, needsUpdater, rescanForced, skipsUpdater, unsupportedName, verdictsChanged } from '../brokenMods'
 import { SCAN_DONE, modLabel, type ScanStep } from '../scanProgress'
 import { HeroFilter, heroOfName } from '../heroFilter'
 import './vfx.css'
@@ -79,7 +79,7 @@ const ORIGINALS_NOTE: Record<Originals, string> = {
 /** A rivals-depot USMAP's release, from its file name (5.3.2-3939753+++depot_marvel+S10.5_release-Marvel.usmap). */
 const usmapRelease = (name?: string | null) => name?.match(/\+([^+]+?)-Marvel\.usmap$/i)?.[1]?.replace(/_/g, ' ') ?? null
 // every group and Advanced start folded each time the window opens: a run unfolds what it works on, and that is not kept
-const GROUP_IDS = ['added', 'needs', 'all', 'updating', 'updated']
+const GROUP_IDS = ['added', 'needs', 'failed', 'all', 'updating', 'updated']
 const fileName = (p: string) => p.replace(/\\/g, '/').split('/').pop() ?? p
 const plural = (n: number, word: string, many = `${word}s`) => `${n.toLocaleString()} ${n === 1 ? word : many}`
 /** A folded panel's content: out of reach of Tab and screen readers (the React 18 types this app uses lack inert). */
@@ -404,6 +404,7 @@ export function VfxUpdaterPanel() {
   const [held, setHeld] = useState<RunLock | null>(null) // who holds the run lock (prefs.ts), this window or another
   const myToken = useRef<string | null>(null) // this window's run, while it holds the lock
   const busyRef = useRef(false)
+  const behindRef = useRef(false) // the USMAP is older than the game: a failure then may only need the new one
   const [uncertain, setUncertain] = useState(new Map<string, string>())
   const [checkError, setCheckError] = useState(false) // which mods need an update could not be checked
   const [, bump] = useState(0)
@@ -470,7 +471,7 @@ export function VfxUpdaterPanel() {
         // every other mod too: one that may crash and is on is listed, and Update turns it off (nothing here rebuilds it)
         const all = await invoke<PakFile[]>('get_pak_files').catch(() => [] as PakFile[])
         let verdicts: Verdict[] = [], failed = false
-        try { verdicts = (await invoke<Verdict[]>('xtra_broken_mods', { modPaths: [...new Set([...listed, ...all].map(m => m.path))] })).filter(v => !keepsEncrypted(v)) } catch (e) { failed = true; addLog(`Could not check which mods need an update: ${e}`, 'warning') }
+        try { verdicts = (await invoke<Verdict[]>('xtra_broken_mods', { modPaths: [...new Set([...listed, ...all].map(m => m.path))] })).filter(keptVerdict) } catch (e) { failed = true; addLog(`Could not check which mods need an update: ${e}`, 'warning') }
         const ours = await invoke<{ path: string; partial: boolean; current: boolean }[]>('xtra_made_mods', { modPaths: listed.map(m => m.path) }).catch(() => [])
         if (!live) return
         const inList = new Set(listed.map(m => norm(m.path)))
@@ -645,15 +646,39 @@ export function VfxUpdaterPanel() {
       if (r.status === 'declined') { kept.push(key); pick([key], false) } // the user's choice, not a failure: tick it again to retry
       // the main window reloads and moves loadouts from the original to the update (a no-op when the update kept the name)
       if (r.decrypted) await emit('mods_dir_changed').catch(() => {})
-      if (r.placed) await emitTo('main', FIXED_EVENT, { from: r.placed.source, to: r.placed.fixed, swap: true, original: r.placed.original } satisfies Fixed).catch(() => {})
+      // a Failed mod updated after all: its update loses the _UNSUPPORTED mark (kept when that name is taken)
+      let fixedFile = r.placed?.fixed
+      if (fixedFile && isUnsupported(fixedFile)) {
+        const from = fixedFile
+        fixedFile = await invoke<string>('rename_mod', { modPath: from, newName: unsupportedName(from, false) }).catch(e => { addLog(`Its update keeps the _UNSUPPORTED name: ${e}`, 'warning'); return from })
+      }
+      if (r.placed) await emitTo('main', FIXED_EVENT, { from: r.placed.source, to: fixedFile!, swap: true, original: r.placed.original } satisfies Fixed).catch(() => {})
       // an update named _UPDATED is a new file and its original leaves the list: its result moves with it
-      const moved = r.placed ? norm(utocOf(r.placed.fixed)) : key
-      if (moved !== key) {
+      const moveTo = (file: string) => {
+        const moved = norm(utocOf(file))
+        if (moved === key) return
         setRuns(rs => { const { [key]: v, ...rest } = rs; return v ? { ...rest, [moved]: v } : rs })
         setOpen(o => { if (!o.has(key)) return o; const n = new Set(o); n.delete(key); n.add(moved); return n })
         setBatch(b => b.map(x => (x === key ? moved : x)))
-        const fixedFile = r.placed!.fixed
-        setAdded(a => a.map(m => (norm(m.utoc) === key ? chosenMod(utocOf(fixedFile), fixedFile) : m))) // a chosen mod's update stays in the list
+        retry.forEach((x, i) => { if (x === key) retry[i] = moved })
+        setAdded(a => a.map(m => (norm(m.utoc) === key ? chosenMod(utocOf(file), file) : m))) // a chosen mod's update stays in the list
+      }
+      if (r.placed) moveTo(fixedFile!)
+      // Unsupported or ambiguous, with a current USMAP: renamed <name>_UNSUPPORTED and off, so it waits under Failed
+      // instead of coming back to Needs an update (ticked there, Update tries it again)
+      const mod = byKey.get(key)
+      if (unsupportedFailure(r) && !behindRef.current && mod && !isUnsupported(mod.path)) {
+        try {
+          const renamed = await invoke<string>('rename_mod', { modPath: mod.path, newName: unsupportedName(mod.path, true) })
+          const off = await invoke<string | null>('xtra_vfx_turn_off', { modPath: renamed, reason: 'The Mod Updater could not update it for this game version, so it was renamed _UNSUPPORTED and turned off.' })
+          const now = off ?? renamed
+          await emitTo('main', FIXED_EVENT, { from: mod.path, to: now, swap: true } satisfies Fixed).catch(() => {}) // loadouts follow the rename
+          moveTo(now)
+          // its row moves to Failed now (the list is read again only after the batch)
+          setMods(ms => ms?.map(m => (norm(m.utoc) === key ? { ...m, path: now, utoc: utocOf(now), enabled: false, name: unsupportedName(mod.path, true) } : m)) ?? ms)
+          pick([key], false)
+          addLog(`${mod.name} cannot be updated: renamed ${unsupportedName(mod.path, true)}, turned off, and listed under Failed.`, 'warning')
+        } catch (e) { addLog(`${mod.name} could not be renamed _UNSUPPORTED: ${e}`, 'warning') }
       }
     }
     for (const key of todo) {
@@ -798,18 +823,19 @@ export function VfxUpdaterPanel() {
   const isAdded = (m: Mod) => !updatedNow(m) && !updatingNow(m) && addedKeys.has(norm(m.utoc)) // chosen by hand, above the rest
   // every mod that needs an update, whatever its kind (VFX, UI, material, or May crash to turn off), with any that ran
   // this session and did not update
-  const first = (m: Mod) => !updatedNow(m) && !updatingNow(m) && !isAdded(m) && Boolean(needsOf(m) || runs[norm(m.utoc)])
+  const first = (m: Mod) => !updatedNow(m) && !updatingNow(m) && !isAdded(m) && !isUnsupported(m.path) && Boolean(needsOf(m) || runs[norm(m.utoc)])
   const group = (id: string, title: string, ms: Mod[], count = ms.length) => {
     const keys = ms.map(m => norm(m.utoc))
     return { id, title, mods: ms, count, keys, all: keys.length > 0 && keys.every(k => picked.has(k)), none: !keys.some(k => picked.has(k)) }
   }
-  const groupId = (m: Mod) => (updatedNow(m) ? 'updated' : updatingNow(m) ? 'updating' : isAdded(m) ? 'added' : first(m) ? 'needs' : 'all')
+  const groupId = (m: Mod) => (updatedNow(m) ? 'updated' : updatingNow(m) ? 'updating' : isAdded(m) ? 'added' : first(m) ? 'needs' : isUnsupported(m.path) ? 'failed' : 'all')
   groupOf.current = new Map(shown.map(m => [norm(m.utoc), groupId(m)]))
   const inGroup = (id: string) => shown.filter(m => groupOf.current.get(norm(m.utoc)) === id)
   const needing = inGroup('needs')
   const groups = [
     group('added', 'Chosen files', inGroup('added')),
     group('needs', 'Needs an update', needing, needing.filter(m => needsOf(m) && !isDone(runs[norm(m.utoc)]?.status)).length),
+    group('failed', 'Failed', inGroup('failed')), // could not be updated: renamed _UNSUPPORTED and off, never back in Needs an update
     group('all', 'All mods', inGroup('all')),
     group('updating', 'Updating', inGroup('updating')),
     group('updated', 'Updated', inGroup('updated')), // last: what is done goes below what is left to do
@@ -824,6 +850,7 @@ export function VfxUpdaterPanel() {
   const partly = reports.filter(r => isPartial(r.report)).length
   const cl = usmapCl(usmap ? fileName(usmap) : null) // the file in use, not the last download
   const behind = cl && build?.cl && cl < build.cl
+  behindRef.current = Boolean(behind)
   const usmapState = checking ? 'Checking for a newer one…' : !usmap ? 'None chosen' : usmapOk === false ? 'File missing' : usmapInfo?.upToDate || usmapInfo?.updated ? 'Up to date' : 'Ready'
   const usmapMissing = !checking && (!usmap || usmapOk === false)
   const runningKey = batch.find(k => runs[k]?.status === 'running')
