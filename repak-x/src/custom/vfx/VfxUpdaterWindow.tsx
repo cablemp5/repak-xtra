@@ -824,7 +824,7 @@ export function VfxUpdaterPanel() {
   // in the run now: waiting their turn, updating, or waiting on a review
   const updatingNow = (m: Mod) => { const s = runs[norm(m.utoc)]?.status; return (busy && s === 'waiting') || s === 'running' || s === 'review' }
   const addedKeys = new Set(added.map(m => norm(m.utoc)))
-  const isAdded = (m: Mod) => !updatedNow(m) && !updatingNow(m) && addedKeys.has(norm(m.utoc)) // chosen by hand, above the rest
+  const isAdded = (m: Mod) => !updatedNow(m) && !updatingNow(m) && !isUnsupported(m.path) && addedKeys.has(norm(m.utoc)) // chosen by hand, above the rest
   // every mod that needs an update, whatever its kind (VFX, UI, material, or May crash to turn off), with any that ran
   // this session and did not update
   const first = (m: Mod) => !updatedNow(m) && !updatingNow(m) && !isAdded(m) && !isUnsupported(m.path) && Boolean(needsOf(m) || runs[norm(m.utoc)])
