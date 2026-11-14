@@ -42,7 +42,9 @@ hooks = [   # (the kit's line, with the fix added): the slot's material, which t
     # A painted jelly skin (King of the Cosmos, Cosmic Kumiho's body): unlit, as Rotate in 3D draws it (cosmic_tuning.py viewer_jelly)
     ('        bsdf.inputs["Coat Tint"].default_value = (0.75 + 0.25 * rim[0] * k, 0.75 + 0.25 * rim[1] * k, 0.75 + 0.25 * rim[2] * k, 1)\n',
      '        bsdf.inputs["Coat Tint"].default_value = (0.75 + 0.25 * rim[0] * k, 0.75 + 0.25 * rim[1] * k, 0.75 + 0.25 * rim[2] * k, 1)\n        viewer_jelly(m, bsdf, N, L, mix, screen, tiles, base_col, stars, mask, chain)\n'),
-    ('print("RESULT " + json.dumps({"ok": True, "renders"', 'interior_rim(renders)\nflow_frames(job, glowing)\nprint("RESULT " + json.dumps({"ok": True, "renders"'),
+    # the glow's frames first: interior_rim turns every material into a depth mask in Raw colour and never puts them
+    # back. flow_frames leaves the size and format at its frames' (FLOW_SCALE, TGA): the depth render must match the still
+    ('print("RESULT " + json.dumps({"ok": True, "renders"', '_pct = sc.render.resolution_percentage\nflow_frames(job, glowing)\nsc.render.resolution_percentage = _pct; sc.render.image_settings.file_format = "PNG"\ninterior_rim(renders)\nprint("RESULT " + json.dumps({"ok": True, "renders"'),
     # the idle the action really came from (borrowed_pose.py): a later clip that fails to load leaves the loop's `path` on it
     ('        A.animation_data.action = act\n', '        A.animation_data.action = act\n        posed_from = path\n'),
     ('    renders[view["name"]] = sc.render.filepath\n', '    renders[view["name"]] = sc.render.filepath\n    constellations(sc.render.filepath)\n    screen_rim(sc.render.filepath)\n    flow_still(sc.render.filepath)\n'),
@@ -309,7 +311,7 @@ if source.count(kept_none) == 1:
 fox_form = '    return [min([p for p in ps if not p.endswith("_Lobby")] or ps, key=len) for _, ps in sorted(forms.items())]'
 if source.count(fox_form) == 1:
     source = source.replace(fox_form, fox_form.replace("for _, ps in sorted(forms.items())]", 'for f, ps in sorted(forms.items()) if f != "10601" or len(forms) == 1]'), 1)
-# Animated previews at 60 frames a second (15 before). The game's clips are keyed at 30, so a sample between two keys
+# Animated previews at 30 frames a second (15 before, 60 from 0.83.0, four times the frames per emote: too slow, 2026-11-14). The game's clips are keyed at 30, so a sample between two keys
 # blends both (the curve read at a subframe), where the kit took the nearest key. Four times the frames in about the old
 # render time: each frame's edges get one FXAA pass instead of five samples (the outline covers the edges). A kit
 # without these exact lines keeps its 15.
@@ -370,7 +372,7 @@ if all(anim_source.count(old) == 1 for old, _ in anim_hooks) and source.count(an
     patched_anim = runtime / "render_anim.py"
     if not patched_anim.exists() or patched_anim.read_text(encoding="utf-8") != anim_source:
         patched_anim.write_text(anim_source, encoding="utf-8")
-    source = source.replace(anim_fps, anim_fps.replace("15, 6.0", "60, 6.0"), 1).replace(anim_path, "Path(" + repr(str(patched_anim)) + ")", 1)
+    source = source.replace(anim_fps, anim_fps.replace("15, 6.0", "30, 6.0"), 1).replace(anim_path, "Path(" + repr(str(patched_anim)) + ")", 1)
 # Blender's render server is the one the last run left open, when a keeper still has it (speed.py kept, keeper.py). A
 # kit without this exact line starts its own each run, as before.
 open_blender = '''        cls.proc = subprocess.Popen([str(bl), "-b", "--factory-startup", "--python", str(BLENDER_SERVER)],

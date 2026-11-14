@@ -16,7 +16,7 @@ fn gate() -> Arc<RwLock<()>> {
 }
 
 pub fn edit() -> Result<OwnedRwLockReadGuard<()>, String> {
-    gate().try_read_owned().map_err(|_| "A snapshot or a storage cleanup is running. Wait for it to finish before changing mods.".into())
+    gate().try_read_owned().map_err(|_| "A backup or a storage cleanup is running. Wait for it to finish before changing mods.".into())
 }
 
 /// Every other mod change waits while `what` (a snapshot, a restore, a storage cleanup) runs, and it waits for them.

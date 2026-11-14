@@ -6,8 +6,9 @@
 // (Goal-Gradient Effect). A paused run stays listed until it is done (Zeigarnik Effect).
 import { useEffect, useRef, useState } from 'react'
 import { AlertTriangle, Eye } from 'lucide-react'
-import { rescanVerdicts } from './brokenMods'
-import { holdScan, progressLine, stageEnd, useScanRun } from './scanProgress'
+import { resumeScan } from './brokenMods'
+import { holdScan, progressLine, scanLeft, stageEnd, useScanRun } from './scanProgress'
+import { leftText } from './eta'
 import { GlideFill } from './GlideFill'
 import { APP_NAME } from './edition'
 
@@ -32,6 +33,7 @@ export default function ScanStatus() {
     : r.running ? (r.last?.path && r.mods ? progressLine(r.last.path, pct, r.mods) : "Reading the game's files")
     : r.held === 'paused' ? 'Paused by you, with mods left to scan'
     : 'Stopped with mods left to scan (the game ran, or the Mod Updater needed the tools)'
+  const left = r.running && !stopping ? scanLeft(r) : undefined
   return (
     <div className="lo-gen scan-gen" ref={ref}>
       <button type="button" className="btn-ghost scan-status" aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen(v => !v)}
@@ -46,6 +48,7 @@ export default function ScanStatus() {
           <div className="lo-gen-status" role="status">
             <b>{r.running ? 'Scanning mods for this game version' : 'Mod scan paused'}</b>
             <span>{status}</span>
+            {r.running && !stopping && <span>{left !== undefined ? leftText(left) : 'Working out the time left…'}</span>}
             {/* the whole run: the stages done and this one's share, never stepping back; a stage with no count yet creeps
                 toward its end (GlideFill) */}
             {r.running && <div className="su-bar" aria-hidden="true"><GlideFill pct={pct} next={r.last?.total ? undefined : stageEnd(r.stage, r.weights)} secs={20} /></div>}
@@ -60,7 +63,7 @@ export default function ScanStatus() {
                   <span className="lo-gen-stop"><span className="stop-glyph" aria-hidden="true" />Cancel</span></button>
               </>
             : <>
-                <button type="button" role="menuitem" className="xtra-item" onClick={() => { setOpen(false); void rescanVerdicts() }}
+                <button type="button" role="menuitem" className="xtra-item" onClick={() => { setOpen(false); void resumeScan() }}
                   title="Scan the mods left now">
                   <span className="lo-gen-stop"><span className="play-glyph" aria-hidden="true" />Resume</span></button>
                 <button type="button" role="menuitem" className="xtra-item run-stop-btn" onClick={() => { setOpen(false); void holdScan('cancelled') }}

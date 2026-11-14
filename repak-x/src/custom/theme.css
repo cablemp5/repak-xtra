@@ -765,6 +765,9 @@ html[data-motion="off"] .lo-screen { animation: none; }
 .lo-gen { position: relative; }
 .lo-gen-menu { left: 0; right: auto; min-width: 270px; z-index: 30; }
 .lo-gen-menu .xtra-item small { margin-left: auto; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+/* a row's label and its count with the time it takes stay one line each: the menu grows instead */
+.lo-gen-menu .xtra-item > span, .lo-gen-menu .xtra-item > small { white-space: nowrap; }
+.lo-gen-menu:not(.scan-menu):not(.vf-scan-menu) { width: max-content; max-width: 360px; } /* a long loadout name ellipsizes */
 /* the Mod Updater's Scan, at the window's foot: opens upward, from the button's right edge */
 .lo-gen-menu.vf-scan-menu { top: auto; bottom: calc(100% + 6px); left: auto; right: 0; min-width: 220px; transform-origin: bottom right; }
 /* A running preview run's menu: which loadout and the step it is on, a line, then Stop */
@@ -976,8 +979,6 @@ html[data-motion="off"] .lo-screen { animation: none; }
 .tooltip-keys .key-separator { margin: 0; color: var(--text-secondary); font-size: 11px; }   /* margin 0: the 4px gap alone, as the F1 list's keys */
 .global-tooltip:has(> .tooltip-keys) { width: max-content; }   /* measured before it is placed: sized to its words and keys (to 350px), never wrapped by the window's right edge */
 /* the Library search's / key, shown while the field is empty and not in use (pressing / focuses it, hotkeys.ts) */
-.search-wrapper .search-kbd { flex: none; margin-right: 4px; pointer-events: none; }
-.search-wrapper:focus-within .search-kbd { display: none; }
 .shortcuts-footer { font-size: 12px; color: var(--text-secondary); }
 /* Rows size to their cards: overflow-clipped cards let auto rows shrink to fit the screen and overlap */
 .lo-grid { grid-auto-rows: max-content; }

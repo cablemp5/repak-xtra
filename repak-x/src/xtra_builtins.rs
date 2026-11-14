@@ -727,8 +727,8 @@ async fn build(app: &tauri::AppHandle, id: &str, dir: &Path, paks: &Path) -> Res
     let made = if game_build(paks) != build_at_start { Err("The game updated during the build. Check again to rebuild from the new game files".into()) } else { made };
     let result = match (made, &blocked) {
         (Ok(summary), Some(_)) if gate.is_err() => Err(match keep(&from, &pending, id, &made_for, &summary, &waited) {
-            Ok(()) => "A snapshot, restore, storage cleanup, or encryption was running, so the new build waits. Try again when it is done".to_string(),
-            Err(e) => format!("A snapshot, restore, storage cleanup, or encryption was running, so the new build was not installed ({e}). Try again when it is done"),
+            Ok(()) => "A backup, restore, storage cleanup, or encryption was running, so the new build waits. Try again when it is done".to_string(),
+            Err(e) => format!("A backup, restore, storage cleanup, or encryption was running, so the new build was not installed ({e}). Try again when it is done"),
         }),
         (Ok(summary), Some(_)) => Err(match keep(&from, &pending, id, &made_for, &summary, &waited) {
             Ok(()) => "Marvel Rivals or Repak X opened while it built, so the new build waits. Close it, then try again to put it in".to_string(),

@@ -64,6 +64,11 @@ export const verdictsChanged = () => emit(VERDICTS_CHANGED).catch(() => {})
 export const VERDICTS_RESCAN = 'xtra-verdicts-rescan'
 export const rescanVerdicts = () => emit(VERDICTS_RESCAN, []).catch(() => {})
 export const rescanForced = (force: string[]) => emit(VERDICTS_RESCAN, force).catch(() => {})
+/** The mods of a Mod Updater Scan that stopped with mods left: Resume (and the window's focus) scans them again. Any
+ *  other run (Refresh list, a game update, a new USMAP) scans every mod and drops them. */
+let stoppedScope: string[] = []
+/** The header's Resume: the stopped run again, only its mods when it was a Mod Updater Scan. */
+export const resumeScan = () => { stoppedScope.forEach(p => forced.add(norm(p))); return rescanVerdicts() } // never `fresh`: what it read stays read
 /** Mods a manual Check asked for: checked first, even when the Mod Updater made them, until a run finishes with them. */
 let forced = new Set<string>()
 /** Of those, the ones whose check records the next run drops first (in the run: a scan in flight would write them back). */
@@ -115,7 +120,7 @@ export function useBrokenWatch(mods: { path: string; modified_date?: number; fil
     // a run the library outdated before it began checked nothing: not finished (gameUpdate.ts asks the new one instead)
     // never the Mod Updater's own updates for this game (xtra_stamp.rs): they were checked as they were made. Nor the
     // original it renamed beside one (a new path, so no record): it is off and kept, the update is what loads
-    let scanPaths = paths
+    let scanPaths = paths, list = paths
     let ticked: string[] = []
     // the four scans (vfx: the VFX and Blueprint ones, meshes: the mesh one), each followed by the badges when it found something.
     // A scan skips a mod it already checked as this file in this game, so a list can be scanned twice cheaply
@@ -159,12 +164,15 @@ export function useBrokenWatch(mods: { path: string; modified_date?: number; fil
       .then(() => first ?? check())
       .then(ok => { if (!ok) throw new Error('the first check failed') })
       .then(() => {
-        ticked = paths.filter(p => forced.has(norm(p))); scanPaths = paths.filter(p => forced.has(norm(p)) || !(made.get(norm(p))?.current || made.get(updateBeside(norm(p)))?.current))
+        // a Scan from the Mod Updater (its ticked mods, the ones that are on, or all) scans only the mods it asked for
+        ticked = paths.filter(p => forced.has(norm(p)))
+        list = ticked.length ? ticked : paths
+        scanPaths = list.filter(p => forced.has(norm(p)) || !(made.get(norm(p))?.current || made.get(updateBeside(norm(p)))?.current))
         // the run's plan, known before a manual Check's mods go first: the mods that are on, through every scan, then the
         // ones that are off (what loads in the game gets its badges soonest)
         const isOn = (p: string) => !/\.bak_repak$/i.test(p)
-        passes = [[scanPaths.filter(isOn), paths.filter(isOn)], [scanPaths.filter(p => !isOn(p)), paths.filter(p => !isOn(p))]].filter(([v, m]) => v.length || m.length)
-        scanned = paths.length
+        passes = [[scanPaths.filter(isOn), list.filter(isOn)], [scanPaths.filter(p => !isOn(p)), list.filter(p => !isOn(p))]].filter(([v, m]) => v.length || m.length)
+        scanned = list.length
         // reading the game's files and the textures weigh a few mods' worth each; a scan step weighs its mods
         weights = [Math.max(1, Math.round(scanned / 20)), ...passes.flatMap(([v, m]) => Array(5).fill(Math.max(1, v.length, m.length))), Math.max(1, Math.round(scanned / 10))]
         scanPlan(weights, scanned)
@@ -173,20 +181,18 @@ export function useBrokenWatch(mods: { path: string; modified_date?: number; fil
         return live && forget.length ? invoke('xtra_scan_forget', { modPaths: forget }).catch(e => console.warn('[brokenMods] could not clear earlier checks', e)) : undefined
       })
       .then(() => (live ? invoke('vfx_check_usmap_update', { force: false }).catch(() => null) : null))
-      // a manual Check's mods first, through all four scans, so they never wait behind the mods not checked yet
-      .then(() => (ticked.length ? scans(ticked, ticked, null).then(() => deep(ticked, null)) : undefined))
       // every mod for meshes: an update carries the original's meshes as they were, and nothing in the Mod Updater checks them
       // the passes planned above, each through every scan
       .then(() => {
         return passes.reduce<Promise<unknown>>((r, [v, m], i) => r.then(() => scans(v, m, 1 + 5 * i)).then(() => deep(v, 1 + 5 * i)), Promise.resolve())
       })
-      .then(() => textures(paths))
+      .then(() => textures(list))
       .then(() => (live ? invoke<boolean>('xtra_scan_stopped').catch(() => false) : true))
       .then(stopped => live && !stopped, e => { console.warn('[brokenMods] background scan failed', e); return false })
       // runs take turns (queued), so this one's end is never another's. One the library outdated is not "paused":
       // the new list's own run follows
       // a run that stopped first (the game, a held scan, an old USMAP) keeps a manual Check's mods for the next one
-      .then(finished => { unfinished = !finished; if (!finished) ticked.forEach(p => forced.add(norm(p))); scanEnded(finished || !live); void invoke('xtra_scan_release').catch(() => {}); return finished })
+      .then(finished => { unfinished = !finished; stoppedScope = finished ? [] : ticked; scanEnded(finished || !live, finished); void invoke('xtra_scan_release').catch(() => {}); return finished })
     let unfinished = false
     // one run waiting its turn is enough: a focus, a Rescan and the game update notice asking meanwhile all get that one
     let waiting: Promise<boolean> | null = null
@@ -199,7 +205,7 @@ export function useBrokenWatch(mods: { path: string; modified_date?: number; fil
     // only a run that stopped with mods left goes on when the window is back (the game, an update or a check took
     // over: xtra_vfx.rs background_may_run). Nothing changed, nothing runs. A game update is gameUpdate.ts's to start
     let lastResume = 0
-    const resume = () => { if (unfinished && !scanHeld() && Date.now() - lastResume > 30_000) { lastResume = Date.now(); void full() } }
+    const resume = () => { if (unfinished && !scanHeld() && Date.now() - lastResume > 30_000) { lastResume = Date.now(); stoppedScope.forEach(p => forced.add(norm(p))); void full() } }
     window.addEventListener('focus', resume)
     const again = listen(VERDICTS_CHANGED, () => { void check() })
     // a Refresh list or Resume: checks the header paused or cancelled run again

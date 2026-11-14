@@ -144,10 +144,10 @@ fn copy_all(list: &[(PathBuf, u64)], from: &Path, to: &Path, prev: Option<&Path>
 
 fn create_at(root: &Path, id: &str, mods: &Path, win64: &Path) -> Result<Snapshot, String> {
     // a folder that cannot be read would leave a partial copy that looks whole: refuse before copying or pruning
-    let unread = |e: String| format!("Could not read every file, so no snapshot was made: {e}");
+    let unread = |e: String| format!("Could not read every file, so no backup was made: {e}");
     let (m, s) = (try_files(mods).map_err(unread)?, try_setup_files(win64).map_err(unread)?);
     if m.is_empty() && s.is_empty() {
-        return Err("The mods folder is empty: there is nothing to snapshot.".into());
+        return Err("The mods folder is empty: there is nothing to back up.".into());
     }
     // copied under a name the list skips, then renamed in: a copy cut short (a full disk, a crash) is never listed
     let staging = root.join(format!(".staging-{id}"));
@@ -157,23 +157,23 @@ fn create_at(root: &Path, id: &str, mods: &Path, win64: &Path) -> Result<Snapsho
         .and_then(|_| copy_all(&s, win64, &staging.join("win64"), prev.as_ref().map(|p| p.join("win64")).as_deref()));
     if let Err(e) = made {
         let _ = fs::remove_dir_all(&staging);
-        return Err(format!("Could not make the snapshot: {e}"));
+        return Err(format!("Could not make the backup: {e}"));
     }
     // two made in the same second: the second takes the next free id, never the first one's folder
-    let mut n: u64 = id.parse().map_err(|_| "Unknown snapshot".to_string())?;
+    let mut n: u64 = id.parse().map_err(|_| "Unknown backup".to_string())?;
     while root.join(n.to_string()).exists() {
         n += 1;
     }
     let id = n.to_string();
     if let Err(e) = fs::rename(&staging, root.join(&id)) {
         let _ = fs::remove_dir_all(&staging);
-        return Err(format!("Could not make the snapshot: {e}"));
+        return Err(format!("Could not make the backup: {e}"));
     }
     let mut all = list_at(root);
     for old in all.split_off(KEEP.min(all.len())) {
         let _ = fs::remove_dir_all(root.join(&old.id));
     }
-    all.into_iter().find(|x| x.id == id).ok_or_else(|| "The snapshot was not saved.".into())
+    all.into_iter().find(|x| x.id == id).ok_or_else(|| "The backup was not saved.".into())
 }
 
 /// The mod files an imported zip may bring: never a loader or plugin (a .dll or .asi from a file of unknown origin
@@ -208,11 +208,11 @@ fn import_at(root: &Path, id: &str, zip: &Path) -> Result<Snapshot, String> {
             fs::create_dir_all(dest.parent().unwrap_or(&snap)).map_err(|e| e.to_string())?;
             fs::rename(from.join(rel), &dest).map_err(|e| e.to_string())?;
         }
-        let mut n: u64 = id.parse().map_err(|_| "Unknown snapshot".to_string())?;
+        let mut n: u64 = id.parse().map_err(|_| "Unknown backup".to_string())?;
         while root.join(n.to_string()).exists() { n += 1; }
         let id = n.to_string();
-        fs::rename(&snap, root.join(&id)).map_err(|e| format!("Could not import the snapshot: {e}"))?;
-        list_at(root).into_iter().find(|x| x.id == id).ok_or_else(|| "The snapshot was not saved.".into())
+        fs::rename(&snap, root.join(&id)).map_err(|e| format!("Could not import the backup: {e}"))?;
+        list_at(root).into_iter().find(|x| x.id == id).ok_or_else(|| "The backup was not saved.".into())
     })();
     let _ = fs::remove_dir_all(&staging);
     out
@@ -224,7 +224,7 @@ fn import_at(root: &Path, id: &str, zip: &Path) -> Result<Snapshot, String> {
 fn export_at(snap: &Path, to: &Path) -> Result<u64, String> {
     use std::io::Write;
     let list = files(&snap.join("mods"));
-    if list.is_empty() { return Err("This snapshot has no mod files to export.".into()) }
+    if list.is_empty() { return Err("This backup has no mod files to export.".into()) }
     let tmp = to.with_extension("zip.repakxtra-part");
     let write = || -> Result<(), String> {
         let mut z = zip::ZipWriter::new(std::io::BufWriter::new(fs::File::create(&tmp).map_err(|e| e.to_string())?));
@@ -237,9 +237,9 @@ fn export_at(snap: &Path, to: &Path) -> Result<u64, String> {
         }
         z.finish().map_err(|e| e.to_string())?.flush().map_err(|e| e.to_string())
     };
-    if let Err(e) = write() { let _ = fs::remove_file(&tmp); return Err(format!("Could not export the snapshot: {e}")) }
+    if let Err(e) = write() { let _ = fs::remove_file(&tmp); return Err(format!("Could not export the backup: {e}")) }
     // rename replaces an existing file in one step (MoveFileEx on Windows): the old one stays if it fails
-    fs::rename(&tmp, to).map_err(|e| { let _ = fs::remove_file(&tmp); format!("Could not export the snapshot: {e}") })?;
+    fs::rename(&tmp, to).map_err(|e| { let _ = fs::remove_file(&tmp); format!("Could not export the backup: {e}") })?;
     Ok(list.len() as u64)
 }
 
@@ -316,7 +316,7 @@ fn restore_at(snap: &Path, mods: &Path, win64: &Path) -> Result<Restored, String
 /// Snapshot ids are folder names: digits only, so an id never reaches outside the snapshots folder.
 fn snap_dir(id: &str) -> Result<PathBuf, String> {
     if id.is_empty() || !id.bytes().all(|c| c.is_ascii_digit()) {
-        return Err("Unknown snapshot".into());
+        return Err("Unknown backup".into());
     }
     Ok(root().join(id))
 }
@@ -349,7 +349,7 @@ pub async fn snapshot_estimate(state: State<'_, Arc<Mutex<crate::AppState>>>) ->
 /// Setup > Snapshots > Export: snapshot `id`'s mod files as a .zip where the person chose (export_at). Returns the file count.
 #[tauri::command]
 pub async fn snapshot_export(id: String, path: String) -> Result<u64, String> {
-    let _alone = crate::xtra_mutation::alone("a snapshot export")?; // no Delete, cleanup, or pruning takes its source meanwhile
+    let _alone = crate::xtra_mutation::alone("a backup export")?; // no Delete, cleanup, or pruning takes its source meanwhile
     let snap = snap_dir(&id)?;
     let to = PathBuf::from(path);
     if !to.extension().is_some_and(|e| e.eq_ignore_ascii_case("zip")) { return Err("Save it as a .zip file.".into()) }
@@ -359,7 +359,7 @@ pub async fn snapshot_export(id: String, path: String) -> Result<u64, String> {
 /// Setup > Snapshots > Import: a .zip the person picked becomes the newest snapshot (import_at).
 #[tauri::command]
 pub async fn snapshot_import(path: String) -> Result<Snapshot, String> {
-    let _alone = crate::xtra_mutation::alone("a snapshot")?;
+    let _alone = crate::xtra_mutation::alone("a backup")?;
     let zip = PathBuf::from(path);
     if !zip.extension().is_some_and(|e| e.eq_ignore_ascii_case("zip")) || !zip.is_file() {
         return Err("Pick a .zip file.".into());
@@ -370,7 +370,7 @@ pub async fn snapshot_import(path: String) -> Result<Snapshot, String> {
 
 #[tauri::command]
 pub async fn snapshot_create(state: State<'_, Arc<Mutex<crate::AppState>>>) -> Result<Snapshot, String> {
-    let _alone = crate::xtra_mutation::alone("a snapshot")?; // no mod change mixes file versions into the copy
+    let _alone = crate::xtra_mutation::alone("a backup")?; // no mod change mixes file versions into the copy
     let (mods, win64) = dirs_of(&state)?;
     let id = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_err(|e| e.to_string())?.as_secs().to_string();
     blocking(move || create_at(&root(), &id, &mods, &win64)).await
@@ -403,7 +403,7 @@ pub async fn snapshot_restore(id: String, state: State<'_, Arc<Mutex<crate::AppS
 pub async fn snapshot_delete(id: String) -> Result<(), String> {
     let _mutation = crate::xtra_mutation::edit()?; // never the snapshot a restore is reading
     let dir = snap_dir(&id)?;
-    blocking(move || fs::remove_dir_all(&dir).map_err(|e| format!("Could not delete the snapshot: {e}"))).await
+    blocking(move || fs::remove_dir_all(&dir).map_err(|e| format!("Could not delete the backup: {e}"))).await
 }
 
 #[cfg(test)]

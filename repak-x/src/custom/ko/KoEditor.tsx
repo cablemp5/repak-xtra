@@ -348,8 +348,8 @@ function Editor({ onInstall, alert, blocked, shown }: KoEditorProps & { shown: b
           <h2 className="ko-h">Colors</h2>
           {edited.length > 0 && <button type="button" className="fp-clear" onClick={() => { save({ colors: {}, hue: 0 }); cue('toggle') }}><RotateCcw size={12} aria-hidden />Reset all</button>}
         </div>
-        <div className={`ko-role ko-all${hue ? ' is-changed' : ''}`} title="Turns every color around the color wheel at once"
-          onMouseEnter={() => setFocus(roles.map(r => r.id))} onMouseLeave={() => setFocus(null)}>
+        {/* no hover focus here: every role at once hides the layers no role owns */}
+        <div className={`ko-role ko-all${hue ? ' is-changed' : ''}`} title="Turns every color around the color wheel at once">
           <span className="ko-wheel" aria-hidden />
           <label className="ko-role-name" htmlFor="ko-hue">All colors</label>
           <input id="ko-hue" type="range" min={-180} max={180} step={1} value={hue} disabled={!roles.length} style={{ '--ko-hue-track': hueTrack } as React.CSSProperties}

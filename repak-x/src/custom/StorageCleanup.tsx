@@ -22,7 +22,7 @@ const INFO: Record<string, { name: string; warn: string }> = {
   previews: { name: 'Mod previews', warn: 'Deletes every preview you made. Making them again needs the preview kit and takes a while.' },
   kit: { name: 'Preview kit', warn: 'Previews cannot be made until you install the kit again in Setup.' },
   trash: { name: 'Recently deleted', warn: 'Mods you deleted can no longer be restored.' },
-  snapshots: { name: 'Snapshots', warn: 'Your mods folder can no longer be restored from them.' },
+  snapshots: { name: 'Backups', warn: 'Your mods folder can no longer be restored from them.' },
   encryption: { name: 'Encryption backups', warn: 'Deletes the unencrypted originals of mods you encrypted, for good.' },
   plugins: { name: 'Removed plugins', warn: 'Plugins the Ban risk check moved out can no longer be put back.' },
 }
