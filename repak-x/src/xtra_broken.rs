@@ -118,7 +118,9 @@ pub(crate) fn class_marks(paks: &Path, utoc: &Path) -> Option<(usize, usize)> {
 fn listed(paks: &Path, utoc: &Path) -> Option<Vec<String>> {
     static SEEN: Mutex<Option<HashMap<String, ((u64, u64), Vec<String>)>>> = Mutex::new(None);
     let file = crate::app_dir().join("repakxtra-mod-classes.json");
-    let (key, stamp) = (decoder_key(utoc, crate::xtra_vfx::parser_id()), file_stamp(utoc));
+    // (the game's build too: the marks say what this game lacks or moved, which its next update can change)
+    let key = format!("{}|{}", decoder_key(utoc, crate::xtra_vfx::parser_id()), crate::xtra_vfx::game_cl(paks).unwrap_or(0));
+    let stamp = file_stamp(utoc);
     let known = |m: &mut Option<HashMap<String, ((u64, u64), Vec<String>)>>| {
         m.get_or_insert_with(|| std::fs::read_to_string(&file).ok().and_then(|t| serde_json::from_str(&t).ok()).unwrap_or_default()).get(&key).filter(|(s, _)| Some(*s) == stamp).map(|(_, f)| f.clone())
     };
