@@ -57,7 +57,7 @@
 
 /* a mod's row, as compact as the Library's: the whole name ticks it, the loadouts holding it, its badges and state at the
    right, then (full width) progress or report */
-.vf-rows > .vf-row { flex-wrap: wrap; min-height: 40px; padding: 0 12px; gap: 8px; color: var(--text-primary); }
+.vf-rows > .vf-row { flex-wrap: wrap; min-height: 40px; padding: 0 12px; gap: 0 8px; color: var(--text-primary); }   /* no row gap: a closed report (a line of its own, 0 tall) left an Updated row 8px taller than the rest */
 .vf-pick { flex: 1; min-width: 0; min-height: 40px; display: flex !important; align-items: center; gap: 12px !important; cursor: pointer; }
 .vf-pick .repakx-checkbox-label { min-width: 0; flex: 1; display: flex; }
 .vf-row-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; font-weight: 600; color: var(--text-primary); }
@@ -104,7 +104,7 @@ button.vf-loadouts:focus-visible { outline: 2px solid var(--accent-primary); out
 
 /* running: the app's thin progress bar (the update dialog's), the step and what it is on */
 /* running: under the name (lined up with it, past the tick), the app's thin bar, then one line of what it is doing */
-.vf-progress { flex-basis: 100%; min-width: 0; margin-top: -8px; padding: 0 0 12px 28px; }   /* close under the name: the tick row is 40px tall, the name sits in its middle */
+.vf-progress { flex-basis: 100%; min-width: 0; padding: 0 0 12px 28px; }   /* close under the name: the tick row is 40px tall, the name sits in its middle */
 .vf-bar { height: 4px; border-radius: 999px; overflow: hidden; background: var(--bg-lighter); }
 /* a plain fill: it keeps moving through a long step by itself (GlideFill.tsx), so it still reads as working */
 .vf-bar i { display: block; height: 100%; background: var(--accent-primary); }
@@ -114,8 +114,7 @@ button.vf-loadouts:focus-visible { outline: 2px solid var(--accent-primary); out
 
 /* a mod's report, under its row */
 .vf-row-panel { flex-basis: 100%; }
-.vf-row-panel[data-open="false"] { margin-top: -8px; }   /* closed, it takes no row gap: an Updated row stays as tall as the others */
-.vf-report { padding: 2px 0 8px; display: flex; flex-direction: column; align-items: flex-start; gap: 12px; }
+.vf-report { padding: 10px 0 8px; display: flex; flex-direction: column; align-items: flex-start; gap: 12px; }
 .vf-note { margin: 0; font-size: 13px; line-height: 1.5; color: var(--text-secondary); overflow-wrap: anywhere; text-wrap: pretty; }
 .vf-note code { font: 12px var(--font-mono); color: var(--text-primary); }
 .vf-warnings { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 4px; align-self: stretch; }
