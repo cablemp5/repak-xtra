@@ -99,6 +99,9 @@ fn replace_with(moves: &[(PathBuf, PathBuf)], old: &[&PathBuf], dir: &Path) -> R
     // noted first, so a crash in between puts every file back at the next start (xtra_journal.rs)
     let plan = crate::xtra_journal::begin(&crate::xtra_journal::Plan { trash: Some(dir.to_path_buf()), trashed: old.iter().map(|p| p.to_path_buf()).collect(), renames: moves.to_vec(), ..Default::default() })?;
     if let Err((d, e)) = crate::xtra_trash::discard_all(dir, &old.iter().map(|p| p.as_path()).collect::<Vec<_>>()) {
+        if e.to_string().contains("Still in Recently deleted") {
+            plan.keep();
+        }
         return Err(format!("Could not move the old {} aside: {}", d.display(), e));
     }
     if let Err(e) = move_all(moves) {
