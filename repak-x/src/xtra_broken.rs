@@ -59,6 +59,15 @@ fn is_anim_blueprint(key: &str) -> bool {
     key.rsplit('/').next().unwrap_or(key).starts_with("abp_")
 }
 
+/// An encrypted mod's reason (brokenMods.ts ENCRYPTED reads its start, to drop it while Keep mods encrypted is on).
+pub(crate) const ENCRYPTED: &str = "Encrypted: the game's Season 11 check cannot read its file list, so it reports the mod, and Project Galacta skips it. The Mod Updater decrypts it, or turn on Keep mods encrypted in its Advanced to leave it as it is.";
+
+/// An animation or montage (an emote's), by where it sits or its montage name. shortcut: by path and name, list
+/// classes (xtra_uat_cli::classes) if a mod ever keeps one elsewhere under another name.
+pub(crate) fn is_animation(key: &str) -> bool {
+    !is_anim_blueprint(key) && (key.contains("/animations/") || key.ends_with("_mt"))
+}
+
 /// The game build that inserted properties into material instances' overrides (xtra_mi_layout.rs): one cooked before
 /// it crashes the game when it overrides a later property (scripts/usmap-diff.py lists what each patch moved).
 const MATERIAL_LAYOUT_BUILD: u64 = 3984769;
@@ -537,6 +546,8 @@ struct Facts<'a> {
     has_blueprint: bool,
     /// when the mod was made (seconds): its file's modified time, which installs set to the source's (xtra_made.rs)
     installed: u64,
+    /// the game's last update moved how animations are stored (AnimSequenceBase, xtra_usmap_diff newest_moved)
+    anims_moved: bool,
     /// its Niagara files are in an older layout although it was written after the update (xtra_niagara.rs layout scan)
     old_layout: bool,
     /// its classes against the game's (xtra_layout.rs): None not checked yet, Some(None) they match, Some(Some(reason))
@@ -547,7 +558,7 @@ struct Facts<'a> {
 }
 
 /// The verdict for one mod, or None when it looks fine. Pure: the facts come in, the words go out.
-fn judge(path: &str, m: &Facts, _game_updated: u64, game: &GameAssets) -> Option<Verdict> {
+fn judge(path: &str, m: &Facts, game_updated: u64, game: &GameAssets) -> Option<Verdict> {
     let packages: Vec<String> = m.files.iter().filter(|f| is_package(f)).map(|f| match_key(f)).collect();
     // Project Galacta skins bring their own new files (meshes, textures, configs) by design: never "broken" for that
     if !m.galacta && !packages.is_empty() && !packages.iter().any(|k| game.contains_key(k)) {
@@ -594,6 +605,24 @@ fn judge(path: &str, m: &Facts, _game_updated: u64, game: &GameAssets) -> Option
             if anims == 1 { "its Animation Blueprint".to_string() } else { format!("its {anims} Animation Blueprints") },
             if anims == 1 { "it" } else { "them" }
         ));
+    }
+    // an animation or montage made before the game update that moved how animations are stored (4042190 inserted two
+    // AnimSequenceBase properties): the emote does not play and the game crashes a moment later. The Mod Updater
+    // rewrites it in the new layout
+    let moved_anims = packages.iter().filter(|k| is_animation(k)).count();
+    if m.anims_moved && !m.fixed && m.installed > 0 && m.installed < game_updated && moved_anims > 0 {
+        return Some(Verdict {
+            path: path.to_string(),
+            kind: "vfx",
+            reason: format!(
+                "A game update changed how animations are stored, and {} made before it, so the emote does not play and the game can crash. The Mod Updater rewrites {} in the new layout.",
+                if moved_anims == 1 { "its animation was".to_string() } else { format!("its {moved_anims} animations were") },
+                if moved_anims == 1 { "it" } else { "them" }
+            ),
+            stale_niagara: 0,
+            usmap_wait: 0,
+            off_only: false,
+        });
     }
     // a KO prompt mod: the Mod Updater rebuilds its widget on the game's new copy, so Needs update, not May crash
     let ko = m.materials && !m.fixed && !m.cleared && crate::xtra_ko::ko_only_files(m.files);
@@ -711,9 +740,8 @@ fn checked_now(store: &HashMap<String, Checked>, utoc: &Path, game_updated: u64)
     checked_record(store, utoc, game_updated).map(|c| c.outdated)
 }
 
-/// A clearance (Nothing to update, or a check found it current) outlives a parser change: the background check never
-/// restores one for a mod with Niagara files, and it looks again at the rest anyway. Findings hold for their parser only.
-/// Kept per decoder (decoder_key): this decoder's own record first, else a clearance any decoder wrote.
+/// The record of `utoc` as it is now, for this game: kept per decoder (decoder_key), this decoder's own first, else a
+/// clearance any decoder wrote, else a finding any decoder wrote.
 fn checked_record<'a>(store: &'a HashMap<String, Checked>, utoc: &Path, game_updated: u64) -> Option<&'a Checked> {
     let (key, stamp, parser) = (checked_key(utoc), file_stamp(utoc), crate::xtra_vfx::parser_id());
     let of_mod = || {
@@ -723,7 +751,9 @@ fn checked_record<'a>(store: &'a HashMap<String, Checked>, utoc: &Path, game_upd
             .map(|(_, c)| c)
             .filter(|c| stamp == Some((c.size, c.modified)) && game_updated <= c.game)
     };
-    of_mod().find(|c| c.parser == parser).or_else(|| of_mod().find(|c| !c.outdated && c.unknown.is_none()))
+    // this decoder's own record first, else another's (the other edition, or the app before its last update): a mod
+    // found built for an older game keeps its badge through an app update, until this decoder's own scan looks again
+    of_mod().find(|c| c.parser == parser).or_else(|| of_mod().find(|c| !c.outdated && c.unknown.is_none())).or_else(|| of_mod().find(|c| c.unknown.is_none()))
 }
 
 /// A "nothing to update" for `utoc` as it is now, from an update that rewrites older material layouts.
@@ -857,6 +887,7 @@ pub async fn xtra_broken_mods(mod_paths: Vec<String>, state: State<'_, Arc<Mutex
         let checked = load_checked(&checked_store());
         let (layouts, usmap_id) = (crate::xtra_layout::load_done(), crate::xtra_layout::usmap_id());
         let meshes = crate::xtra_mesh::load_done();
+        let anims_moved = crate::xtra_usmap_diff::newest_moved("AnimSequenceBase");
         let niagara_layouts = crate::xtra_niagara::known_layouts(&paks);
         // an update beside it: <name>_UPDATED next to the original, or the original renamed <name>_BROKEN next to the update
         // each folder's stems, so an _UPDATED name that takes the priority (two originals that would clash) is found
@@ -947,10 +978,20 @@ pub async fn xtra_broken_mods(mod_paths: Vec<String>, state: State<'_, Arc<Mutex
                     cleared: found == Some(false),
                     has_blueprint: details.has_blueprint,
                     installed,
+                    anims_moved,
                     old_layout: details.category == "VFX" && crate::xtra_niagara::known_old_layout(&path, &niagara_layouts),
                     layout: crate::xtra_layout::found_now(&layouts, &path.with_extension("utoc"), game_updated, &usmap_id),
                 };
                 judge_checked(p, facts, game_updated, &game, record.and_then(|c| c.unknown.as_deref()))
+                    // last: any other finding says more, and its update comes out unencrypted anyway
+                    .or_else(|| (!has_fix(&path) && crate::xtra_encrypt::encrypted(&path.with_extension("utoc"))).then(|| Verdict {
+                        path: p.to_string(),
+                        kind: "vfx",
+                        reason: ENCRYPTED.into(),
+                        stale_niagara: 0,
+                        usmap_wait: 0,
+                        off_only: false,
+                    }))
             })
             .collect::<Vec<Verdict>>();
         // an update the Mod Updater made for this game is never flagged Needs update or Safety unknown again (the Mod
@@ -963,6 +1004,7 @@ pub async fn xtra_broken_mods(mod_paths: Vec<String>, state: State<'_, Arc<Mutex
             // an inconclusive check of a mod this updater rebuilt is noise, whichever game it was made for
             if v.kind == "unknown" && made.is_some() { return false; }
             v.kind != "vfx"
+                || v.reason == ENCRYPTED // an update kept encrypted (Keep mods encrypted) is still encrypted
                 || can_finish(p)
                 || crate::xtra_niagara::known_old_layout(p, &niagara_layouts)
                 || checked_record(&checked, &utoc, game_updated).is_some_and(|c| c.outdated && c.old_layout)
@@ -972,7 +1014,7 @@ pub async fn xtra_broken_mods(mod_paths: Vec<String>, state: State<'_, Arc<Mutex
         // the update decodes. Otherwise it waits for the USMAP of the installed build, and its reason says which
         let usmap = crate::vfx_updater::commands::saved_usmap_path().filter(|u| Path::new(u).is_file());
         if let Some((u, g)) = usmap.as_deref().and_then(|u| crate::xtra_niagara::usmap_behind(u, &paks)) {
-            for v in verdicts.iter_mut().filter(|v| v.kind == "vfx") {
+            for v in verdicts.iter_mut().filter(|v| v.kind == "vfx" && v.reason != ENCRYPTED) {
                 v.usmap_wait = usmap_wait(&paks, usmap.as_deref().unwrap_or_default(), &Path::new(&v.path).with_extension("utoc"));
                 v.reason += &if v.usmap_wait > 0 {
                     format!(" It waits for the USMAP of game build {g}: the update changed {} of the files it rebuilds, which the saved USMAP (build {u}) would read wrong.", v.usmap_wait)
@@ -1101,7 +1143,7 @@ mod tests {
         files.iter().map(|s| s.to_string()).collect()
     }
     fn facts(files: &[String], installed: u64) -> Facts<'_> {
-        Facts { files, galacta: false, vfx: false, materials: false, fixed: false, cleared: false, has_blueprint: false, installed, old_layout: false, layout: None, mesh: None }
+        Facts { files, galacta: false, vfx: false, materials: false, fixed: false, cleared: false, has_blueprint: false, installed, anims_moved: false, old_layout: false, layout: None, mesh: None }
     }
     const LIVE: &str = "Marvel/Content/Marvel/Characters/1026/1026001/Meshes/SK_1026_1026001.uasset";
 
@@ -1175,6 +1217,17 @@ mod tests {
     }
 
     #[test]
+    fn another_decoders_finding_stands_until_this_one_looks() {
+        let dir = tempfile::tempdir().unwrap();
+        let (utoc, store) = (dir.path().join("mod.utoc"), dir.path().join("checked.json"));
+        std::fs::write(&utoc, b"toc").unwrap();
+        remember_checked(&store, &utoc, 200, true, true, None).unwrap();
+        let theirs: HashMap<String, Checked> = load_checked(&store).into_iter().map(|(k, mut c)| { c.parser = "other".into(); (format!("{k}|other"), c) }).collect();
+        assert_eq!(checked_now(&theirs, &utoc, 200), Some(true), "found outdated by another decoder: still flagged");
+        assert_eq!(checked_now(&theirs, &utoc, 300), None, "not after the game updated again");
+    }
+
+    #[test]
     fn inconclusive_materials_replace_date_guesses_but_keep_confirmed_risks() {
         let files = v(&[LIVE]);
         let unknown = || Facts { vfx: true, ..facts(&files, 50) };
@@ -1210,7 +1263,7 @@ mod tests {
         other.values_mut().for_each(|c| c.parser = String::new());
         assert!(layout_cleared(&other, &utoc, 200), "a clearance outlives a parser change, a legacy one too");
         other.values_mut().for_each(|c| c.outdated = true);
-        assert_eq!(checked_now(&other, &utoc, 200), None, "a finding holds for its parser only");
+        assert_eq!(checked_now(&other, &utoc, 200), Some(true), "a finding outlives a parser change too, until this decoder looks");
         remember_checked(&store, &utoc, 200, true, true, None).unwrap();
         remember_checked(&store, &utoc, 200, false, false, Some("Unknown".into())).unwrap();
         assert_eq!(checked_now(&load_checked(&store), &utoc, 200), Some(true), "a check found it outdated");
@@ -1265,6 +1318,22 @@ mod tests {
         let found = judge("m.pak", &Facts { has_blueprint: true, layout: Some(None), ..facts(&files, 50) }, 200, &game).unwrap();
         assert_eq!((found.kind, found.reason.contains("Animation Blueprint")), ("risky", true), "whatever its class check found");
         assert_eq!(judge("m.pak", &Facts { has_blueprint: true, layout: Some(None), ..facts(&files, 150) }, 200, &game), None, "made after the game's copy changed");
+    }
+
+    #[test]
+    fn an_animation_made_before_the_update_that_moved_animations_needs_an_update() {
+        let emote = "Marvel/Content/Marvel/Characters/1026/1026001/Animations/Emotes/Emote_10260012010.uasset";
+        let montage = "Marvel/Content/MysterySeat/WP_MysterySeat_MT.uasset";
+        let mut game = game();
+        game.insert(match_key(emote), 100);
+        game.insert(match_key(montage), 100);
+        let files = v(&[emote, montage]);
+        let moved = |installed| Facts { anims_moved: true, ..facts(&files, installed) };
+        let found = judge("m.pak", &moved(50), 200, &game).unwrap();
+        assert_eq!((found.kind, found.reason.contains("its 2 animations were")), ("vfx", true), "{}", found.reason);
+        assert_eq!(judge("m.pak", &moved(250), 200, &game), None, "made after the update");
+        assert_eq!(judge("m.pak", &facts(&files, 50), 200, &game), None, "the update did not move animations");
+        assert_eq!(judge("m.pak", &Facts { fixed: true, ..moved(50) }, 200, &game), None, "its update sits beside it");
     }
 
     #[test]
@@ -1341,6 +1410,7 @@ mod tests {
                 cleared: false,
                 has_blueprint: true,
                 installed,
+                anims_moved: false,
                 old_layout: vfx && crate::xtra_niagara::known_old_layout(&p, &niagara_layouts),
                 layout,
             };

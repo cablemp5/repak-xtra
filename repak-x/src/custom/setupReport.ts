@@ -194,10 +194,12 @@ export async function gatherReport(onStage?: (stage: ReportStage) => void): Prom
     ...(crash.build_version ? [`game build ${crash.build_version}${crash.engine_version ? ` (${crash.engine_version})` : ''}`] : []),
     ...(crash.asset_path || crash.character_id ? tierLines(suspects, p => relativeToMods(p, src.gamePath)) : []),
   ]
-  const recentLines = (await recentCrashes(mods.map(m => m.path), recent)).map(c => {
+  const recentLines = (await recentCrashes(mods.map(m => m.path), onPaths, recent)).map(c => {
     const head = `${when(c.time)}, ${c.asset ? `crashed loading ${c.asset}` : `crashed (${c.type})`}`
     const held = c.held?.map(p => relativeToMods(p, src.gamePath))
-    return !c.asset ? head : `${head}: ${!held ? 'not checked' : held.length ? `replaced by ${held.join(', ')}` : 'no installed mod replaces it'}`
+    const on = c.onAt === 'crash' ? 'that was on' : 'that is on now'
+    const by = c.onAt === 'crash' ? 'replaced by, on at the time,' : 'replaced by, on now,'
+    return !c.asset ? head : `${head}: ${!held ? 'not checked' : held.length ? `${by} ${held.join(', ')}` : `no mod ${on} replaces it`}`
   })
   const gpuInfo = [crash?.gpu_driver, crash?.rhi].filter(Boolean).join(', ')
   const system = [crash?.cpu, crash?.gpu && `${crash.gpu}${gpuInfo ? ` (${gpuInfo})` : ''}`, crash?.ram_gb != null && `${crash.ram_gb} GB`, crash?.os]
@@ -226,17 +228,24 @@ export async function gatherReport(onStage?: (stage: ReportStage) => void): Prom
   })
 }
 
-export type RecentCrash = { time: number; type: string; asset?: string; held?: string[] }
+/** `onAt`: the mods that were on when it crashed (saved as the game started, xtra_crash.rs), or 'now' when that session was
+ *  not saved and `held` lists the mods on now instead */
+export type RecentCrash = { time: number; type: string; asset?: string; held?: string[]; onAt?: 'crash' | 'now' }
+/** A mod's key on or off (xtra_crash.rs on_key). Pure. */
+export const onKey = (path: string) => path.replace(/\\/g, '/').toLowerCase().replace(/\.(pak|bak_repak|utoc|ucas)$/, '')
 /** The newest five crashes (xtra_recent_crashes): when, what kind, the asset each crashed loading (its name), and the
- *  installed mods (`modPaths`, on or off) that replace that asset, undefined when the check failed. For the setup report
- *  and Settings > Crash reports. `listed` skips the backend call when the caller already has the crashes. */
-export async function recentCrashes(modPaths: string[], listed?: { time: number; crash_type?: Opt; asset_path?: Opt }[]): Promise<RecentCrash[]> {
+ *  installed mods (`modPaths`, on or off) that replace that asset and were on when it crashed (`onNow` when that is not
+ *  known), undefined when the check failed. For the setup report and Settings > Crash reports. `listed` skips the backend
+ *  call when the caller already has the crashes. */
+export async function recentCrashes(modPaths: string[], onNow: string[], listed?: { time: number; crash_type?: Opt; asset_path?: Opt }[]): Promise<RecentCrash[]> {
   const list = listed ?? await settled(invoke<{ time: number; crash_type?: Opt; asset_path?: Opt }[]>('xtra_recent_crashes')) ?? []
   return Promise.all(list.map(async c => {
     const base = { time: c.time, type: c.crash_type || 'Crash', asset: c.asset_path?.split('/').pop() || undefined }
     if (!c.asset_path) return base
     const t = await settled(invoke<Tiered[]>('xtra_crash_tiers', { assetPath: c.asset_path, heroId: null, modPaths }))
-    return { ...base, held: t?.filter(x => x.tier === 'asset').map(x => x.path) }
+    const atCrash = await settled(invoke<string[] | null>('xtra_mods_on_at', { time: c.time }))
+    const on = new Set(atCrash ?? onNow.map(onKey))
+    return { ...base, held: t?.filter(x => x.tier === 'asset' && on.has(onKey(x.path))).map(x => x.path), onAt: atCrash ? 'crash' as const : 'now' as const }
   }))
 }
 
@@ -244,6 +253,7 @@ export async function recentCrashes(modPaths: string[], listed?: { time: number;
 const holders = (names: string[]) => !names.length ? 'no mod that is on' : names.length <= 2 ? names.join(', ') : `${names.slice(0, 2).join(', ')} and ${names.length - 2} more`
 
 if (import.meta.env.DEV) {
+  console.assert(onKey('C:\\Mods\\~mods\\Cool Mod_9999999_P.pak') === 'c:/mods/~mods/cool mod_9999999_p' && onKey('C:/Mods/~mods/Cool Mod_9999999_P.bak_repak') === 'c:/mods/~mods/cool mod_9999999_p', 'one key on or off, as xtra_crash.rs on_key')
   const root = 'C:\\Program Files (x86)\\Steam\\steamapps\\common\\MarvelRivals\\MarvelGame\\Marvel\\Content\\Paks\\~mods'
   console.assert(relativeToMods(`${root}\\Sub\\A_9999999_P.pak`, root) === '~mods/Sub/A_9999999_P.pak', 'mods relative to ~mods')
   console.assert(relativeToMods('D:\\Elsewhere\\B.pak', root) === 'B.pak', 'outside ~mods: the file name only')

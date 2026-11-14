@@ -8,13 +8,13 @@ import { useSyncExternalStore } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { emit } from '@tauri-apps/api/event'
 import type { useAlert } from '../../components/AlertHandler'
-import { verdictLabel, verdictOf, verdictsChanged } from '../brokenMods'
+import { ENCRYPTED, verdictLabel, verdictOf, verdictsChanged } from '../brokenMods'
 import { modKey, nameKey, renameModKey } from '../loadoutStore'
 import { renameSource } from '../nexusSource'
 import { readFilter } from './filter'
 import { fixInVfxWindow, openVfxWindow, sendReport, utocOf } from './handoff'
 import { STEPS, fixVfxMod, incompleteAssets, repairOutcome, type VfxReport } from './pipeline'
-import { claimRun, newRunToken, readNaming, readOriginals, readAskReview, readRepairPolicy, readSafeOff, readSafety, releaseRun, runLock } from './prefs'
+import { claimRun, newRunToken, readKeepEncrypted, readNaming, readOriginals, readAskReview, readRepairPolicy, readSafety, releaseRun, runLock } from './prefs'
 
 type Alert = ReturnType<typeof useAlert>
 let reserved = false // one right-click update at a time in this window, taken before anything is awaited
@@ -79,7 +79,8 @@ export async function updateVfxModInPlace(mod: { path: string; utoc_path?: strin
       // declined and sent to the Mod Updater's review. Off (the default), one without unchecked assets goes in
       autoAccept: !readAskReview(), review: async c => !incompleteAssets(c) && !c.warnings.length,
       keepName: naming === 'broken', turnOffOriginal: originals !== 'keep', trashOriginal: originals === 'trash',
-      safeOff: readSafeOff() && ['broken', 'vfx', 'risky'].includes(verdictOf(mod.path)?.kind ?? ''), trashUnsafe: readSafety() === 'trash',
+      safeOff: readSafety() !== 'on' && ['broken', 'vfx', 'risky'].includes(verdictOf(mod.path)?.kind ?? ''), keepEncrypted: readKeepEncrypted(),
+      decryptOnly: verdictOf(mod.path)?.reason?.startsWith(ENCRYPTED),
       onStep: s => { if (id !== null) alert.updateToast(id, { description: `Step ${s.step} of ${STEPS.length}: ${s.title}`, progressValue: ((s.step - 0.5) / STEPS.length) * 100 }) },
     })
     if (r.status === 'fixed' && r.placed) {
@@ -89,7 +90,8 @@ export async function updateVfxModInPlace(mod: { path: string; utoc_path?: strin
       await emit('mods_dir_changed').catch(() => {})
       await reload()
     }
-    if (r.status === 'nothing' || r.placed || r.turnedOff) await verdictsChanged() // its Needs VFX update flag goes (xtra_broken.rs)
+    if (r.decrypted) await emit('mods_dir_changed').catch(() => {})
+    if (r.status === 'nothing' || r.placed || r.turnedOff || r.decrypted) await verdictsChanged() // its Needs VFX update flag goes (xtra_broken.rs)
     if (id !== null) alert.dismissAlert(id)
     id = null
     resultToast(r, name, alert, mod.path)
@@ -104,7 +106,9 @@ export async function updateVfxModInPlace(mod: { path: string; utoc_path?: strin
 /** The result, as a new toast: Show report keeps every warning and asset one click away (the VFX Updater shows it). */
 function resultToast(r: VfxReport, name: string, alert: Alert, path: string) {
   const show = { label: 'Show report', onClick: () => { sendReport(r); void openVfxWindow() } }
-  if (r.status === 'fixed' && r.placed) {
+  if (r.decrypted) {
+    alert.showAlert({ color: 'success', duration: 6000, title: `Decrypted: ${name}`, description: "The game's Season 11 check can read it now. The encrypted copy is in Settings > Recently deleted." })
+  } else if (r.status === 'fixed' && r.placed) {
     const warned = r.warnings.length, left = r.counts.left
     const where = left ? 'The original is off and kept for a full update later.' : r.placed.trashed ? 'The original is in Recently deleted.' : r.placed.turnedOff ? 'The original is off.' : ''
     alert.showAlert({
@@ -120,11 +124,11 @@ function resultToast(r: VfxReport, name: string, alert: Alert, path: string) {
     alert.showAlert({ color: 'warning', duration: 0, title: `${name} needs a review`, description: 'Its repair has changes to approve before it replaces the mod. The original was not changed.',
       action: { label: 'Review in Mod Updater', onClick: () => { void fixInVfxWindow([path], true) } } })
   } else if (r.status === 'nothing') {
-    alert.showAlert({ color: r.turnedOff ? 'warning' : 'default', duration: r.turnedOff ? 0 : 6000, title: r.trashed ? `${name} was moved to Recently deleted` : r.turnedOff ? `${name} was turned off` : `${name} needs no update`,
-      description: `${r.error ?? ''}${r.trashed ? ' It is in Settings > Recently deleted for 7 days, so it cannot crash the game.' : r.turnedOff ? ' It is off now, so it cannot crash the game.' : ''}` })
+    alert.showAlert({ color: r.turnedOff ? 'warning' : 'default', duration: r.turnedOff ? 0 : 6000, title: r.turnedOff ? `${name} was turned off` : `${name} needs no update`,
+      description: `${r.error ?? ''}${r.turnedOff ? ' It is off now, so it cannot crash the game.' : ''}` })
   } else {
     // a problem is yellow, never red
-    alert.showAlert({ color: 'warning', duration: 0, title: `${name} was not updated`, description: `${r.error ?? 'Something went wrong.'}${r.trashed ? ' It was moved to Recently deleted, so it cannot crash the game.' : r.turnedOff ? ' It was turned off, so it cannot crash the game.' : ''}`, action: show })
+    alert.showAlert({ color: 'warning', duration: 0, title: `${name} was not updated`, description: `${r.error ?? 'Something went wrong.'} It stays as it was.`, action: show })
   }
 }
 

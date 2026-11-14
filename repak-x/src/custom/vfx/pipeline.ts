@@ -56,10 +56,10 @@ export type VfxReport = {
   /** The fixed mod: its .pak or .bak_repak beside the original (or the .utoc packed into outputDir) */
   output?: string
   placed?: Placed
-  /** Could not be made safe, so it was turned off (FixOptions.safeOff) */
+  /** Proved to crash the game as it is, so it was turned off (FixOptions.safeOff) */
   turnedOff?: boolean
-  /** And then moved to Recently deleted (FixOptions.trashUnsafe) */
-  trashed?: boolean
+  /** Decrypted in place, nothing else changed (fixVfxMod: an encrypted mod that needed nothing else) */
+  decrypted?: boolean
   /** Placed after Use candidate or Approve all (Ask me to review candidates on) */
   reviewed?: boolean
   assets: AssetResult[]
@@ -81,7 +81,7 @@ export type FixOptions = {
   policy?: 'strict' | 'bestEffort'
   review?: (report: VfxReport) => Promise<boolean>
   /** No review (Ask me to review candidates is off): a Best effort candidate goes in unless it keeps unchecked assets
-   *  (uncheckedAssets), and then the run fails, so a flagged mod is turned off rather than left on to crash */
+   *  (uncheckedAssets), and then the run fails and the mod stays as it was */
   autoAccept?: boolean
   outputDir?: string
   turnOffOriginal?: boolean
@@ -89,14 +89,18 @@ export type FixOptions = {
   keepName?: boolean
   /** The original goes to Recently deleted (off, so a restore never clashes with the update) */
   trashOriginal?: boolean
-  /** The mod is flagged (Needs VFX update, May crash): when the run fails, it is turned off rather than left on to crash.
-   *  A run that finds its materials only in the old layout turns it off unless this is false */
+  /** A run that proves the original crashes the game (its files match the game, but in the old layout) turns it off
+   *  unless this is false. A failed run never does: the mod stays as it was */
   safeOff?: boolean
-  /** With safeOff: the mod turned off then goes to Recently deleted (Safety: Move to Recently deleted, the default) */
-  trashUnsafe?: boolean
   filter?: ColorFilter
   log?: (message: string, type?: 'info' | 'success' | 'warning' | 'error') => void
   onStep?: (s: { step: number; title: string }) => void
+  /** Keep mods encrypted (Advanced): an encrypted mod's update is encrypted again, and none is decrypted. Off (the default):
+   *  every update comes out unencrypted, and an encrypted mod that needs nothing else is decrypted in place */
+  keepEncrypted?: boolean
+  /** Its only finding is that it is encrypted (xtra_broken.rs ENCRYPTED): decrypted at once, with no rebuild attempt
+   *  (about half a second, where a rebuild attempt reads every file first) */
+  decryptOnly?: boolean
   /** Progress inside a step that runs here (reading files); Rust steps send vfx_progress events */
   onProgress?: (current: number, total: number, message: string) => void
   /** Checked between steps and files: true stops the run once the call in flight returns */
@@ -156,7 +160,36 @@ async function mapLimit<T, R>(items: T[], limit: number, worker: (item: T, i: nu
 
 const plural = (n: number, word: string, many = `${word}s`) => `${n.toLocaleString()} ${n === 1 ? word : many}`
 
+/** An encrypted mod the update found nothing else to do for: decrypted in place (Season 11's file check reports
+ *  encrypted mods, and Project Galacta skips them), unless Keep mods encrypted is on. */
 export async function fixVfxMod(o: FixOptions): Promise<VfxReport> {
+  const direct = Boolean(o.decryptOnly) && !o.keepEncrypted && !o.outputDir
+  const t0 = performance.now()
+  const report: VfxReport = direct
+    ? { mod: o.modPath, name: stem(o.modPath).replace(/(_\d+)?_P$/i, ''), status: 'nothing', assets: [], warnings: [],
+        counts: { updated: 0, same: 0, added: 0, passed: 0, left: 0, ownGame: 0, unreadable: 0, changes: 0, relaid: 0 }, ms: 0, steps: [] }
+    : await rebuild(o)
+  // not one Safety just turned off as made for an older game build: that one stays as it is now
+  if (report.status !== 'nothing' || report.turnedOff || o.keepEncrypted || o.outputDir || !await invoke<boolean>('xtra_mod_encrypted', { modPath: o.modPath }).catch(() => false)) return report
+  if (o.cancelled?.()) return report
+  const log = o.log ?? (() => {})
+  try {
+    report.output = await invoke<string>('xtra_decrypt_mod', { modPath: o.modPath })
+    report.status = 'fixed'
+    report.decrypted = true
+    report.error = undefined
+    log(`Decrypted ${stem(o.modPath)}: the game's Season 11 check can read it now. The encrypted copy is in Recently deleted.`, 'success')
+  } catch (e) {
+    report.status = 'failed'
+    report.error = `Not decrypted: ${String(e).replace(/[.!]?\s*$/, '')}. The mod was not changed.`
+    log(report.error, 'warning')
+  }
+  // only a decrypt that worked says how long it took: a failed one never counts as a rebuild's time (ms 0 is never recorded)
+  if (direct && report.decrypted) report.ms = performance.now() - t0
+  return report
+}
+
+async function rebuild(o: FixOptions): Promise<VfxReport> {
   const filter = o.filter ?? DEFAULT_FILTER
   const log = o.log ?? (() => {})
   const t0 = performance.now()
@@ -171,15 +204,12 @@ export async function fixVfxMod(o: FixOptions): Promise<VfxReport> {
     o.onStep?.({ step: n, title: STEPS[n - 1] })
   }
   const check = () => { if (o.cancelled?.()) throw new Cancelled() }
-  const surgical = new Set<string>()
   const relaid = new Set<string>() // file names rewritten in today's layout
   const asset = (path: string, kind: AssetKind, detail: string) => {
     if ([...relaid].some(k => assetKey(path).endsWith('/' + k))) detail = detail.replace(/kept as it was/i, m => `${m[0]}ept, rewritten in the new game build's layout`)
     report.assets.push({ name: stem(path), path, kind, detail }); if (kind in report.counts) report.counts[kind as keyof typeof report.counts]++
   }
   const warn = (w: string) => { report.warnings.push(w); log(w, 'warning') }
-  // a refusal by the repair policy or a game build change, not a broken mod: it stays as it was, never turned off
-  let keepOn = false
   let runId: string | undefined // its work folder, removed when the run ends (placed or dropped by then)
   const strict = o.policy !== 'bestEffort'
   const changePolicy = 'Review the asset report, or choose Best effort in Advanced > Repair policy.'
@@ -219,12 +249,10 @@ export async function fixVfxMod(o: FixOptions): Promise<VfxReport> {
     // a patch that inserts properties into a class moves every later one (3984769: material overrides), and a file cooked
     // before it crashes the game and reads as nothing to change. Rewritten in today's layout here, every step below reads it
     const older = ask.filter(p => !NIAGARA_BY_NAME.test(fileName(p))).map(p => rel(p).replace(/\.uasset$/i, ''))
-    const re = older.length ? await invoke<{ files: string[]; failed: string[]; unread: string[]; untold: string[]; complete: boolean; surgical?: string[]; oldBuild: number | null; noUsmap: boolean }>('xtra_vfx_relayout', { modPath: src, gamePaks: o.gamePaksPath, usmapPath: o.usmapPath, modExtract: dirs.modExtract, files: older, stageDir: dirs.stage })
+    const re = older.length ? await invoke<{ files: string[]; failed: string[]; unread: string[]; untold: string[]; complete: boolean; oldBuild: number | null; noUsmap: boolean }>('xtra_vfx_relayout', { modPath: src, gamePaks: o.gamePaksPath, usmapPath: o.usmapPath, modExtract: dirs.modExtract, files: older, stageDir: dirs.stage })
       .catch(e => { warn(`Could not check its material layout (${e}).`); return undefined }) : null
     check()
     re?.files.forEach(f => relaid.add(assetKey(f)))
-    re?.surgical?.forEach(f => surgical.add(assetKey(f)))
-    re?.files.filter(f => !surgical.has(assetKey(f))).forEach(f => warn(`${stem(f)}: layout reconstructed through decoded exports. All creator edits are not proven preserved.`))
     report.counts.relaid = re?.files.length ?? 0
     // not checked, or in the old layout and not rewritten: passed on as they are they can crash the game, so the mod stays
     // as it was before any step can pack it
@@ -238,14 +266,14 @@ export async function fixVfxMod(o: FixOptions): Promise<VfxReport> {
       // no older USMAP could be had at all (offline, or GitHub out of lookups for now): the connection, not the USMAP
       const offline = Boolean(re?.noUsmap) && !unrewritten
       const why = re === undefined ? 'its material layout could not be checked'
-        : unrewritten ? `${plural(unrewritten, 'material or blueprint', 'materials and blueprints')} could not be rewritten in the new game build's layout`
+        : unrewritten ? `${plural(unrewritten, 'file')} could not be rewritten in the new game build's layout`
           : offline ? `checking the layout of ${plural(untold, 'material or blueprint', 'materials and blueprints')} needs an older game build's USMAP, and none could be downloaded`
             : `the layout of ${plural(untold, 'material or blueprint', 'materials and blueprints')} could not be told (no older USMAP read ${untold === 1 ? 'it' : 'them'})`
       report.error = `Not updated: ${why}. The mod was not changed. ${offline ? 'Check the internet connection' : 'Check the USMAP in Advanced'}, then try again.`
       log(report.error, 'warning')
       return report // failed: Try again stays
     }
-    if (re?.files.length) log(`Rewrote ${plural(re.files.length, 'material or blueprint', 'materials and blueprints')} cooked in an older game build's layout${re.oldBuild ? ` (build ${re.oldBuild})` : ''}.`, 'warning')
+    if (re?.files.length) log(`Rewrote ${plural(re.files.length, 'file')} cooked in an older game build's layout${re.oldBuild ? ` (build ${re.oldBuild})` : ''}.`, 'warning')
     log(`Read ${plural(extracted.length, 'asset')}. Reading the type of ${ask.length}.`)
     const found = ask.length ? await invoke<Record<string, Detected>>('xtra_vfx_detect', { usmapPath: o.usmapPath, paths: ask }) : {}
     check()
@@ -257,7 +285,8 @@ export async function fixVfxMod(o: FixOptions): Promise<VfxReport> {
     let editable: string[] = [], keep: string[] = []
     const maybe = new Map<string, string>()
     for (const p of extracted) {
-      if (surgical.has(assetKey(rel(p)))) { keep.push(p); asset(p, 'passed', 'Known material header layout repaired. All other bytes preserved.'); continue }
+      // a material rewritten in today's layout is still rebuilt on the game's copy below: it carries shader data cooked
+      // for the old game, which the game draws gray (2026-11-13: YellowColoredVFX kept as it was came out gray all over)
       const d = passes(p) ? undefined : types.get(assetKey(slash(p)))
       if (d && d.kind !== 'other') { editable.push(p); if (d.kind === 'maybe') maybe.set(assetKey(rel(p)), d.class ?? ''); continue }
       keep.push(p)
@@ -359,7 +388,6 @@ export async function fixVfxMod(o: FixOptions): Promise<VfxReport> {
       const missing = incompleteAssets(report)
       if (strict && (missing || report.warnings.length)) {
         report.error = `Not updated: Strict repair found ${plural(missing, 'incomplete asset')} and ${plural(report.warnings.length, 'warning')}. The mod was not changed. ${changePolicy}`
-        keepOn = true
         log(report.error, 'warning')
         return
       }
@@ -371,7 +399,7 @@ export async function fixVfxMod(o: FixOptions): Promise<VfxReport> {
       enter(9)
       const buildNow = await invoke<{ updated: number }>('xtra_game_build').then(b => b.updated)
       // 0: the game build could not be read (a mods folder outside Paks), so there is nothing to compare
-      if (buildAt && buildNow !== buildAt) { report.error = 'Not updated: the game updated while this ran, so the update was made from old game files. Update it again.'; keepOn = true; log(report.error, 'warning'); return }
+      if (buildAt && buildNow !== buildAt) { report.error = 'Not updated: the game updated while this ran, so the update was made from old game files. Update it again.'; log(report.error, 'warning'); return }
       // what was rebuilt must read back whole with today's USMAP: one that does not would crash the game (Niagara files
       // are checked by their own step, and decoding them again is slow)
       // each is held to the JSON it came from: the edited one for a rebuild, and under Strict the mod's own for the
@@ -389,19 +417,24 @@ export async function fixVfxMod(o: FixOptions): Promise<VfxReport> {
       const base = o.outputDir ? `${slash(o.outputDir)}/${fixedName(o.modPath)}` : `${dirs.stage}/fixed`
       const utoc = await invoke<string>('vfx_pack_to_iostore', { usmapPath: o.usmapPath, inputDir: dirs.finalUassets, outputBase: base, allowedAssets: manifest })
       report.output = utoc
+      // Keep mods encrypted: an encrypted mod's update is encrypted too, in the run's folder before anything is placed
+      if (o.keepEncrypted && !o.outputDir && await invoke<boolean>('xtra_mod_encrypted', { modPath: src })) {
+        const failed = await invoke('xtra_encrypt_staged', { utoc }).then(() => null, e => String(e))
+        if (failed) { report.error = `Not updated: the update could not be encrypted like the mod (${failed}). The mod was not changed.`; log(report.error, 'warning'); return }
+      }
       if (o.policy === 'bestEffort' && !o.outputDir) {
         const unchecked = uncheckedAssets(report)
         if (o.autoAccept && unchecked) {
           report.error = `Not updated: ${plural(unchecked, 'material or blueprint', 'materials and blueprints')} could not be rebuilt or read, and the game can crash on ${unchecked === 1 ? 'it' : 'them'}. The mod was not changed. Turn on Ask me to review candidates in Advanced to look at it yourself.`
           log(report.error, 'warning')
-          return // failed: safe-off applies
+          return // failed: the mod stays as it was
         }
         const accepted = o.autoAccept || (o.review ? await o.review({ ...report, status: 'fixed' }) : false)
         report.reviewed = !o.autoAccept && accepted
         check()
         if (!accepted) { report.status = 'declined'; report.error = 'Original kept. The candidate was not installed.'; return }
         const reviewedBuild = await invoke<{ updated: number }>('xtra_game_build').then(b => b.updated)
-        if (buildAt && reviewedBuild !== buildAt) { report.error = 'Not updated: the game updated during the review. Update it again.'; keepOn = true; log(report.error, 'warning'); return }
+        if (buildAt && reviewedBuild !== buildAt) { report.error = 'Not updated: the game updated during the review. Update it again.'; log(report.error, 'warning'); return }
       }
       if (o.outputDir) report.output = utoc
       else {
@@ -427,7 +460,6 @@ export async function fixVfxMod(o: FixOptions): Promise<VfxReport> {
 
     if (!editable.length) {
       if (report.counts.unreadable && strict) {
-        keepOn = true
         report.error = `${plural(report.counts.unreadable, 'asset')} could not be read, so it is not known whether ${report.counts.unreadable === 1 ? 'it needs' : 'they need'} rebuilding. Check the USMAP in Advanced, then try again.`
         return report // failed: Try again stays
       }
@@ -531,6 +563,9 @@ export async function fixVfxMod(o: FixOptions): Promise<VfxReport> {
         // it points at another parent material, mesh or material than the game's: rebuilding it on the game's copy would
         // lose that, so the mod's own copy stays (a skin's material swap, a Blueprint's mesh)
         const extra = uncarriedPackages(e.packages, json, e.params).map(k => k.split('/').pop())
+        // one cooked for an older game build keeps that build's shader data, which the game may draw gray: said, so the
+        // report and a review show it
+        if (relaid.has(key) || [...relaid].some(k => key.endsWith('/' + k))) warn(`${stem(p)}: kept with its own parent material and the shader data of an older game build. It may show gray in the game.`)
         swapped++; own.push(p); asset(p, 'passed', `Kept as it was: it uses ${extra.slice(0, 2).join(', ')}${extra.length > 2 ? ` and ${extra.length - 2} more` : ''} where the game's file does not, which an update cannot carry.`)
       }
       else {
@@ -571,7 +606,6 @@ export async function fixVfxMod(o: FixOptions): Promise<VfxReport> {
     if ((failedN || report.counts.unreadable || report.warnings.length) && strict) {
       const why = [failedN && plural(failedN, 'material or blueprint', 'materials and blueprints') + ' could not be rebuilt', report.counts.unreadable && plural(report.counts.unreadable, 'asset') + ' could not be read', report.warnings.length && plural(report.warnings.length, 'warning') + ` require${report.warnings.length === 1 ? 's' : ''} review`].filter(Boolean).join(', and ')
       report.error = `Not updated: ${why}. The mod was not changed. ${report.warnings.length ? changePolicy : 'Check the USMAP in Advanced, then try again.'}`
-      keepOn = true
       log(report.error, 'warning')
       return report // failed: Try again stays
     }
@@ -597,7 +631,7 @@ export async function fixVfxMod(o: FixOptions): Promise<VfxReport> {
     }
     if (!report.counts.updated && !report.counts.added && !niagaraDone && !relaidKept && !((report.counts.left || report.counts.ownGame) && keep.length)) {
       if (report.counts.left || report.counts.ownGame) { report.error = allStale(); return report }
-      if (report.warnings.length) { report.error = 'Not updated: preserving all creator edits could not be verified. Review the asset report. The original was not changed.'; keepOn = true; return report }
+      if (report.warnings.length) { report.error = 'Not updated: preserving all creator edits could not be verified. Review the asset report. The original was not changed.'; return report }
       // every material and blueprint was read and matches the game (anything else stopped above): it works as it is
       if (report.counts.same || swapped) {
         report.status = 'nothing'
@@ -634,19 +668,14 @@ export async function fixVfxMod(o: FixOptions): Promise<VfxReport> {
         report.warnings.push(message); log(message, 'warning')
       })
     }
-    // not made safe: off, so it cannot crash the game (xtra_safe_off.rs keeps it off). Its Needs update flag goes: the
-    // updater has done what it can for this game build, and another update or the Library's Turn on anyway still reach it
-    const unsafe = (report.status === 'failed' && o.safeOff) || (report.status === 'nothing' && report.counts.relaid > 0 && o.safeOff !== false)
-    if (unsafe && !keepOn && !o.outputDir) {
-      const out = await retireUnsafe(o.modPath, report.error ?? 'An update could not make it safe.', Boolean(o.trashUnsafe))
+    // A failed or cancelled run is the updater falling short, not news about the mod: it stays exactly as it was, flag and
+    // all. Only a run that proved the original crashes the game (every file matches the game, but in the old layout) takes
+    // it out, as Safety says: off, never deleted, and its Needs update flag stays so the Library still says why
+    if (report.status === 'nothing' && report.counts.relaid > 0 && o.safeOff !== false && !o.outputDir) {
+      const out = await retireUnsafe(o.modPath, report.error ?? 'It was made for an older game build and can crash it.')
         .catch(e => { log(`Could not turn it off: ${e}`, 'warning'); return false as const })
       report.turnedOff = Boolean(out)
-      report.trashed = out === 'trashed'
-      if (out === 'trashed') log(`Moved ${stem(o.modPath)} to Recently deleted, so it cannot crash the game. Restore it in Settings within 7 days.`, 'warning')
-      if (out === 'off') {
-        log(`Turned ${stem(o.modPath)} off, so it cannot crash the game. Update it again later, or turn it back on in the Library.`, 'warning')
-        await invoke('xtra_vfx_no_update', { modPath: o.modPath }).catch(e => log(`Could not clear its Needs update flag: ${e}`, 'warning'))
-      }
+      if (out) log(`Turned ${stem(o.modPath)} off, so it cannot crash the game. Turn it back on in the Library to use it anyway.`, 'warning')
     }
   }
   return report

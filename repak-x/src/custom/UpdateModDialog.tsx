@@ -1,11 +1,10 @@
 // repakxtra: Replace file (a mod's update), in place of upstream's UpdateModModal (same props). The app's dialog: a title
 // naming the mod, the two files in one panel (now, then the new one), one choice for the name with what it changes, the
-// obfuscation switch as the install dialog has it, then Cancel and Replace. Loadouts follow a new name (App.tsx
+// then Cancel and Replace. Never encrypted (Season 11's file check reports encrypted mods). Loadouts follow a new name (App.tsx
 // handleConfirmUpdate).
 import { useState } from 'react'
 import { motion } from 'framer-motion'
 import { RefreshCw } from 'lucide-react'
-import Switch from '../components/ui/Switch'
 import { useDialogFocus } from './dialogFocus'
 import { nameKey } from './loadoutStore'
 import './install.css'
@@ -56,9 +55,8 @@ export default function UpdateModDialog(props: Props) {
   return <Dialog {...props} oldMod={props.oldMod} />
 }
 
-function Dialog({ onClose, onConfirm, oldMod, newSourcePath, initialObfuscate }: Props & { oldMod: NonNullable<Props['oldMod']> }) {
+function Dialog({ onClose, onConfirm, oldMod, newSourcePath }: Props & { oldMod: NonNullable<Props['oldMod']> }) {
   const [keepName, setKeepName] = useState(true)
-  const [obfuscate, setObfuscate] = useState(initialObfuscate === true)
   const focus = useDialogFocus(true, onClose)
 
   const oldFile = fileOf(oldMod.path).replace(/\.bak_repak$/i, '.pak') // a mod that is off ends in .bak_repak on disk: shown as its .pak
@@ -104,20 +102,11 @@ function Dialog({ onClose, onConfirm, oldMod, newSourcePath, initialObfuscate }:
               : <>Saved under the new file's name. Loadouts and tags follow it, but its load order can change.</>}</p>
           </div>
 
-          <div className="ip-switches um-switches">
-            <Switch size="sm" color="primary" checked={obfuscate} onChange={(v: boolean) => setObfuscate(v)}
-              className={`install-toggle obfuscate-toggle${obfuscate ? ' active' : ''}`} title="Encrypts the IoStore with the game's AES key to block FModel extraction">
-              <div className="install-toggle__text">
-                <span className="install-toggle__label">Obfuscation</span>
-                <span className="install-toggle__hint">{obfuscate ? 'IoStore will be AES encrypted' : 'Encrypt to block FModel extraction'}</span>
-              </div>
-            </Switch>
-          </div>
         </div>
 
         <div className="modal-footer um-footer">
           <button type="button" className="lo-text-btn" onClick={onClose}>Cancel</button>
-          <button type="button" className="btn-primary" onClick={() => onConfirm(keepName, obfuscate)} autoFocus>
+          <button type="button" className="btn-primary" onClick={() => onConfirm(keepName, false)} autoFocus>
             <RefreshCw size={14} aria-hidden="true" /> Replace
           </button>
         </div>

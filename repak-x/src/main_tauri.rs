@@ -36,6 +36,7 @@ mod xtra_layout; // repakxtra: May crash from the game classes an update changed
 mod xtra_nexus; // repakxtra: Nexus source from archive names
 mod xtra_offfiles; // repakxtra: .pak.off files install like .pak
 mod xtra_bundle; // repakxtra: a mod's pak/utoc/ucas found and moved as one set
+mod xtra_journal; // repakxtra: a swap a crash cut short is put back at the next start
 mod xtra_encrypt;
 mod xtra_mutation;
 mod xtra_updater; // repakxtra: applies an update without string-built shell commands
@@ -5393,8 +5394,16 @@ async fn extract_mod_assets_inner(
 }
 
 #[tauri::command]
-async fn check_game_running() -> Result<bool, String> {
+async fn check_game_running(state: State<'_, Arc<Mutex<AppState>>>) -> Result<bool, String> {
     let running = is_game_process_running();
+    // repakxtra: the mods on as the game starts, and when it ends, so a crash report names only those (xtra_crash.rs).
+    // This is the app's game poll (App.tsx, every 5 s)
+    static WAS: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+    if WAS.swap(running, std::sync::atomic::Ordering::Relaxed) != running {
+        let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_secs());
+        let mods = state.lock().unwrap().game_path.clone();
+        std::thread::spawn(move || if running { xtra_crash::remember_on(&mods, now) } else { xtra_crash::remember_end(now) });
+    }
     if running {
         crate::xtra_previews::stop_kept(false); // repakxtra: a game started outside the app (Steam) gets the kept preview helpers' memory too
     }
@@ -7720,17 +7729,9 @@ fn compute_mod_details(
         .unwrap_or("Unknown")
         .to_string();
 
-    // Check encryption:
-    //   - IoStore: ask UAssetTool whether the container is AES-encrypted
-    //   - PAK: list_pak already told us if the index is encrypted (obfuscated mods)
-    let is_encrypted = if is_iostore {
-        uasset_toolkit::is_iostore_encrypted(&utoc_path.to_string_lossy()).unwrap_or(false)
-    } else {
-        pak_list_info
-            .as_ref()
-            .map(|info| info.encrypted_index)
-            .unwrap_or(false)
-    };
+    // Check encryption: whether the IoStore container is AES-encrypted (the game's Season 11 check reports these)
+    // repakxtra: a .pak alone never: every mod .pak for this game has an encrypted index, so it said Encrypted for all of them
+    let is_encrypted = is_iostore && uasset_toolkit::is_iostore_encrypted(&utoc_path.to_string_lossy()).unwrap_or(false);
 
     let details = ModDetails {
         mod_name,
@@ -8664,6 +8665,10 @@ fn main() {
             // Plugin initialization has established that this is the primary instance. Secondary opens must not sweep live work.
             let mods = app.state::<Arc<Mutex<AppState>>>().lock().unwrap().game_path.clone();
             std::thread::spawn(move || {
+                // first: a cut-short swap's files may still sit in a staging folder the sweep removes
+                for s in crate::xtra_journal::recover() {
+                    ui_log::warn("Mods", s);
+                }
                 crate::xtra_bundle::sweep_staging(&mods, started);
                 crate::xtra_snapshot::sweep_staging(started);
             });
@@ -8760,6 +8765,8 @@ fn main() {
             xtra_identity::xtra_upstream_running, // repakxtra: beside Repak X
             xtra_crash::xtra_newest_crash, // repakxtra: setup report
             xtra_crash::xtra_recent_crashes, // repakxtra: setup report crash list
+            xtra_crash::xtra_mods_on_at, // repakxtra: the mods on when a crash happened
+            xtra_vfx::xtra_scan_release, // repakxtra: the command line's memory back when the checks end
             xtra_crash::xtra_crash_suspects, // repakxtra: crash suspects
             xtra_crash::xtra_crash_tiers, // repakxtra: crash suspects by asset, skin and hero
             xtra_game::xtra_game_update_check, xtra_game::xtra_game_update_seen, // repakxtra: game update notice
@@ -8800,8 +8807,9 @@ fn main() {
             xtra_vfx::xtra_vfx_lock,
             xtra_vfx::xtra_scan_stopped,
             xtra_vfx::xtra_scan_hold, // repakxtra: the header's Pause and Cancel for the mod checks
-            xtra_encrypt::xtra_encrypt_mods,
-            xtra_encrypt::xtra_encrypt_list,
+            xtra_encrypt::xtra_mod_encrypted, // repakxtra: Season 11, the Mod Updater decrypts
+            xtra_encrypt::xtra_decrypt_mod,
+            xtra_encrypt::xtra_encrypt_staged,
             xtra_galacta::xtra_galacta_list, // repakxtra
             xtra_galacta::xtra_galacta_make,
             xtra_vfx::xtra_vfx_stale,

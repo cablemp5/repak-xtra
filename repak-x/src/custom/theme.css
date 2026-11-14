@@ -595,7 +595,6 @@ html[data-show-header-icons] .header-actions-right .btn-vfx svg { margin-right: 
 html:not([data-show-priority]) .mod-card .number-input-container { display: none !important; }
 html:not([data-show-tools]) [data-tour="tools-btn"] { display: none !important; }
 html:not([data-show-vfx-updater]) [data-tour="vfx-updater-btn"] { display: none !important; }
-html:not([data-show-encrypt]) [data-tour="encrypt-btn"] { display: none !important; }
 html:not([data-show-galacta]) [data-tour="galacta-btn"] { display: none !important; }
 html:not([data-show-conflicts]) .mod-type-badge.conflict-badge, html:not([data-show-conflicts]) .conflict-dot { display: none !important; }   /* Settings > On each mod */
 html:not([data-show-nexus]) :is(.nexus-badge, .nexus-update-chip, .nexus-split) { display: none !important; }
@@ -766,6 +765,8 @@ html[data-motion="off"] .lo-screen { animation: none; }
 .lo-gen { position: relative; }
 .lo-gen-menu { left: 0; right: auto; min-width: 270px; z-index: 30; }
 .lo-gen-menu .xtra-item small { margin-left: auto; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+/* the Mod Updater's Scan, at the window's foot: opens upward, from the button's right edge */
+.lo-gen-menu.vf-scan-menu { top: auto; bottom: calc(100% + 6px); left: auto; right: 0; min-width: 220px; transform-origin: bottom right; }
 /* A running preview run's menu: which loadout and the step it is on, a line, then Stop */
 .lo-gen-status { display: flex; flex-direction: column; gap: 2px; padding: 8px 12px 12px; margin-bottom: 4px; border-bottom: 1px solid var(--panel-border);
   font-size: 13px; color: var(--text-secondary); }
@@ -3124,6 +3125,7 @@ html[data-motion="off"] .ct-pop, html[data-motion="off"] .ct-btn svg { animation
 /* The mod checks' progress in the header (ScanStatus.tsx): a quiet pill that rises in (transitions.dev Stagger) while a
    run reads mods, and keeps spinning while the window is in the background (idlePause.ts pauses decorative loops only) */
 .scan-status { height: 32px; padding: 0 10px; font-size: 13px; font-weight: 500; color: var(--text-secondary); white-space: nowrap; cursor: pointer;
+  font-variant-numeric: tabular-nums; /* its percentage counts up without the button changing width */
   animation: t-rise-in var(--stagger-dur) var(--stagger-ease) backwards; }
 .scan-status:hover { background: var(--quiet-hover); color: var(--text-primary); }
 .scan-status-in { display: inline-flex; align-items: center; gap: 8px; }   /* the glyph slot's gap, as in its menu */

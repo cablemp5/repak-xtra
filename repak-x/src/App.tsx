@@ -152,7 +152,6 @@ const ASSET_EXPLORER_FOCUS_MOD_KEY = 'repakx:assetExplorer:focusModPath'
 import TitleBar from './components/TitleBar'
 
 import InstallModPanel from './custom/InstallPanel' // repakxtra: the install dialog redesigned around saving a loadout
-import EncryptMods, { openEncrypt } from './custom/EncryptMods' // repakxtra
 import { folderCounts } from './custom/folderCounts' // repakxtra
 import GalactaMods from './custom/GalactaMods' // repakxtra
 const SettingsPanel = lazy(() => import('./components/SettingsPanel')) // repakxtra: loaded when Settings first opens
@@ -3863,7 +3862,6 @@ function App() {
             <span className="hdr-label">Mod Updater</span>{/* repakxtra: hdr-label, Icons only hides it */}
             <VfxDot mods={mods} />{/* repakxtra: VFX mods need an update */}
           </button>
-          <EncryptMods />{/* repakxtra */}
           <GalactaMods />{/* repakxtra */}
 
           <SetupButton alert={alert} />{/* repakxtra: signature bypass and Project Galacta */}
@@ -4415,7 +4413,6 @@ function App() {
               handleShowInAssetExplorer(targets)
             }}
             onExtractAssets={handleExtractAssets}
-            onEncrypt={contextMenu.mod ? () => void openEncrypt(menuSelection.has(contextMenu.mod!.path) ? [...menuSelection] : [contextMenu.mod!.path]) : undefined /* repakxtra */}
             allTags={allTags}
             onDeleteTag={handleDeleteTagFromCatalog}
             gamePath={gamePath}

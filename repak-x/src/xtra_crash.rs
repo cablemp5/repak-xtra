@@ -6,6 +6,79 @@ use regex_lite::Regex;
 use serde::Serialize;
 use std::sync::OnceLock;
 
+// ---- which mods were on while the game ran: a crash report names only those ----
+// Saved when the game is seen starting (main_tauri.rs check_game_running, the app's 5 s poll): its start time and every
+// .pak in the mods folder then (on), as keys (on_key), and its end once it is seen gone. The newest ten are kept.
+
+#[derive(serde::Serialize, serde::Deserialize)]
+struct Session {
+    start: u64,
+    /// None while it runs, or when the app closed before the game did
+    end: Option<u64>,
+    on: Vec<String>,
+}
+
+/// How long after the game is seen gone its crash folder may still be written, and how long a session the app never
+/// saw end may run (seconds).
+const CRASH_WRITE_SECS: u64 = 120;
+const OPEN_SESSION_SECS: u64 = 6 * 3600;
+
+fn read_sessions() -> Vec<Session> {
+    std::fs::read(sessions_store()).ok().and_then(|b| serde_json::from_slice(&b).ok()).unwrap_or_default()
+}
+
+fn sessions_store() -> std::path::PathBuf {
+    dirs::config_dir().unwrap_or_else(|| std::path::PathBuf::from(".")).join("Repak-X").join("repakxtra-game-sessions.json")
+}
+
+/** A mod's key on or off: its path without .pak, .bak_repak, .utoc or .ucas, forward slashes, lowercase (setupReport.ts onKey). */
+pub(crate) fn on_key(path: &std::path::Path) -> String {
+    let p = path.to_string_lossy().replace('\\', "/").to_lowercase();
+    [".pak", ".bak_repak", ".utoc", ".ucas"].iter().find_map(|x| p.strip_suffix(x)).unwrap_or(&p).to_string()
+}
+
+/// main_tauri.rs: the game started (`start`, Unix seconds): which mods are on now.
+pub(crate) fn remember_on(mods_dir: &std::path::Path, start: u64) {
+    let on: Vec<String> = walkdir::WalkDir::new(mods_dir)
+        .into_iter()
+        .filter_entry(crate::xtra_bundle::library_walk)
+        .flatten()
+        .filter(|e| e.file_type().is_file() && e.path().extension().is_some_and(|x| x.eq_ignore_ascii_case("pak")))
+        .map(|e| on_key(e.path()))
+        .collect();
+    let mut all = read_sessions();
+    all.push(Session { start, end: None, on });
+    all.sort_by_key(|s| s.start);
+    let skip = all.len().saturating_sub(10);
+    all.drain(..skip);
+    let _ = std::fs::write(sessions_store(), serde_json::to_vec(&all).unwrap_or_default());
+}
+
+/// main_tauri.rs: the game is gone (`end`, Unix seconds): the newest session still open ends then.
+pub(crate) fn remember_end(end: u64) {
+    let mut all = read_sessions();
+    if let Some(s) = all.iter_mut().rev().find(|s| s.end.is_none()) {
+        s.end = Some(end);
+        let _ = std::fs::write(sessions_store(), serde_json::to_vec(&all).unwrap_or_default());
+    }
+}
+
+/// The on-set of the session a crash at `time` happened in: it started before the crash and had not ended long before it
+/// (a session the app never saw end counts for OPEN_SESSION_SECS). None for a crash outside every saved session.
+fn on_at(all: Vec<Session>, time: u64) -> Option<Vec<String>> {
+    all.into_iter()
+        .filter(|s| s.start <= time && time <= s.end.map_or(s.start + OPEN_SESSION_SECS, |e| e + CRASH_WRITE_SECS))
+        .max_by_key(|s| s.start)
+        .map(|s| s.on)
+}
+
+/// setupReport.ts: the mods that were on in the game session a crash at `time` (Unix seconds) happened in, as keys
+/// (on_key). None when it matches no saved session (a crash from before they were kept, or one while the app was closed).
+#[tauri::command]
+pub fn xtra_mods_on_at(time: u64) -> Option<Vec<String>> {
+    on_at(read_sessions(), time)
+}
+
 #[derive(Serialize)]
 pub struct NewestCrash {
     /// Unix seconds when the crash folder was made
@@ -492,6 +565,27 @@ pub async fn xtra_crash_tiers(asset_path: String, hero_id: Option<String>, mod_p
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn a_crash_takes_the_mods_of_its_own_session_only() {
+        let s = |start, end: Option<u64>, on: &str| Session { start, end, on: vec![on.into()] };
+        let all = || vec![s(100, Some(200), "a"), s(1000, None, "b")];
+        assert_eq!(on_at(all(), 150), Some(vec!["a".into()]));
+        assert_eq!(on_at(all(), 200 + CRASH_WRITE_SECS), Some(vec!["a".into()]), "its folder written just after the game went");
+        assert_eq!(on_at(all(), 500), None, "between sessions: the app did not see that one");
+        assert_eq!(on_at(all(), 50), None, "before any");
+        assert_eq!(on_at(all(), 1500), Some(vec!["b".into()]), "a session still open");
+        assert_eq!(on_at(all(), 1000 + OPEN_SESSION_SECS + 1), None, "an open session ends some time");
+    }
+
+    #[test]
+    fn a_mod_has_one_key_on_or_off() {
+        // the same keys setupReport.ts onKey makes
+        let on = on_key(std::path::Path::new(r"C:\Mods\~mods\Cool Mod_9999999_P.pak"));
+        assert_eq!(on, "c:/mods/~mods/cool mod_9999999_p");
+        assert_eq!(on_key(std::path::Path::new("C:/Mods/~mods/Cool Mod_9999999_P.bak_repak")), on);
+        assert_eq!(on_key(std::path::Path::new("C:/Mods/~mods/Cool Mod_9999999_P.utoc")), on);
+    }
     use super::*;
 
     #[test]

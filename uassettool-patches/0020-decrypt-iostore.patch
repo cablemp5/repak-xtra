@@ -1,0 +1,78 @@
+--- a/src/UAssetTool/Program.cs
++++ b/src/UAssetTool/Program.cs
+@@ -2796,6 +2796,7 @@
+                 "recompress_iostore" => RecompressIoStore(request.FilePath),
+                 "encrypt_iostore" => EncryptIoStore(request.FilePath, request.OutputPath),
+                 "encrypt_pak" => EncryptPak(request.FilePath, request.OutputPath),
++                "decrypt_iostore" => DecryptIoStore(request.FilePath, request.OutputPath, request.AesKey),
+                 "extract_iostore" => ExtractIoStoreJson(request.FilePath, request.OutputPath, request.AesKey),
+                 "extract_iostore_legacy" => ExtractIoStoreLegacyJson(request.GamePaks, request.ModPath, request.OutputPath, request.FilterPatterns, request.AesKey, request.WithDeps),
+                 "extract_script_objects" => ExtractScriptObjectsJson(request.FilePath, request.OutputPath),
+--- /dev/null
++++ b/src/UAssetTool/Decryption.cs
+@@ -0,0 +1,65 @@
++using System;
++using System.IO;
++using System.Linq;
++using UAssetTool.IoStore;
++
++namespace UAssetTool;
++
++public partial class Program
++{
++    // The reverse of EncryptIoStore (0010): the same chunks, the same container id, mount point, version and block size,
++    // the directory index in plain text, nothing encrypted. Season 11's file check reports a mod whose file list it
++    // cannot read. The key comes with the request (the app has it), so it is written in one place only.
++    private static UAssetResponse DecryptIoStore(string? input, string? output, string? aesKeyHex)
++    {
++        try
++        {
++            if (string.IsNullOrEmpty(input) || string.IsNullOrEmpty(output) ||
++                Path.GetFullPath(input).Equals(Path.GetFullPath(output), StringComparison.OrdinalIgnoreCase))
++                throw new ArgumentException("Decryption requires separate input and output files.");
++            if (string.IsNullOrEmpty(aesKeyHex)) throw new ArgumentException("Decryption needs the game's key.");
++            byte[] key = Convert.FromHexString(aesKeyHex);
++            using var reader = new IoStoreReader(input, key);
++            var toc = reader.Toc;
++            if (!toc.IsEncrypted) throw new InvalidDataException("The container is not encrypted.");
++            if (toc.PartitionCount > 1 || toc.ContainerFlags.HasFlag(EIoContainerFlags.Signed))
++                throw new NotSupportedException("Signed or multi-part containers cannot be decrypted here.");
++            var chunks = reader.GetChunks().ToArray();
++            if (chunks.Any(id => id.ChunkType == EIoChunkType.MemoryMappedBulkData))
++                throw new NotSupportedException("Memory-mapped chunks cannot be decrypted here.");
++            if (chunks.Length == 0) throw new InvalidDataException("The container has no chunks.");
++            // a container whose file list could not be read is refused: written without one, the game could not read it either
++            if (toc.RawDirectoryIndex is not { Length: > 0 } directory)
++                throw new InvalidDataException("Its file list could not be read, so it cannot be decrypted.");
++            var paths = chunks.Where(id => id.ChunkType != EIoChunkType.ContainerHeader).Select(id => reader.GetChunkPath(id)).ToArray();
++            if (paths.Any(p => string.IsNullOrEmpty(p)))
++                throw new InvalidDataException("A file in it has no name in its file list, so it cannot be decrypted.");
++            using (var writer = new IoStoreWriter(output, toc.Version, null, toc.MountPoint,
++                enableCompression: true, enableEncryption: false, aesKeyHex: null,
++                containerId: toc.ContainerId, compressionBlockSize: toc.CompressionBlockSize))
++            {
++                writer.SetRawDirectoryIndex(directory);
++                foreach (var id in chunks)
++                {
++                    byte[] data = reader.ReadChunk(id);
++                    if (id.ChunkType == EIoChunkType.ContainerHeader) writer.WriteChunkUncompressed(id, data);
++                    else writer.WriteChunk(id, reader.GetChunkPath(id), data);
++                }
++                writer.Complete();
++            }
++            // read back with no key: what the game's check sees
++            using var verify = new IoStoreReader(output);
++            if (verify.Toc.IsEncrypted || !chunks.SequenceEqual(verify.GetChunks()))
++                throw new InvalidDataException("Decrypted container failed metadata verification.");
++            foreach (var id in chunks)
++            {
++                if (reader.GetChunkPath(id) != verify.GetChunkPath(id))
++                    throw new InvalidDataException("Decrypted container lost a file name.");
++                if (!reader.ReadChunk(id).AsSpan().SequenceEqual(verify.ReadChunk(id)))
++                    throw new InvalidDataException("Decrypted container changed a chunk payload.");
++            }
++            return new UAssetResponse { Success = true, Message = "Decrypted and verified all chunks" };
++        }
++        catch (Exception e) { return new UAssetResponse { Success = false, Message = e.Message }; }
++    }
++}

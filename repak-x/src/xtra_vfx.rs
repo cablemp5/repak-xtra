@@ -271,6 +271,15 @@ pub fn xtra_scan_stopped() -> bool {
     STOPPED.swap(false, std::sync::atomic::Ordering::Relaxed)
 }
 
+/// brokenMods.ts, when a run of the checks ends: the long-lived command line (xtra_uat_cli.rs serve, the game's
+/// containers loaded, a few GB) goes now rather than after its 90 s idle, unless the Mod Updater is running.
+#[tauri::command]
+pub fn xtra_scan_release() {
+    if RUN.lock().unwrap_or_else(|e| e.into_inner()).is_none() {
+        crate::xtra_uat_cli::reset();
+    }
+}
+
 /// Who holds the run lock, if anyone.
 #[tauri::command]
 pub fn xtra_vfx_lock() -> Option<RunLock> {
@@ -752,6 +761,32 @@ fn place(source: &Path, staged_base: &Path, turn_off_original: bool, keep_name: 
             }
         }
     };
+    // every change below, noted before the first one: a crash part way puts it all back at the next start, and the
+    // note goes once the update is in or undone (xtra_journal.rs). Step 5 (the original to Recently deleted) is after
+    // it: the update is in by then
+    let main = dir.join(format!("{target}.{}", if update_on { "pak" } else { "bak_repak" }));
+    let finals = [(tmp("utoc"), dir.join(format!("{target}.utoc"))), (tmp("ucas"), dir.join(format!("{target}.ucas"))), (tmp("pak"), main.clone())];
+    let originals: Vec<(PathBuf, PathBuf)> = if replace { Vec::new() } else { files(&stem) }
+        .into_iter()
+        .map(|from| {
+            let x = from.extension().map(|x| x.to_string_lossy().to_string()).unwrap_or_default();
+            let x = if turn_off && x.eq_ignore_ascii_case("pak") { "bak_repak".to_string() } else { x };
+            let to = dir.join(format!("{kept}.{x}"));
+            (from, to)
+        })
+        .filter(|(from, to)| from != to)
+        .collect();
+    let plan = crate::xtra_journal::begin(&crate::xtra_journal::Plan { trash: trash.clone(), trashed: existing.clone(), renames: originals.iter().cloned().chain(finals.iter().cloned()).collect(), ..Default::default() });
+    let plan = match plan {
+        Ok(p) => p,
+        Err(e) => {
+            drop_temps();
+            if let Some(t) = &trash {
+                crate::xtra_trash::release_if_empty(t);
+            }
+            return Err(format!("{e}. Nothing in the mods folder changed."));
+        }
+    };
     let mut trashed = Vec::new();
     let mut renamed: Vec<(PathBuf, PathBuf)> = Vec::new();
     // puts back what moved, and names what it could not
@@ -776,6 +811,7 @@ fn place(source: &Path, staged_base: &Path, turn_off_original: bool, keep_name: 
         if stuck.is_empty() {
             format!("{msg} The mod is as it was.")
         } else {
+            plan.keep(); // the next start tries again
             format!("{msg} Some files could not be put back: {}.", stuck.join(". "))
         }
     };
@@ -788,13 +824,7 @@ fn place(source: &Path, staged_base: &Path, turn_off_original: bool, keep_name: 
     }
 
     // 3. the original to its new name, and off
-    for from in if replace { Vec::new() } else { files(&stem) } {
-        let x = from.extension().map(|x| x.to_string_lossy().to_string()).unwrap_or_default();
-        let x = if turn_off && x.eq_ignore_ascii_case("pak") { "bak_repak".to_string() } else { x };
-        let to = dir.join(format!("{kept}.{x}"));
-        if to == from {
-            continue;
-        }
+    for (from, to) in originals {
         if let Err(e) = std::fs::rename(&from, &to) {
             drop_temps();
             return Err(fail(format!("Could not rename the original {}: {e}.", from.display()), undo(&trashed, &renamed)));
@@ -803,8 +833,6 @@ fn place(source: &Path, staged_base: &Path, turn_off_original: bool, keep_name: 
     }
 
     // 4. the update to its own names: renames in one folder
-    let main = dir.join(format!("{target}.{}", if update_on { "pak" } else { "bak_repak" }));
-    let finals = [(tmp("utoc"), dir.join(format!("{target}.utoc"))), (tmp("ucas"), dir.join(format!("{target}.ucas"))), (tmp("pak"), main.clone())];
     for (i, (from, to)) in finals.iter().enumerate() {
         if let Err(e) = std::fs::rename(from, to) {
             // the update's files already moved go back to their temporary names (and then away); one that cannot is named
@@ -818,6 +846,7 @@ fn place(source: &Path, staged_base: &Path, turn_off_original: bool, keep_name: 
         }
     }
 
+    drop(plan); // the update is in
     let original = if replace { main.clone() } else { dir.join(format!("{kept}.{}", if was_on && !turn_off { "pak" } else { "bak_repak" })) };
     // 5. the original to Recently deleted, as one deletion of its own. The update is in either way: a failure puts back
     //    what moved and says so, naming any file left in Recently deleted
@@ -994,6 +1023,9 @@ pub async fn xtra_vfx_mods(window: Window, state: State<'_, Arc<Mutex<AppState>>
                 };
                 // by class too: a UI material named M_..._Inst is no MI_ (xtra_broken::material_instances)
                 let listed = updatable(&details.category, &details.files)
+                    // Season 11: emote animations it rewrites in the new layout, and encrypted mods it decrypts
+                    || details.files.iter().any(|f| crate::xtra_broken::is_animation(&crate::xtra_broken::match_key(f)))
+                    || crate::xtra_encrypt::encrypted(&utoc)
                     || paks.as_ref().is_some_and(|p| !crate::xtra_broken::material_instances(p, &utoc, &details.files).0.is_empty());
                 listed.then(|| VfxMod {
                     name: m.custom_name.clone().filter(|n| !n.trim().is_empty()).unwrap_or_else(|| split_priority(&stem).0.to_string()),

@@ -1,5 +1,5 @@
 // repakxtra: the Copy setup report button (Settings > Help & Community, and Setup). Text is built in setupReport.ts.
-// While it reads it takes the header's Checking mods look: quiet, its icon and the pass (Reading setup, then Checking
+// While it reads it takes the header's Scanning mods look: quiet, its icon and the pass (Reading setup, then Scanning
 // mods) shimmering together, shown only past 300 ms and then at least 400 ms.
 import { useState } from 'react'
 import { invoke } from '@tauri-apps/api/core'
@@ -55,7 +55,7 @@ export default function CopySetupReport({ alert, className = 'action-btn' }: { a
     <button type="button" className={`${className}${spin ? ' is-working' : ''}`} disabled={busy} onClick={run}
       title="Copies your setup and the mods that are on, ready to paste in a help channel. No folder paths or user name.">
       {spin
-        ? <span key={stage} className="scan-status-in t-shimmer-all" role="status"><ClipboardCopy size={14} aria-hidden="true" />{stage === 'setup' ? 'Reading setup' : 'Checking mods'}</span>
+        ? <span key={stage} className="scan-status-in t-shimmer-all" role="status"><ClipboardCopy size={14} aria-hidden="true" />{stage === 'setup' ? 'Reading setup' : 'Scanning mods'}</span>
         : <>{copied ? <Check size={14} /> : <ClipboardCopy size={14} />}{' '}
           <span key={copied ? 'copied' : 'idle'} className={copied ? 't-text-in' : undefined}>{copied ? 'Copied' : 'Copy setup report'}</span></>}
     </button>

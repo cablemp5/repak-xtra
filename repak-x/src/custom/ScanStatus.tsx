@@ -7,7 +7,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { AlertTriangle, Eye } from 'lucide-react'
 import { rescanVerdicts } from './brokenMods'
-import { holdScan, progressLine, useScanRun } from './scanProgress'
+import { holdScan, progressLine, stageEnd, useScanRun } from './scanProgress'
+import { GlideFill } from './GlideFill'
 import { APP_NAME } from './edition'
 
 export default function ScanStatus() {
@@ -25,45 +26,49 @@ export default function ScanStatus() {
   }, [open])
   useEffect(() => { if (!shown) setOpen(false) }, [shown])
   if (!shown) return null
+  const pct = r.pct
   const stopping = r.running && r.held !== null // Pause or Cancel pressed: the mod being read finishes first
-  const status = stopping ? `${r.held === 'cancelled' ? 'Cancelling' : 'Pausing'} after the mod being read`
-    : r.running ? (r.last ? progressLine(r.last) : 'Getting ready')
-    : r.held === 'paused' ? 'Paused by you, with mods left to read'
-    : 'Stopped with mods left to read (the game ran, or the Mod Updater needed the tools)'
+  const status = stopping ? `${r.held === 'cancelled' ? 'Cancelling' : 'Pausing'} after the mod being scanned`
+    : r.running ? (r.last?.path && r.mods ? progressLine(r.last.path, pct, r.mods) : "Reading the game's files")
+    : r.held === 'paused' ? 'Paused by you, with mods left to scan'
+    : 'Stopped with mods left to scan (the game ran, or the Mod Updater needed the tools)'
   return (
     <div className="lo-gen scan-gen" ref={ref}>
       <button type="button" className="btn-ghost scan-status" aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen(v => !v)}
-        title={r.running ? 'Show the mod checks: pause or cancel them' : 'The mod checks are paused: resume or cancel them'}>
+        title={r.running ? 'Show the mod scan: pause or cancel it' : 'The mod scan is paused: resume or cancel it'}>
         {/* running: an eye and its words, shimmering together (t-shimmer-all: an SVG cannot take the text gradient) */}
         {r.running
-          ? <span className="scan-status-in t-shimmer-all"><Eye size={14} aria-hidden="true" />{stopping ? (r.held === 'paused' ? 'Pausing checks' : 'Stopping checks') : 'Checking mods'}</span>
-          : <span className="scan-status-in"><span className="pause-glyph" aria-hidden="true" />Checks paused</span>}
+          ? <span className="scan-status-in t-shimmer-all"><Eye size={14} aria-hidden="true" />{stopping ? (r.held === 'paused' ? 'Pausing scan' : 'Stopping scan') : 'Scanning mods'}</span>
+          : <span className="scan-status-in"><span className="pause-glyph" aria-hidden="true" />Scan paused</span>}
       </button>
       {open && (
         <div className="xtra-menu lo-gen-menu scan-menu" role="menu">
           <div className="lo-gen-status" role="status">
-            <b>{r.running ? 'Checking mods for this game version' : 'Mod checks paused'}</b>
+            <b>{r.running ? 'Scanning mods for this game version' : 'Mod scan paused'}</b>
             <span>{status}</span>
+            {/* the whole run: the stages done and this one's share, never stepping back; a stage with no count yet creeps
+                toward its end (GlideFill) */}
+            {r.running && <div className="su-bar" aria-hidden="true"><GlideFill pct={pct} next={r.last?.total ? undefined : stageEnd(r.stage, r.weights)} secs={20} /></div>}
           </div>
           {r.running
             ? <>
                 <button type="button" role="menuitem" className="xtra-item" disabled={stopping} onClick={() => { setOpen(false); void holdScan('paused') }}
-                  title="Stop after the mod being read. Resume picks up where it stopped">
+                  title="Stop after the mod being scanned. Resume picks up where it stopped">
                   <span className="lo-gen-stop"><span className="pause-glyph" aria-hidden="true" />Pause</span></button>
                 <button type="button" role="menuitem" className="xtra-item run-stop-btn" disabled={stopping && r.held === 'cancelled'} onClick={() => { setOpen(false); void holdScan('cancelled') }}
-                  title="Stop after the mod being read, and hide this until the checks run again">
+                  title="Stop after the mod being scanned, and hide this until the scan runs again">
                   <span className="lo-gen-stop"><span className="stop-glyph" aria-hidden="true" />Cancel</span></button>
               </>
             : <>
                 <button type="button" role="menuitem" className="xtra-item" onClick={() => { setOpen(false); void rescanVerdicts() }}
-                  title="Check the mods left to read now">
+                  title="Scan the mods left now">
                   <span className="lo-gen-stop"><span className="play-glyph" aria-hidden="true" />Resume</span></button>
                 <button type="button" role="menuitem" className="xtra-item run-stop-btn" onClick={() => { setOpen(false); void holdScan('cancelled') }}
-                  title="Leave the rest unchecked and hide this until the checks run again">
+                  title="Leave the rest unscanned and hide this until the scan runs again">
                   <span className="lo-gen-stop"><span className="stop-glyph" aria-hidden="true" />Cancel</span></button>
               </>}
           <p className="scan-menu-warn"><AlertTriangle size={14} aria-hidden="true" />
-            <span>Mods not checked yet get no Broken or May crash warning, and can crash the game. Refresh list (Ctrl+Shift+R) runs the checks again, and so does the next start of {APP_NAME}.</span></p>
+            <span>Mods not scanned yet show no Broken, May crash, or Needs update warning, so they can crash the game or not work. Refresh list (Ctrl+Shift+R) or the next start of {APP_NAME} scans them again.</span></p>
         </div>
       )}
     </div>

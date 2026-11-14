@@ -515,7 +515,7 @@ const ModItem = memo(function ModItem({
                             onClick={(e) => { e.stopPropagation(); revealBuiltin(mod.builtin) }}>Built-in</button>
                     )}
                     <NexusTag path={mod.path} />{/* repakxtra: installed from Nexus Mods (custom/nexusSource.tsx), right of the file size */}
-                    {modDetails?.is_encrypted && <span className="mod-type-badge mod-lock" title="This mod is encrypted"><Lock size={9} aria-hidden="true" />Encrypted</span>}{/* repakxtra: Settings > On each mod hides it */}
+                    {modDetails?.is_encrypted && <span className="mod-type-badge mod-lock" title="Encrypted. The game's Season 11 check reports it, and Project Galacta skips it. The Mod Updater decrypts it."><Lock size={9} aria-hidden="true" />Encrypted</span>}{/* repakxtra: Settings > On each mod hides it */}
                     {!builtin && <LoadoutTag path={mod.path} />}{/* repakxtra: the loadouts it is in (custom/LoadoutTag.tsx) */}
                     {/* repakxtra: Project Galacta compatible mods (xtra_classify.rs) */}
                     {typeof modDetails?.mod_type === 'string' && /\[[^\]]*Project Galacta[^\]]*\]$/.test(modDetails.mod_type) && (
