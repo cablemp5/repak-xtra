@@ -62,6 +62,19 @@ name, is refused, as are signed, multi-part, and memory-mapped ones. The output 
 encrypted, and its chunk ids, file names, and every chunk's bytes must match. Four real mods decrypted (467, 4, 2, and 3
 files, one without the Indexed flag), each listing every file afterwards.
 
+`0021-moved-classes-and-unnamed-imports.patch`: Season 11 (game build 4042190) moved the class
+`AnimNotifyState_SetComponentsInActorVisible` from `/Script/Marvel` to `/Script/MarvelAnimNotify`. An emote montage made
+before it imports the hash of the old path, which the game no longer has. The extract wrote that import as a
+`__ScriptImport_<hash>__` placeholder, and packing it again wrote a null import, so the updated mod's export had no class
+and the game crashed loading it. Three changes. `ScriptObjectsDatabase.GetMoved` finds the one current script object whose
+path hashes to a missing index once another script package's name stands in for its own (kept per index, about 0.6 s for
+the first ask of each), and the extract reads the import at that place. Packing writes a `__ScriptImport_<hash>__` import
+back as that hash instead of null. `list_iostore --types --class-marks` adds `!damaged` after the class of a package with
+an export that has no class, and `!moved` after one that imports a class the game moved (`xtra_uat_cli.rs` reads both).
+Checked on one dance emote (2026-11-14): its original lists `!moved` on both montages and extracts with the class
+under `/Script/MarvelAnimNotify`, the copy an earlier update made lists `!damaged`, and the rebuilt mod lists neither, with
+that export read whole like the game's own. The game's Character, VFX, and UI containers (312,027 packages) list no mark.
+
 ## Refreshing a patch
 
 When `build.ps1` says a patch no longer applies (the submodule moved to a newer upstream commit):

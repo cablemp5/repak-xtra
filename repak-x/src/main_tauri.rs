@@ -8792,6 +8792,8 @@ fn main() {
             xtra_usmap_diff::xtra_layout_moves, // repakxtra
             xtra_tables::xtra_vfx_merge_tables, // repakxtra
             xtra_vfx::xtra_vfx_classes, // repakxtra
+            xtra_vfx::xtra_vfx_class_marks, // repakxtra
+            xtra_vfx::xtra_vfx_trashed_originals, // repakxtra
             xtra_vfx::xtra_vfx_pak_half, // repakxtra
             xtra_stamp::xtra_vfx_stamp, // repakxtra
             xtra_stamp::xtra_made_mods, // repakxtra: the Updated tag
