@@ -306,6 +306,22 @@ pub fn get_pak_characteristics_detailed(mod_contents: Vec<String>) -> ModCharact
         detected_char_id = Some("4017".to_string());
     }
 
+    // repakxtra: several heroes named, but every skeletal mesh is one hero's: it is that hero's skin
+    if hero_names.len() > 1 {
+        let mesh = crate::xtra_classify::mesh_of_one_hero(&mod_contents);
+        let id = mesh.and_then(|m| CHAR_ID_REGEX.captures(m)).and_then(|c| c.get(1)).map(|m| m.as_str().to_string());
+        if let Some((id, name)) = id.and_then(|id| character_data::get_character_name_from_id(&id).map(|n| (id, n))) {
+            hero_names = HashSet::from([name]);
+            detected_char_id = Some(id);
+            // the mesh's own skin, never one another hero's file named
+            (character_name, fallback) = match mesh.and_then(|m| get_character_mod_skin(m)) {
+                Some(ModType::Custom(skin)) => (Some(skin), None),
+                Some(ModType::Default(skin)) => (None, Some(skin)),
+                None => (None, None),
+            };
+        }
+    }
+
     // Convert to sorted Vec for consistent ordering
     let mut heroes: Vec<String> = hero_names.into_iter().collect();
     heroes.sort();

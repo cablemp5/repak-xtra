@@ -1076,11 +1076,15 @@ pub(crate) async fn run(game_paks: &str, usmap: &str, mod_extract: &Path, files:
 }
 
 #[tauri::command]
-pub async fn xtra_vfx_niagara(window: Window, game_paks: String, usmap_path: String, mod_extract: String, files: Vec<String>, final_uassets: String, stage_dir: String, vanilla_extract: String) -> Result<NiagaraRun, String> {
+#[allow(clippy::too_many_arguments)]
+pub async fn xtra_vfx_niagara(window: Window, game_paks: String, usmap_path: String, mod_extract: String, files: Vec<String>, final_uassets: String, stage_dir: String, vanilla_extract: String, quiet: Option<bool>) -> Result<NiagaraRun, String> {
     let vanilla = Path::new(&vanilla_extract).parent().map(Path::to_path_buf).ok_or("No cache folder")?;
     let work = Path::new(&stage_dir).join("niagara");
     let _scan = SCANNING.lock().await; // as xtra_vfx_old_layout: never beside the background scan on the game cache
-    run(&game_paks, &usmap_path, Path::new(&mod_extract), &files, Path::new(&final_uassets), &work, &vanilla, &TauriVfxProgressSink::new(&window)).await
+    // quiet: it runs beside the update's earlier steps (pipeline.ts), whose own progress the row shows
+    let (shown, silent) = (TauriVfxProgressSink::new(&window), crate::vfx_updater::progress::NoOpProgressSink);
+    let progress: &dyn VfxProgressSink = if quiet == Some(true) { &silent } else { &shown };
+    run(&game_paks, &usmap_path, Path::new(&mod_extract), &files, Path::new(&final_uassets), &work, &vanilla, progress).await
 }
 
 #[cfg(test)]

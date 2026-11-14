@@ -48,6 +48,20 @@ pub fn is_galacta_compatible(files: &[String]) -> bool {
     has("sk_") && has("da_")
 }
 
+/// The skeletal mesh of a mod that names several heroes, when every one sits in one hero's folder: a skin often
+/// borrows another hero's textures under that hero's path (a Black Cat skin with White Fox textures listed as
+/// "Multiple Heroes (3)", 2026-11-14), and the mesh says whose skin it is. The path of the first such mesh.
+pub fn mesh_of_one_hero(files: &[String]) -> Option<&String> {
+    let hero = |f: &str| {
+        let p = rel_lower(f);
+        let id = p.strip_prefix("characters/")?.split('/').next()?.to_string();
+        (id.len() == 4 && id.bytes().all(|b| b.is_ascii_digit())).then_some(id)
+    };
+    let meshes: Vec<&String> = files.iter().filter(|f| { let p = rel_lower(f); file_name(&p).starts_with("sk_") && (p.ends_with(".uasset") || !file_name(&p).contains('.')) }).collect();
+    let first = hero(meshes.first()?)?;
+    meshes.iter().all(|m| hero(m).as_deref() == Some(&first)).then(|| meshes[0])
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -72,6 +86,22 @@ mod tests {
         ]));
         assert_eq!(details.category, "Audio");
         assert!(details.mod_type.contains("Audio"));
+    }
+
+    #[test]
+    fn a_skin_with_borrowed_textures_is_its_meshs_hero() {
+        let cat = v(&[
+            "Marvel/Content/Marvel/Characters/1036/1036001/Textures/T_1036001_Equip_02_M.uasset",
+            "Marvel/Content/Marvel/Characters/1011/1011001/Texture/T_1011001_Equip_02_S.uasset",
+            "Marvel/Content/Marvel/Characters/1026/1026001/Meshes/SK_1026_1026001_Lobby.uasset",
+            "Marvel/Content/Marvel/Characters/1026/1026001/Meshes/SK_1026_1026001.uasset",
+        ]);
+        assert_eq!(mesh_of_one_hero(&cat), Some(&cat[2]));
+        let details = crate::utils::get_pak_characteristics_detailed(cat.clone());
+        assert_eq!((details.heroes.len(), details.character_id.as_str()), (1, "1026"), "{}", details.mod_type);
+        let two = v(&[&cat[2], "Marvel/Content/Marvel/Characters/1036/1036001/Meshes/SK_1036_1036001.uasset"]);
+        assert_eq!(mesh_of_one_hero(&two), None, "meshes of two heroes: several heroes still");
+        assert_eq!(mesh_of_one_hero(&cat[..2].to_vec()), None, "no mesh says nothing");
     }
 
     #[test]

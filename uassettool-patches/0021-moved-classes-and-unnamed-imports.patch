@@ -1,0 +1,205 @@
+diff --git a/src/UAssetTool/Program.cs b/src/UAssetTool/Program.cs
+index f5bc799..82ae6f9 100644
+--- a/src/UAssetTool/Program.cs
++++ b/src/UAssetTool/Program.cs
+@@ -5453,6 +5453,52 @@ public partial class Program
+         return null;
+     }
+ 
++    // repakxtra: what a package's class references say about loading it in this game. "damaged": an export without a
++    // class (a repack that lost it, the game crashes on it). "moved": a script import the game has under another script
++    // package (ScriptObjectsDatabase.GetMoved), which an extract reads at its current place. Null when neither, or the
++    // header cannot be read.
++    private static string? ReadClassMark(
++        IoStore.IoStoreReader reader, IoStore.FIoChunkId exportChunk, ZenPackage.ScriptObjectsDatabase? scriptObjects)
++    {
++        if (scriptObjects == null) return null;
++        try
++        {
++            byte[] header = reader.ReadChunkPrefix(exportChunk, 64 * 1024);
++            for (int pass = 0; pass < 2; pass++)
++            {
++                using var ms = new MemoryStream(header);
++                using var br = new BinaryReader(ms);
++                var summary = new ZenPackage.FZenPackageSummary();
++                summary.Read(br, ZenPackage.EIoContainerHeaderVersion.NoExportInfo);
++                int start = summary.ImportMapOffset, end = summary.ExportMapOffset;
++                if (start <= 0 || end < start) return null;
++                var exports = end <= header.Length
++                    ? ZenPackage.FZenPackageHeader.ReadExportMapOnly(header, ZenPackage.EIoContainerHeaderVersion.NoExportInfo) : null;
++                if (exports == null)
++                {
++                    // the header did not fit in the prefix: the whole chunk, once
++                    if (pass == 0 && reader.GetChunkSize(exportChunk) > header.Length) { header = reader.ReadChunk(exportChunk); continue; }
++                    return null;
++                }
++                if (exports.Any(e => e.ClassIndex.IsNull())) return "damaged";
++                // one the game has under another script package: as an export's class, parent or template, or in the
++                // import map. One the game lacks altogether says nothing: its own files keep some (6 packages of
++                // 267,106 in Character, 2026-11-14) and load
++                bool moved(ZenPackage.FPackageObjectIndex i) => i.IsScriptImport() && scriptObjects.GetScriptObject(i) == null && scriptObjects.GetMoved(i) != null;
++                if (exports.Any(e => moved(e.ClassIndex) || moved(e.SuperIndex) || moved(e.TemplateIndex))) return "moved";
++                for (int at = start; at + 8 <= end; at += 8)
++                    if (moved(new ZenPackage.FPackageObjectIndex(BitConverter.ToUInt64(header, at)))) return "moved";
++                return null;
++            }
++        }
++        catch (Exception ex)
++        {
++            if (Environment.GetEnvironmentVariable("DEBUG") == "1")
++                Console.Error.WriteLine($"[ReadClassMark] {ex.GetType().Name}: {ex.Message}");
++        }
++        return null;
++    }
++
+     private static int CliListIoStore(string[] args)
+     {
+         if (args.Length < 2)
+@@ -5467,6 +5513,8 @@ public partial class Program
+             Console.Error.WriteLine("                             (Texture2D, SkeletalMesh, BlueprintGeneratedClass, ...)");
+             Console.Error.WriteLine("                             Off by default: it reads each package header, which");
+             Console.Error.WriteLine("                             the rest of the listing does not need.");
++            Console.Error.WriteLine("  --class-marks            - With --types: add !moved or !damaged after the type of a");
++            Console.Error.WriteLine("                             package whose class references this game cannot load as they are");
+             Console.Error.WriteLine("  --type <name>            - Only list packages of this asset type. Repeatable,");
+             Console.Error.WriteLine("                             and accepts a comma separated list. Matches the class");
+             Console.Error.WriteLine("                             exactly, so Material selects master materials without");
+@@ -5483,6 +5531,7 @@ public partial class Program
+         string? aesKey = null;
+         string? filterPattern = null;
+         bool includeTypes = false;
++        bool classMarks = false; // repakxtra
+         string? scriptObjectsPath = null;
+         string? gamePaks = null;
+         var typeFilter = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+@@ -5495,6 +5544,8 @@ public partial class Program
+                 filterPattern = args[++i];
+             else if (args[i] == "--types")
+                 includeTypes = true;
++            else if (args[i] == "--class-marks")
++                classMarks = true;
+             else if (args[i] == "--type" && i + 1 < args.Length)
+             {
+                 // Accepts repeats and comma separated lists. Filtering by type only means
+@@ -5606,10 +5657,14 @@ public partial class Program
+                 // prints in container order. Oodle guards its own initialisation against
+                 // parallel callers and reads are positional, so the reader takes concurrency.
+                 var assetTypes = new string?[listed.Count];
++                var marks = new string?[listed.Count];
+                 if (includeTypes)
+                 {
+-                    System.Threading.Tasks.Parallel.For(0, listed.Count,
+-                        i => assetTypes[i] = ReadAssetType(reader, listed[i].ExportChunk, scriptObjects));
++                    System.Threading.Tasks.Parallel.For(0, listed.Count, i =>
++                    {
++                        assetTypes[i] = ReadAssetType(reader, listed[i].ExportChunk, scriptObjects);
++                        if (classMarks) marks[i] = ReadClassMark(reader, listed[i].ExportChunk, scriptObjects);
++                    });
+                 }
+ 
+                 for (int listedIndex = 0; listedIndex < listed.Count; listedIndex++)
+@@ -5657,7 +5712,7 @@ public partial class Program
+                     string typeInfo = string.Empty;
+                     if (includeTypes)
+                     {
+-                        typeInfo = $"  <{assetType ?? "unknown"}>";
++                        typeInfo = $"  <{assetType ?? "unknown"}>" + (marks[listedIndex] is string mark ? $"  !{mark}" : "");
+                         typeCounts[assetType ?? "unknown"] = typeCounts.GetValueOrDefault(assetType ?? "unknown") + 1;
+                     }
+ 
+diff --git a/src/UAssetTool/ZenPackage/ScriptObjectsDatabase.cs b/src/UAssetTool/ZenPackage/ScriptObjectsDatabase.cs
+index d68ee87..1d8a0c1 100644
+--- a/src/UAssetTool/ZenPackage/ScriptObjectsDatabase.cs
++++ b/src/UAssetTool/ZenPackage/ScriptObjectsDatabase.cs
+@@ -289,6 +289,52 @@ public class ScriptObjectsDatabase
+         return null;
+     }
+     
++    // repakxtra: a script object a game update moved to another /Script package (Season 11 took
++    // AnimNotifyState_SetComponentsInActorVisible from /Script/Marvel to /Script/MarvelAnimNotify). A package cooked
++    // before the move imports the hash of the old path, which the game no longer has, and the game crashes on it. Its
++    // current place is the one object whose path hashes to that index once another script package's name stands in for
++    // its own. Null when the index is known as it is, when nothing matches, or when more than one object does. The
++    // answer is kept per index, a miss too: one search is every object under every package name.
++    private readonly System.Collections.Concurrent.ConcurrentDictionary<ulong, ScriptObjectEntry?> _moved = new();
++
++    public ScriptObjectEntry? GetMoved(FPackageObjectIndex index)
++    {
++        if (index.IsNull() || !index.IsScriptImport() || _scriptObjectsByIndex.ContainsKey(index.Value))
++            return null;
++        return _moved.GetOrAdd(index.Value, FindMoved);
++    }
++
++    private ScriptObjectEntry? FindMoved(ulong missing)
++    {
++        const string Script = "/Script/";
++        static byte[] Utf16(string s) => System.Text.Encoding.Unicode.GetBytes(s.Replace(':', '/').Replace('.', '/').ToLowerInvariant());
++        // "/Script/<Package>" names, and every object under one as ("/<rest of its path>", its index)
++        var packages = new List<byte[]>();
++        var objects = new List<(byte[] Tail, ulong Index)>();
++        foreach (var (path, index) in _scriptObjectsByName)
++        {
++            if (!path.StartsWith(Script, StringComparison.OrdinalIgnoreCase)) continue;
++            int slash = path.IndexOf('/', Script.Length);
++            if (slash < 0) packages.Add(Utf16(path));
++            else objects.Add((Utf16(path.Substring(slash)), index));
++        }
++        ulong want = missing & ~(3ul << 62);
++        var found = new System.Collections.Concurrent.ConcurrentDictionary<ulong, bool>();
++        System.Threading.Tasks.Parallel.ForEach(packages, package =>
++        {
++            var buffer = new byte[package.Length + 1024];
++            Buffer.BlockCopy(package, 0, buffer, 0, package.Length);
++            foreach (var (rest, index) in objects)
++            {
++                if (rest.Length > 1024) continue;
++                Buffer.BlockCopy(rest, 0, buffer, package.Length, rest.Length);
++                if ((IoStore.CityHash.CityHash64(buffer, 0, package.Length + rest.Length) & ~(3ul << 62)) == want)
++                    found[index] = true;
++            }
++        });
++        return found.Count == 1 && _scriptObjectsByIndex.TryGetValue(System.Linq.Enumerable.First(found.Keys), out var entry) ? entry : null;
++    }
++
+     /// <summary>
+     /// Get name string from FMappedName, including number suffix if present
+     /// </summary>
+diff --git a/src/UAssetTool/ZenPackage/ZenConverter.cs b/src/UAssetTool/ZenPackage/ZenConverter.cs
+index 715a712..5a160fe 100644
+--- a/src/UAssetTool/ZenPackage/ZenConverter.cs
++++ b/src/UAssetTool/ZenPackage/ZenConverter.cs
+@@ -934,6 +934,17 @@ public class ZenConverter
+                 continue;
+             }
+ 
++            // repakxtra: a script import the extract could not name (ZenToLegacyConverter writes it as
++            // __ScriptImport_<its index in hex>__) goes back as that index. It was written as Null, so a repack left
++            // the export that used it without a class.
++            if (objectName.Length == 33 && objectName.StartsWith("__ScriptImport_") && objectName.EndsWith("__")
++                && ulong.TryParse(objectName.AsSpan(15, 16), System.Globalization.NumberStyles.HexNumber, null, out ulong unnamed)
++                && FPackageObjectIndex.CreateFromRaw(unnamed).IsScriptImport())
++            {
++                zenPackage.ImportMap.Add(FPackageObjectIndex.CreateFromRaw(unnamed));
++                continue;
++            }
++
+             // Check if this import is from a /Script/ package (based on the object path, not class package)
+             if (objectPath.StartsWith("/Script/"))
+             {
+diff --git a/src/UAssetTool/ZenPackage/ZenToLegacyConverter.cs b/src/UAssetTool/ZenPackage/ZenToLegacyConverter.cs
+index e03fc33..07e42d7 100644
+--- a/src/UAssetTool/ZenPackage/ZenToLegacyConverter.cs
++++ b/src/UAssetTool/ZenPackage/ZenToLegacyConverter.cs
+@@ -1195,6 +1195,12 @@ public class ZenToLegacyConverter
+         
+         var scriptObject = _scriptObjects.GetScriptObject(import);
+         if (scriptObject == null)
++        {
++            // repakxtra: a class a game update moved to another script package is read at its current place
++            scriptObject = _scriptObjects.GetMoved(import);
++            if (scriptObject != null) import = new FPackageObjectIndex(scriptObject.GlobalIndex);
++        }
++        if (scriptObject == null)
+         {
+             return new ResolvedZenImport
+             {

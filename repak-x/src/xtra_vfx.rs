@@ -1114,12 +1114,7 @@ pub async fn xtra_vfx_pak_half(mod_path: String, mod_extract: String) -> Result<
 pub async fn xtra_vfx_classes(mod_path: String, game_paks: String) -> Option<HashMap<String, String>> {
     tauri::async_runtime::spawn_blocking(move || {
         let listed = crate::xtra_uat_cli::classes(&Path::new(&mod_path).with_extension("utoc"), Path::new(&game_paks))?;
-        let key = |p: &str| {
-            let p = p.replace('\\', "/").to_lowercase();
-            let p = p.trim_start_matches("../");
-            p.strip_suffix(".uasset").unwrap_or(p).to_string()
-        };
-        Some(listed.into_iter().map(|(p, c)| (key(&p), c)).collect())
+        Some(listed.into_iter().map(|(p, c)| (class_key(&p), c)).collect())
     })
     .await
     .ok()
@@ -1288,6 +1283,60 @@ pub fn xtra_vfx_source(mod_path: String) -> Result<String, String> {
     let source = source_of(Path::new(&mod_path));
     repairable(&source)?;
     Ok(source.to_string_lossy().to_string())
+}
+
+/// The mod's packages this game cannot load as they are (xtra_uat_cli::class_marks), keyed like xtra_vfx_classes:
+/// "damaged" (an earlier update left an export without its class, the game crashes on it) or "moved" (a game class
+/// another game update moved, which the extract repoints). None without the command line.
+#[tauri::command]
+pub async fn xtra_vfx_class_marks(mod_path: String, game_paks: String) -> Option<HashMap<String, String>> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let listed = crate::xtra_uat_cli::class_marks(&Path::new(&mod_path).with_extension("utoc"), Path::new(&game_paks))?;
+        Some(listed.into_iter().map(|(p, mark)| (class_key(&p), mark)).collect())
+    })
+    .await
+    .ok()
+    .flatten()
+}
+
+/// A listed package path as pipeline.ts keys it (assetKey): lowercase, forward slashes, no ../ or extension.
+fn class_key(p: &str) -> String {
+    let p = p.replace('\\', "/").to_lowercase();
+    let p = p.trim_start_matches("../");
+    p.strip_suffix(".uasset").unwrap_or(p).to_string()
+}
+
+/// The originals of an updated mod in Recently deleted (Originals set to delete them), newest first: each .utoc there
+/// that came from the mod's folder under the name its original had (<name>_BROKEN, or the name an _UPDATED copy was
+/// made from), with its .ucas beside it. An update that damaged the mod starts again from the newest sound one.
+fn trashed_originals(mod_path: &Path, trash_root: &Path) -> Vec<PathBuf> {
+    let (Some(stem), Some(dir)) = (mod_path.file_stem().map(|s| s.to_string_lossy().to_string()), mod_path.parent()) else { return Vec::new() };
+    let names: Vec<String> = [Some(broken_stem(&stem)), update_base_stem(&stem)].into_iter().flatten().filter(|n| !n.eq_ignore_ascii_case(&stem)).collect();
+    let same = |a: &Path, b: &Path| a.to_string_lossy().replace('\\', "/").eq_ignore_ascii_case(&b.to_string_lossy().replace('\\', "/"));
+    let mut found: Vec<(std::time::SystemTime, PathBuf)> = std::fs::read_dir(trash_root)
+        .into_iter()
+        .flatten()
+        .flatten()
+        .flat_map(|e| std::fs::read_dir(e.path()).into_iter().flatten().flatten())
+        .map(|f| f.path())
+        .filter(|f| f.extension().is_some_and(|x| x.eq_ignore_ascii_case("utoc")) && f.with_extension("ucas").is_file())
+        .filter(|f| f.file_stem().is_some_and(|s| names.iter().any(|n| n.eq_ignore_ascii_case(&s.to_string_lossy()))))
+        .filter_map(|f| {
+            let record = f.with_file_name(format!("{}.from", f.file_name()?.to_string_lossy()));
+            let from = PathBuf::from(std::fs::read_to_string(&record).ok()?.trim());
+            if !same(from.parent()?, dir) {
+                return None;
+            }
+            Some((std::fs::metadata(&record).ok()?.modified().ok()?, f))
+        })
+        .collect();
+    found.sort();
+    found.into_iter().rev().map(|(_, f)| f).collect()
+}
+
+#[tauri::command(async)]
+pub fn xtra_vfx_trashed_originals(mod_path: String) -> Vec<String> {
+    trashed_originals(Path::new(&mod_path), &crate::xtra_trash::trash_dir()).iter().map(|p| p.to_string_lossy().to_string()).collect()
 }
 
 #[tauri::command]
@@ -1498,6 +1547,28 @@ mod tests {
     fn touch(p: &Path, text: &str) {
         std::fs::create_dir_all(p.parent().unwrap()).unwrap();
         std::fs::write(p, text).unwrap();
+    }
+
+    #[test]
+    fn a_damaged_update_finds_its_original_in_recently_deleted() {
+        let root = std::env::temp_dir().join(format!("repakxtra-trashed-original-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let (mods, trash) = (root.join("~mods"), root.join("trash"));
+        let put = |id: &str, name: &str, from: &Path| {
+            for x in ["utoc", "ucas"] {
+                touch(&trash.join(id).join(format!("{name}.{x}")), "old");
+                touch(&trash.join(id).join(format!("{name}.{x}.from")), &from.join(format!("{name}.{x}")).to_string_lossy());
+            }
+        };
+        put("1-0", "Dance_BROKEN_9999999_P", &mods);
+        put("2-0", "Dance_BROKEN_9999999_P", &root.join("elsewhere")); // another folder's mod of the same name
+        put("3-0", "Other_BROKEN_9999999_P", &mods);
+        assert_eq!(trashed_originals(&mods.join("Dance_9999999_P.utoc"), &trash), vec![trash.join("1-0").join("Dance_BROKEN_9999999_P.utoc")]);
+        assert!(trashed_originals(&mods.join("Missing_9999999_P.utoc"), &trash).is_empty());
+        put("4-0", "Solo_9999999_P", &mods);
+        assert_eq!(trashed_originals(&mods.join("Solo_UPDATED_9999999_P.utoc"), &trash), vec![trash.join("4-0").join("Solo_9999999_P.utoc")], "the name an _UPDATED copy was made from");
+        assert!(trashed_originals(&mods.join("Solo_9999999_P.utoc"), &trash).is_empty(), "never the mod itself");
+        let _ = std::fs::remove_dir_all(&root);
     }
 
     #[test]
@@ -1739,6 +1810,9 @@ mod tests {
             }
             // repakxtra 0.39: the commands the pipeline gained
             "xtra_vfx_classes" => json!(xtra_vfx_classes(s(a, "modPath"), s(a, "gamePaks")).await),
+            "xtra_vfx_class_marks" => json!(xtra_vfx_class_marks(s(a, "modPath"), s(a, "gamePaks")).await),
+            // REPAKXTRA_TRASH: a bench's own Recently deleted folder
+            "xtra_vfx_trashed_originals" => json!(trashed_originals(Path::new(&s(a, "modPath")), &std::env::var_os("REPAKXTRA_TRASH").map(PathBuf::from).unwrap_or_else(crate::xtra_trash::trash_dir))),
             "xtra_vfx_pak_half" => json!(pak_half(Path::new(&s(a, "modPath")), Path::new(&s(a, "modExtract")))?),
             "xtra_vfx_verify" => json!(crate::xtra_mi_layout::verify(&s(a, "usmapPath"), &s(a, "dir"), &list(a, "rels"), &s(a, "jsonDir"), &s(a, "stageDir"), p).await?),
             "xtra_vfx_merge_tables" => json!(crate::xtra_tables::merge_tables(&s(a, "gamePaks"), &s(a, "usmapPath"), &s(a, "modExtract"), &list(a, "files"), &s(a, "out"), &s(a, "stageDir"), p).await?),

@@ -95,7 +95,7 @@ fn material_instances_with(builds: Option<&AssetBuilds>, paks: &Path, utoc: &Pat
         let other = |k: &str| ["t_", "sk_", "sm_", "ns_", "ne_"].iter().any(|p| k.rsplit('/').next().unwrap_or(k).starts_with(p));
         keys.iter().any(|k| !is_material_instance(k) && !other(k) && b.by_package.get(k).is_some_and(|cl| *cl >= MATERIAL_LAYOUT_BUILD))
     });
-    let listed = if rewritten { listed_materials(paks, utoc) } else { Some(Vec::new()) };
+    let listed = if rewritten { listed(paks, utoc).map(|l| l.into_iter().filter(|k| !k.starts_with('!')).collect()) } else { Some(Vec::new()) };
     let complete = listed.is_some();
     out.extend(listed.unwrap_or_default());
     out.sort();
@@ -103,25 +103,39 @@ fn material_instances_with(builds: Option<&AssetBuilds>, paks: &Path, utoc: &Pat
     (out, complete)
 }
 
-/// The material instances in the container `utoc` by their class, kept per file (its size and time written) and decoder,
-/// in memory and in repakxtra-mod-classes.json: each listing runs a process (about 0.3 s), and every launch asked again
-/// for every mod an update touched.
-fn listed_materials(paks: &Path, utoc: &Path) -> Option<Vec<String>> {
+/// The packages of `utoc` this game cannot load as they are, (damaged, moved) counts (xtra_uat_cli::class_marks): an
+/// export an earlier update left without its class, and a game class a game update moved to another script package.
+/// None when the container could not be listed.
+pub(crate) fn class_marks(paks: &Path, utoc: &Path) -> Option<(usize, usize)> {
+    let l = listed(paks, utoc)?;
+    Some((l.iter().filter(|k| k.starts_with("!damaged:")).count(), l.iter().filter(|k| k.starts_with("!moved:")).count()))
+}
+
+/// The material instances in the container `utoc` by their class, and its marked packages as "!<mark>:<key>"
+/// (xtra_uat_cli::listing), kept per file (its size and time written) and decoder, in memory and in
+/// repakxtra-mod-classes.json: each listing runs a process (about 0.3 s), and every launch asked again for every mod
+/// an update touched.
+fn listed(paks: &Path, utoc: &Path) -> Option<Vec<String>> {
     static SEEN: Mutex<Option<HashMap<String, ((u64, u64), Vec<String>)>>> = Mutex::new(None);
     let file = crate::app_dir().join("repakxtra-mod-classes.json");
-    let (key, stamp) = (decoder_key(utoc, crate::xtra_vfx::parser_id()), file_stamp(utoc));
+    // (the game's build too: the marks say what this game lacks or moved, which its next update can change)
+    let key = format!("{}|{}", decoder_key(utoc, crate::xtra_vfx::parser_id()), crate::xtra_vfx::game_cl(paks).unwrap_or(0));
+    let stamp = file_stamp(utoc);
     let known = |m: &mut Option<HashMap<String, ((u64, u64), Vec<String>)>>| {
         m.get_or_insert_with(|| std::fs::read_to_string(&file).ok().and_then(|t| serde_json::from_str(&t).ok()).unwrap_or_default()).get(&key).filter(|(s, _)| Some(*s) == stamp).map(|(_, f)| f.clone())
     };
     if let Some(found) = known(&mut SEEN.lock().unwrap_or_else(|e| e.into_inner())) {
         return Some(found);
     }
-    let listed = crate::xtra_uat_cli::classes(utoc, paks)?;
-    // a class it could not name (no script objects): not known, and asked again next time
-    if listed.is_empty() || listed.iter().any(|(_, c)| c.is_empty() || c.to_ascii_lowercase().contains("unknown")) {
+    let listed = crate::xtra_uat_cli::listing(utoc, paks)?;
+    // a class it could not name (no script objects): not known, and asked again next time. A marked package says its
+    // own: a class the game moved reads as unknown when it is the package's own
+    if listed.is_empty() || listed.iter().any(|(_, c, mark)| mark.is_empty() && (c.is_empty() || c.to_ascii_lowercase().contains("unknown"))) {
         return None;
     }
-    let found: Vec<String> = listed.iter().filter(|(_, c)| c.starts_with("MaterialInstance")).map(|(p, _)| match_key(p)).collect();
+    let found: Vec<String> = listed.iter().filter(|(_, c, _)| c.starts_with("MaterialInstance")).map(|(p, _, _)| match_key(p))
+        .chain(listed.iter().filter(|(_, _, mark)| !mark.is_empty()).map(|(p, _, mark)| format!("!{mark}:{}", match_key(p))))
+        .collect();
     if let Some(s) = stamp {
         let mut seen = SEEN.lock().unwrap_or_else(|e| e.into_inner());
         let all = seen.get_or_insert_with(HashMap::new);
@@ -555,6 +569,9 @@ struct Facts<'a> {
     layout: Option<Option<String>>,
     /// a mesh with more bones than its rebuilt skeleton (xtra_mesh.rs), the reason
     mesh: Option<String>,
+    /// packages the game cannot load as they are (class_marks): (left without a class by an earlier update, using a
+    /// game class a game update moved)
+    class_marks: (usize, usize),
 }
 
 /// The verdict for one mod, or None when it looks fine. Pure: the facts come in, the words go out.
@@ -574,6 +591,24 @@ fn judge(path: &str, m: &Facts, game_updated: u64, game: &GameAssets) -> Option<
             stale_niagara: 0,
             usmap_wait: 0,
         off_only: false,
+        });
+    }
+    // an emote an earlier update left without a class (the game crashes on it), or one that still names a class a
+    // game update moved (Season 11: AnimNotifyState_SetComponentsInActorVisible). The Mod Updater repairs both
+    let (damaged, moved) = m.class_marks;
+    if !m.fixed && damaged + moved > 0 {
+        let files = |n: usize| if n == 1 { "1 of its files".to_string() } else { format!("{n} of its files") };
+        return Some(Verdict {
+            path: path.to_string(),
+            kind: "vfx",
+            reason: if damaged > 0 {
+                format!("An earlier update left {} without a game class, so the game crashes on it. The Mod Updater rebuilds it from its original.", files(damaged))
+            } else {
+                format!("A game update moved a game class that {} use{}, so the game cannot load {}. The Mod Updater points {} at the class's new place.", files(moved), if moved == 1 { "s" } else { "" }, if moved == 1 { "it" } else { "them" }, if moved == 1 { "it" } else { "them" })
+            },
+            stale_niagara: 0,
+            usmap_wait: 0,
+            off_only: false,
         });
     }
     // a mesh with more bones than the skeleton the game rebuilt since the mod was made (xtra_mesh.rs read both): first,
@@ -939,6 +974,20 @@ pub async fn xtra_broken_mods(mod_paths: Vec<String>, state: State<'_, Arc<Mutex
                 && crate::xtra_vfx::partial_stem(&stem).eq_ignore_ascii_case(&stem)
                 && installed_mods.contains(&base(&path.with_file_name(format!("{}.pak", crate::xtra_vfx::original_stem(&stem)))))
         };
+        // mods with animations have their container listed for class marks, several at a time (about half a second
+        // each, once per file: listed keeps them). shortcut: animations only, where Season 11 moved a class; list
+        // every mod if a later update moves a class other kinds use
+        use rayon::prelude::*;
+        let marked: HashMap<&String, (usize, usize)> = mod_paths
+            .par_iter()
+            .filter_map(|p| {
+                let path = PathBuf::from(p);
+                if crate::xtra_setup::is_managed_loader(&path) || crate::xtra_builtins::in_folder(&path) { return None; }
+                let details = crate::compute_mod_details(&path, &state).ok()?;
+                if !details.files.iter().any(|f| is_package(f) && is_animation(&match_key(f))) { return None; }
+                Some((p, class_marks(&paks, &path.with_extension("utoc"))?))
+            })
+            .collect();
         let mut verdicts = mod_paths
             .iter()
             .filter_map(|p| {
@@ -994,6 +1043,7 @@ pub async fn xtra_broken_mods(mod_paths: Vec<String>, state: State<'_, Arc<Mutex
                     vfx,
                     materials: !vfx && crate::xtra_vfx::updatable(&details.category, &details.files),
                     mesh: crate::xtra_mesh::found_now(&meshes, &path.with_extension("utoc"), game_updated),
+                    class_marks: marked.get(p).copied().unwrap_or_default(),
                     // an update found nothing to rebuild in it (this file, this game): judged like one with its fix beside it
                     fixed: has_fix(&path),
                     cleared: found == Some(false),
@@ -1016,8 +1066,8 @@ pub async fn xtra_broken_mods(mod_paths: Vec<String>, state: State<'_, Arc<Mutex
             })
             .collect::<Vec<Verdict>>();
         // an update the Mod Updater made for this game is never flagged Needs update or Safety unknown again (the Mod
-        // Updater's list says Updated), unless the new USMAP can finish a partial one or its files are in an older layout,
-        // which can crash the game
+        // Updater's list says Updated), unless the new USMAP can finish a partial one, its files are in an older layout,
+        // or its class references do not load, each of which can crash the game
         verdicts.retain(|v| {
             let p = Path::new(&v.path);
             let utoc = p.with_extension("utoc");
@@ -1029,6 +1079,8 @@ pub async fn xtra_broken_mods(mod_paths: Vec<String>, state: State<'_, Arc<Mutex
                 || can_finish(p)
                 || crate::xtra_niagara::known_old_layout(p, &niagara_layouts)
                 || checked_record(&checked, &utoc, game_updated).is_some_and(|c| c.outdated && c.old_layout)
+                // or an earlier update left its files without a class (or naming a moved one): the game crashes on it
+                || marked.get(&&v.path).is_some_and(|(damaged, moved)| damaged + moved > 0)
                 || !made.is_some_and(|s| s.game_updated >= game_updated)
         });
         // A mod that needs an update can be updated with the saved USMAP when no patch newer than it rewrote the files
@@ -1164,7 +1216,7 @@ mod tests {
         files.iter().map(|s| s.to_string()).collect()
     }
     fn facts(files: &[String], installed: u64) -> Facts<'_> {
-        Facts { files, galacta: false, vfx: false, materials: false, fixed: false, cleared: false, has_blueprint: false, installed, anims_moved: false, old_layout: false, layout: None, mesh: None }
+        Facts { files, galacta: false, vfx: false, materials: false, fixed: false, cleared: false, has_blueprint: false, installed, anims_moved: false, old_layout: false, layout: None, mesh: None, class_marks: (0, 0) }
     }
     const LIVE: &str = "Marvel/Content/Marvel/Characters/1026/1026001/Meshes/SK_1026_1026001.uasset";
 
@@ -1355,6 +1407,12 @@ mod tests {
         assert_eq!(judge("m.pak", &moved(250), 200, &game), None, "made after the update");
         assert_eq!(judge("m.pak", &facts(&files, 50), 200, &game), None, "the update did not move animations");
         assert_eq!(judge("m.pak", &Facts { fixed: true, ..moved(50) }, 200, &game), None, "its update sits beside it");
+        // made after the update, but an earlier update left a file without its class, or it names a class the game moved
+        let found = judge("m.pak", &Facts { class_marks: (2, 0), ..facts(&files, 300) }, 200, &game).unwrap();
+        assert_eq!((found.kind, found.reason.contains("left 2 of its files without a game class")), ("vfx", true), "{}", found.reason);
+        let found = judge("m.pak", &Facts { class_marks: (0, 1), ..facts(&files, 300) }, 200, &game).unwrap();
+        assert_eq!((found.kind, found.reason.contains("moved a game class that 1 of its files uses")), ("vfx", true), "{}", found.reason);
+        assert_eq!(judge("m.pak", &Facts { class_marks: (0, 1), fixed: true, ..facts(&files, 300) }, 200, &game), None, "the kept original beside its update");
     }
 
     #[test]
@@ -1427,6 +1485,7 @@ mod tests {
                 vfx,
                 materials: !vfx && crate::xtra_vfx::updatable(&d.category, &d.files),
                 mesh: None,
+                class_marks: (0, 0),
                 fixed: false,
                 cleared: false,
                 has_blueprint: true,

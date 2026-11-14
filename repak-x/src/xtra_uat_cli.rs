@@ -139,22 +139,49 @@ static SERVER: std::sync::Mutex<Option<Server>> = std::sync::Mutex::new(None);
 /// Each package in the container `utoc` with its class (`list_iostore --types`, about 0.3 s for a mod): (path, class).
 /// None without the command line or when it fails.
 pub(crate) fn classes(utoc: &Path, paks: &Path) -> Option<Vec<(String, String)>> {
+    Some(listing(utoc, paks)?.into_iter().map(|(p, c, _)| (p, c)).collect())
+}
+
+/// The packages of `utoc` this game cannot load as they are (uassettool-patches 0021): (path, "damaged") an export
+/// without a class, which an earlier update left where the extract could not name it and the game crashes on,
+/// (path, "moved") a game class a game update moved to another script package, which an extract now reads at its
+/// current place. None without the command line or when it fails. An older command line marks nothing.
+pub(crate) fn class_marks(utoc: &Path, paks: &Path) -> Option<Vec<(String, String)>> {
+    Some(listing(utoc, paks)?.into_iter().filter(|(_, _, mark)| !mark.is_empty()).map(|(p, _, mark)| (p, mark)).collect())
+}
+
+/// (path, class, mark) of each package. The last listing is kept while its file stands: an update asks for the
+/// classes and the marks of the same mod one after the other.
+pub(crate) fn listing(utoc: &Path, paks: &Path) -> Option<Vec<(String, String, String)>> {
+    type Kept = (std::path::PathBuf, Option<std::time::SystemTime>, u64, Vec<(String, String, String)>);
+    static LAST: std::sync::Mutex<Option<Kept>> = std::sync::Mutex::new(None);
+    let meta = std::fs::metadata(utoc).ok()?;
+    let (at, len) = (meta.modified().ok(), meta.len());
+    if let Some((p, t, l, lines)) = &*LAST.lock().unwrap_or_else(|e| e.into_inner()) {
+        if p == utoc && *t == at && *l == len {
+            return Some(lines.clone());
+        }
+    }
     let mut cmd = std::process::Command::new(cli()?);
-    cmd.arg("list_iostore").arg(utoc).arg("--types").arg("--game-paks").arg(paks);
+    cmd.arg("list_iostore").arg(utoc).arg("--types").arg("--class-marks").arg("--game-paks").arg(paks);
     #[cfg(windows)]
     {
         use std::os::windows::process::CommandExt;
         cmd.creation_flags(0x0800_0000 | 0x0000_4000); // CREATE_NO_WINDOW, BELOW_NORMAL_PRIORITY_CLASS
     }
     let out = cmd.output().ok().filter(|o| o.status.success())?;
-    Some(String::from_utf8_lossy(&out.stdout).lines().filter_map(class_line).collect())
+    let lines: Vec<_> = String::from_utf8_lossy(&out.stdout).lines().filter_map(class_line).collect();
+    *LAST.lock().unwrap_or_else(|e| e.into_inner()) = Some((utoc.to_path_buf(), at, len, lines.clone()));
+    Some(lines)
 }
 
-/// One listing line: `  ../../../Marvel/Content/X/MI_A.uasset [no bulk]  <MaterialInstanceConstant>  (export=1b)`.
-fn class_line(line: &str) -> Option<(String, String)> {
+/// One listing line: `  ../../../Marvel/Content/X/MI_A.uasset [no bulk]  <MaterialInstanceConstant>  (export=1b)`, with
+/// `  !moved` or `  !damaged` after the class when the listing marks it.
+fn class_line(line: &str) -> Option<(String, String, String)> {
     let (path, rest) = line.trim_start().split_once(" [")?;
-    let class = rest.split_once("]")?.1.split_once('<')?.1.split_once('>')?.0;
-    Some((path.to_string(), class.to_string()))
+    let (class, after) = rest.split_once("]")?.1.split_once('<')?.1.split_once('>')?;
+    let mark = after.split_whitespace().next().and_then(|w| w.strip_prefix('!')).unwrap_or_default();
+    Some((path.to_string(), class.to_string(), mark.to_string()))
 }
 
 fn start(exe: &Path) -> std::io::Result<Server> {
@@ -267,7 +294,9 @@ mod tests {
     #[test]
     fn a_listing_line_gives_the_package_and_its_class() {
         let l = "  ../../../Marvel/Content/Marvel/UI/Materials/Battle/PP_Sceen_Effect_Dying_Ins.uasset [no bulk]  <MaterialInstanceConstant>  (export=2,793b)";
-        assert_eq!(class_line(l), Some(("../../../Marvel/Content/Marvel/UI/Materials/Battle/PP_Sceen_Effect_Dying_Ins.uasset".into(), "MaterialInstanceConstant".into())));
+        assert_eq!(class_line(l), Some(("../../../Marvel/Content/Marvel/UI/Materials/Battle/PP_Sceen_Effect_Dying_Ins.uasset".into(), "MaterialInstanceConstant".into(), String::new())));
+        let marked = "  ../../../Marvel/Content/Marvel/Characters/1026/1026001/Animations/Emotes/Emote_1_MT.uasset [no bulk]  <AnimMontage>  !damaged  (export=3,096b)";
+        assert_eq!(class_line(marked).map(|(_, c, m)| (c, m)), Some(("AnimMontage".into(), "damaged".into())), "a mark follows the class");
         assert_eq!(class_line("  Summary: 4 packages, 0 with .ubulk"), None);
         assert_eq!(class_line("=== Patch_-Windows_1.1.3984769_P.utoc ==="), None);
     }

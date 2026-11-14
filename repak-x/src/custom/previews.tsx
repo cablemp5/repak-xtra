@@ -398,7 +398,8 @@ function loadUrl(key: string, rev: number): Promise<string | null | undefined> {
 /** A card's looping clip of this animated picture: the one kept from an earlier launch, else made now (thumbWorker.ts
  *  smallClip) and kept. Kept in the browser's Cache storage under the picture's own SHA-1, the width and the boost, so
  *  a preview made again never gets an old clip. Any trouble with the storage: made as before, not kept. */
-const CLIPS = 'repakxtra-clips-2' // 2: the color in BT.601 video range (thumbWorker.ts toI420), clips kept before are made again
+const CLIPS = 'repakxtra-clips-3' // 3: at most 30 frames a second (thumbWorker.ts CLIP_FPS), clips kept before are made again
+for (const old of ['repakxtra-clips-1', 'repakxtra-clips-2']) void globalThis.caches?.delete(old).catch(() => undefined) // the 60 a second ones: never read again
 const CLIPS_MOST = 300 // past this many, the 50 kept longest ago go
 /** How wide a card's clip is made: the card's own width on this screen, in steps of 32 px, to the stills' 400 at
  *  most (and 400 when no card is on screen to measure). Every clip in view is decoded on one thread of the WebView (measured: 20 playing got 36 frames a second each,

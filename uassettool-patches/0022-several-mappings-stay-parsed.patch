@@ -1,0 +1,35 @@
+diff --git a/src/UAssetAPI/Unversioned/Usmap.cs b/src/UAssetAPI/Unversioned/Usmap.cs
+index ff0cdf4..a26afe4 100644
+--- a/src/UAssetAPI/Unversioned/Usmap.cs
++++ b/src/UAssetAPI/Unversioned/Usmap.cs
+@@ -783,9 +783,10 @@ namespace UAssetAPI.Unversioned
+         // asset adds what it learns to them, so a call never sees what an earlier call learned and its output is the
+         // same as with a fresh parse. The parsed schemas themselves are never changed after the read. The parse is
+         // let go 60 s after its last use, and read again when the file changes
++        // (up to three files at once: an update reads a mod with an older game build's mappings and writes it with
++        // today's, in turn, and with one parse kept each switch read the file again, twice a mod)
+         private static readonly object SharedLock = new object();
+-        private static string SharedKey;
+-        private static Usmap SharedParse;
++        private static readonly Dictionary<string, (Usmap Parse, long Used)> SharedParses = new Dictionary<string, (Usmap Parse, long Used)>();
+         private static System.Threading.Timer SharedDrop;
+ 
+         public static Usmap Shared(string path)
+@@ -795,9 +796,14 @@ namespace UAssetAPI.Unversioned
+             Usmap parse;
+             lock (SharedLock)
+             {
+-                if (SharedKey != key) { SharedParse = new Usmap(path); SharedKey = key; }
+-                parse = SharedParse;
+-                SharedDrop ??= new System.Threading.Timer(_ => { lock (SharedLock) { SharedKey = null; SharedParse = null; } });
++                if (!SharedParses.TryGetValue(key, out var held))
++                {
++                    if (SharedParses.Count >= 3) SharedParses.Remove(SharedParses.OrderBy(p => p.Value.Used).First().Key);
++                    held = (new Usmap(path), 0);
++                }
++                SharedParses[key] = (held.Parse, Environment.TickCount64);
++                parse = held.Parse;
++                SharedDrop ??= new System.Threading.Timer(_ => { lock (SharedLock) { SharedParses.Clear(); } });
+                 SharedDrop.Change(60000, System.Threading.Timeout.Infinite);
+             }
+             var names = parse.AreFNamesCaseInsensitive ? StringComparer.InvariantCultureIgnoreCase : StringComparer.InvariantCulture;

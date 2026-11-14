@@ -204,8 +204,23 @@ pub(crate) fn layout(path: &Path) -> Result<std::sync::Arc<Structs>, String> {
 }
 
 /// The structs whose own layout moved between the USMAPs at `old` and `new`: the ones a rewrite gives new headers.
+/// Kept per pair of files while both keep their size (a few pairs): comparing every struct took about 2 s, on every mod
+/// of a batch, for the same answer.
 pub(crate) fn moved_between(old: &Path, new: &Path) -> Result<std::collections::HashSet<String>, String> {
-    Ok(moved_itself(&*layout(old)?, &*layout(new)?))
+    type Pair = ((PathBuf, u64), (PathBuf, u64));
+    static MOVED: Mutex<Vec<(Pair, std::collections::HashSet<String>)>> = Mutex::new(Vec::new());
+    let sized = |p: &Path| std::fs::metadata(p).map(|m| (p.to_path_buf(), m.len())).map_err(|e| e.to_string());
+    let pair: Pair = (sized(old)?, sized(new)?);
+    if let Some((_, m)) = MOVED.lock().unwrap().iter().find(|(p, _)| *p == pair) {
+        return Ok(m.clone());
+    }
+    let m = moved_itself(&*layout(old)?, &*layout(new)?);
+    let mut kept = MOVED.lock().unwrap();
+    if kept.len() >= 4 {
+        kept.remove(0);
+    }
+    kept.push((pair, m.clone()));
+    Ok(m)
 }
 
 /// Each export's own unversioned header (`OriginalUnversionedHeader`, the class's property indices the file was cooked
