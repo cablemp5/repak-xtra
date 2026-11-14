@@ -1064,8 +1064,8 @@ pub async fn xtra_broken_mods(mod_paths: Vec<String>, state: State<'_, Arc<Mutex
             })
             .collect::<Vec<Verdict>>();
         // an update the Mod Updater made for this game is never flagged Needs update or Safety unknown again (the Mod
-        // Updater's list says Updated), unless the new USMAP can finish a partial one or its files are in an older layout,
-        // which can crash the game
+        // Updater's list says Updated), unless the new USMAP can finish a partial one, its files are in an older layout,
+        // or its class references do not load, each of which can crash the game
         verdicts.retain(|v| {
             let p = Path::new(&v.path);
             let utoc = p.with_extension("utoc");
@@ -1077,6 +1077,8 @@ pub async fn xtra_broken_mods(mod_paths: Vec<String>, state: State<'_, Arc<Mutex
                 || can_finish(p)
                 || crate::xtra_niagara::known_old_layout(p, &niagara_layouts)
                 || checked_record(&checked, &utoc, game_updated).is_some_and(|c| c.outdated && c.old_layout)
+                // or an earlier update left its files without a class (or naming a moved one): the game crashes on it
+                || marked.get(&&v.path).is_some_and(|(damaged, moved)| damaged + moved > 0)
                 || !made.is_some_and(|s| s.game_updated >= game_updated)
         });
         // A mod that needs an update can be updated with the saved USMAP when no patch newer than it rewrote the files
