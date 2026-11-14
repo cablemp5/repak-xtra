@@ -224,6 +224,7 @@ async function rebuild(o: FixOptions): Promise<VfxReport> {
   }
   const warn = (w: string) => { report.warnings.push(w); log(w, 'warning') }
   let runId: string | undefined // its work folder, removed when the run ends (placed or dropped by then)
+  let niagaraEarly: Promise<NiagaraRun> | undefined // the Niagara rebuild started before step 7
   const strict = o.policy !== 'bestEffort'
   const changePolicy = 'Review the asset report, or choose Best effort in Advanced > Repair policy.'
 
@@ -399,11 +400,13 @@ async function rebuild(o: FixOptions): Promise<VfxReport> {
 
     // ---- 7 (after 6, or early when the mod changes only Niagara files): rebuild the stale Niagara files ----
     let niagaraDone = 0, niagaraUpdated = 0 // carried, and of those the ones counted as updated (the rest match the game)
+    // quiet: started early (below), its progress lines would take the place of the step the row shows
+    const niagaraRun = (quiet: boolean) => invoke<NiagaraRun>('xtra_vfx_niagara', { gamePaks: o.gamePaksPath, usmapPath: o.usmapPath, modExtract: dirs.modExtract, files: staleFiles.map(rel),
+      finalUassets: dirs.finalUassets, stageDir: dirs.stage, vanillaExtract: dirs.vanillaExtract, quiet })
     const rebuildNiagara = async () => {
       if (!staleFiles.length) return
       enter(7)
-      const r = await invoke<NiagaraRun>('xtra_vfx_niagara', { gamePaks: o.gamePaksPath, usmapPath: o.usmapPath, modExtract: dirs.modExtract, files: staleFiles.map(rel),
-        finalUassets: dirs.finalUassets, stageDir: dirs.stage, vanillaExtract: dirs.vanillaExtract })
+      const r = await (niagaraEarly ?? niagaraRun(false))
       if (!r.ready) { log(`The Niagara files stay left out: ${r.why}.`, 'warning'); return }
       const results = new Map(r.files.map(f => [assetKey(f.file), f]))
       for (const a of report.assets) {
@@ -540,6 +543,11 @@ async function rebuild(o: FixOptions): Promise<VfxReport> {
     enter(2)
     const modJson = await invoke<string[]>('vfx_convert_uassets_to_json', { usmapPath: o.usmapPath, inputDir: dirs.modExtract, outputDir: dirs.modJson })
     log(`Converted ${plural(modJson.length, 'material or blueprint', 'materials and blueprints')} to JSON.`)
+
+    // The Niagara rebuild reads and writes only the Niagara files, and steps 3 to 6 run here in the window, where the
+    // tool sits idle (it takes one call at a time): started now, it runs beside them (about 8 s of a 45 s update) and
+    // step 7 only waits for the rest of it. Not under Strict, where a run that stops at step 6 never needs it
+    if (!strict && staleFiles.length) { niagaraEarly = niagaraRun(true); niagaraEarly.catch(() => {}) }
 
     // ---- 3: what to carry ----
     enter(3)
@@ -715,6 +723,8 @@ async function rebuild(o: FixOptions): Promise<VfxReport> {
     const now = performance.now()
     if (step) report.steps.push({ step, ms: now - stepAt })
     report.ms = now - t0
+    // a run that stopped before step 7 (a cancel, a failure): its early Niagara rebuild still writes in the work folder
+    await niagaraEarly?.catch(() => {})
     if (runId) await invoke('xtra_vfx_run_done', { runId }).catch(() => {})
     // here, where the early returns pass too: Needs VFX update stops flagging it until the mod or the game changes (xtra_broken.rs)
     // not when its materials were rewritten: the original stays installed in the old layout and still needs turning off

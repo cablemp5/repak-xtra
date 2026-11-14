@@ -75,6 +75,11 @@ Checked on one dance emote (2026-11-14): its original lists `!moved` on both mon
 under `/Script/MarvelAnimNotify`, the copy an earlier update made lists `!damaged`, and the rebuilt mod lists neither, with
 that export read whole like the game's own. The game's Character, VFX, and UI containers (312,027 packages) list no mark.
 
+`0022-several-mappings-stay-parsed.patch`: 0018 kept one parsed mappings file. An update reads a mod with an older game
+build's mappings and writes it with today's, in turn, so each switch parsed a file again (about 0.8 s, twice a mod). Up to
+three stay parsed now, the least recently used one going first, all let go 60 s after the last use as before. Each call
+still gets its own copy.
+
 ## Refreshing a patch
 
 When `build.ps1` says a patch no longer applies (the submodule moved to a newer upstream commit):

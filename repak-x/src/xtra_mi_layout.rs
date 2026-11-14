@@ -240,20 +240,31 @@ pub(crate) async fn relayout(usmap: &str, mod_extract: &Path, rels: &[String], o
             }
         };
         moved.extend(pair.iter().cloned());
+        lap("older mappings compared with today's");
         let (input, json) = (work.join("old"), work.join("old_json"));
         let names: Vec<String> = pending.iter().map(|(r, _)| r.clone()).collect();
         stage_links(mod_extract, &input, &names)?;
         if to_json(&old, &input, &json, progress).await.is_err() {
             continue;
         }
-        pending.retain(|(r, today)| {
-            let Some(j) = decode(&json, r) else { return true };
-            let Some(then) = decoded(&j, &moved) else { return today.is_none() }; // read whole today: today's layout is right
+        lap("decode with older mappings");
+        // each file told on its own, several at a time (a mod's 400 materials are 100 MB of JSON read twice here, about
+        // a second one after the other), then taken in the list's order so the result is the same
+        enum Told {
+            Unread,
+            Settled,
+            Rewritten,
+            Failed(String),
+        }
+        let told: Vec<Told> = pending.par_iter().map(|(r, today)| {
+            let Some(j) = decode(&json, r) else { return Told::Unread };
+            // read whole today: today's layout is right
+            let Some(then) = decoded(&j, &moved) else { return if today.is_none() { Told::Unread } else { Told::Settled } };
             if today.as_ref().and_then(|t| decoded(t, &moved)).is_some_and(|t| t == then) {
-                return false; // the same in both layouts: nothing to rewrite
+                return Told::Settled; // the same in both layouts: nothing to rewrite
             }
             if today.as_ref().is_some_and(|t| !old_reading_right(t, &j, game.get(r), older)) {
-                return false; // both read whole and today's reading is the right one
+                return Told::Settled; // both read whole and today's reading is the right one
             }
             // the file as the tool read it, headers and all: the moved structs' headers go, the exports' are remapped
             let mut same_layout = false;
@@ -269,22 +280,31 @@ pub(crate) async fn relayout(usmap: &str, mod_extract: &Path, rels: &[String], o
                 std::fs::create_dir_all(to.parent().unwrap_or(&fixed_json)).and_then(|_| std::fs::write(&to, to_tool_json(&mut raw))).map_err(|e| e.to_string())
             });
             match rewritten {
-                Ok(()) if same_layout => {}
-                Ok(()) => {
-                    out.files.push(r.clone());
+                Ok(()) if same_layout => Told::Settled,
+                Ok(()) => Told::Rewritten,
+                Err(e) => Told::Failed(e),
+            }
+        }).collect();
+        let mut left = Vec::new();
+        for ((r, today), told) in std::mem::take(&mut pending).into_iter().zip(told) {
+            match told {
+                Told::Unread => left.push((r, today)),
+                Told::Settled => {}
+                Told::Rewritten => {
+                    out.files.push(r);
                     out.old_build = out.old_build.or(usmap_build(&old));
                 }
-                Err(e) => {
+                Told::Failed(e) => {
                     log::warn!("[vfx relayout] {r}: {e}");
                     if std::env::var_os("REPAKXTRA_TIMING").is_some() {
                         eprintln!("[relayout] {r}: {e}");
                     }
-                    out.failed.push(r.clone());
+                    out.failed.push(r);
                 }
             }
-            false
-        });
-        lap("decode with older mappings and compare");
+        }
+        pending = left;
+        lap("compare with the older reading");
     }
     // old_first: what no older USMAP read is read with today's after all (a file already in today's layout)
     // (only when an older USMAP was had and did not read them: with none to ask, today's reading proves nothing)
@@ -317,7 +337,8 @@ pub(crate) async fn relayout(usmap: &str, mod_extract: &Path, rels: &[String], o
     to_json(usmap, &fixed, &check, progress).await?;
     lap("read back");
     let mut kept = Vec::new();
-    for r in std::mem::take(&mut out.files) {
+    // (several at a time, as above: two decodes and two copies a file)
+    let checked: Vec<(String, Option<&str>, bool)> = std::mem::take(&mut out.files).into_par_iter().map(|r| {
         let why = match (decode(&check, &r), decode(&fixed_json, &r)) {
             (Some(a), Some(b)) => match (decoded(&a, &moved), decoded(&b, &moved)) {
                 (Some(x), Some(y)) if x == y => None,
@@ -327,18 +348,20 @@ pub(crate) async fn relayout(usmap: &str, mod_extract: &Path, rels: &[String], o
             (None, _) => Some("was not written"),
             _ => Some("its rewrite could not be read"),
         };
+        let copied = why.is_none()
+            && ["uasset", "uexp"].iter().all(|x| {
+                let (from, to) = (fixed.join(format!("{r}.{x}")), mod_extract.join(format!("{r}.{x}")));
+                from.is_file() && std::fs::copy(&from, &to).is_ok()
+            });
+        (r, why, copied)
+    }).collect();
+    for (r, why, copied) in checked {
         if let Some(why) = why {
             log::warn!("[vfx relayout] {r}: {why}");
             if std::env::var_os("REPAKXTRA_TIMING").is_some() {
                 eprintln!("[relayout] {r}: {why}");
             }
         }
-        let same = why.is_none();
-        let copied = same
-            && ["uasset", "uexp"].iter().all(|x| {
-                let (from, to) = (fixed.join(format!("{r}.{x}")), mod_extract.join(format!("{r}.{x}")));
-                from.is_file() && std::fs::copy(&from, &to).is_ok()
-            });
         if copied { kept.push(r) } else { out.failed.push(r) }
     }
     out.files = kept;
