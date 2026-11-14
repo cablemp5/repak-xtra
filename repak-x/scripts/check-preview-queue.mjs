@@ -8,7 +8,7 @@ const source = readFileSync(new URL('../src/custom/previews.tsx', import.meta.ur
 const ast = ts.createSourceFile('previews.tsx', source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX)
 const names = new Set(`queue active batchDone run runPaths version listeners notify subscribe current leftArmed leftSaved leftPending LEFT_KEY
 readLeft unfinished saveLeft armLeft running generatePreviews refuse start startNext finish stop usePreviewFailureToast
-resuming retryAt tries RETRY_MS TRIES retryLater launched asking earlyDone gaveUp`.split(/\s+/))
+resuming retryAt tries RETRY_MS TRIES retryLater launched asking earlyDone gaveUp batchStart`.split(/\s+/))
 const declarations = ast.statements.filter(n => names.has(n.name?.text) || n.declarationList?.declarations.some(d => names.has(d.name.text)))
 assert.equal(declarations.length, names.size, 'Every queue declaration must be exercised')
 const code = ts.transpileModule(declarations.map(n => n.getText(ast).replace(/^export /, '')).join('\n'), {
@@ -25,7 +25,7 @@ function session(available = true, early = false) {
     localStorage: { getItem: k => storage.get(k) ?? null, setItem: (k, v) => storage.set(k, v), removeItem: k => storage.delete(k) },
     jobId: j => j.set ?? j.paths.join(), nameKey: p => p.split('/').at(-1), keysOf: j => j.paths,
     koPreview: async () => false, invoke: async (command, args) => { calls.push({ command, args }); if (early && command === 'generate_mod_previews') vm.runInContext('if (asking) earlyDone = true', context); return true },
-    play() {}, showPreviewCover() {}, verdictOf() {}, syncPreviewList() {},
+    play() {}, learn() {}, showPreviewCover() {}, verdictOf() {}, syncPreviewList() {},
     useEffect: fn => cleanups.push(fn()), plural: (n, word) => `${n} ${word}`, previewSetKey: n => `loadout-${n}`,
     alert: { info: (...args) => { toasts.push(args); return 1 }, dismissAlert() {}, error() {}, warning() {} },
   })

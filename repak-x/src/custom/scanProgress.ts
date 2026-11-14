@@ -77,9 +77,9 @@ export const scanStage = (stage: number, weights: number[], mods: number, count?
   showSoon()
 }
 /** brokenMods.ts: the run ended. `finished`: false when it stopped with mods left to read, or failed. */
-export const scanEnded = (finished: boolean) => {
+export const scanEnded = (finished: boolean, whole = finished) => {
   // a whole run teaches the time per unit (the dev copy is a debug build, several times slower than the app)
-  if (finished && run.started && run.mods > 0 && !import.meta.env.DEV) learn('scan-unit', (Date.now() - run.started) / units(run.weights))
+  if (whole && run.started && run.mods > 0 && !import.meta.env.DEV) learn('scan-unit', (Date.now() - run.started) / units(run.weights))
   set({ running: false, paused: !finished && run.held !== 'cancelled' })
   window.dispatchEvent(new Event(SCAN_DONE))
   void emit(SCAN_DONE).catch(() => {}) // and the Mod Updater window, which follows the run (its Scan starts one)

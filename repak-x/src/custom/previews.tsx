@@ -237,7 +237,7 @@ function finish(ok: boolean) {
   }
   play(run.busy ? 'warning' : stoppedEarly ? 'close' : run.made && !failed && run.setResult !== 'failed' ? 'ready' : run.made ? 'warning' : 'error')
   // a run that went through teaches this PC's time per mod (KO prompts and unchanged mods take no time: they count too)
-  if (!stopped && !run.busy && run.total > 0 && run.made + run.none > 0) { const ms = (Date.now() - runStart) / run.total; if (ms >= 2000) learn('preview', ms) } // under 2 s a mod: kept unchanged, not rendered
+  if (ok && !stopped && !run.busy && run.total > 0 && run.made + run.none > 0) { const ms = (Date.now() - runStart) / run.total; if (ms >= 2000) learn('preview', ms) } // under 2 s a mod: kept unchanged, not rendered
   if (!run.busy) { batchDone++; batchMods += run.total }
   notify()
   syncPreviewList()
@@ -603,6 +603,7 @@ export const generatePreviews = (job: Job): Promise<string | null> => {
 const refuse = (job: Job, reason: string) => {
   leftPending = unfinished()
   active = false
+  batchStart = 0; batchMods = 0 // a retry's wait is not the batch's pace
   if (resuming) { pending.clear(); queue.length = 0; retryLater(); return reason } // the batch waits and tries again, quietly
   pending.clear()
   for (const j of [job, ...queue]) keysOf(j).forEach(k => outcome.set(k, reason))
