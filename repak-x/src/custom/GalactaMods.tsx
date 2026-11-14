@@ -15,7 +15,7 @@ export async function openGalacta() {
 /** Header button, hidden until Settings > Header buttons shows it (like Encrypt). */
 export default function GalactaMods() {
   return (
-    <button type="button" className="btn-settings" data-tour="galacta-btn" title="Make mods Project Galacta compatible"
+    <button type="button" className="btn-settings" data-tour="galacta-btn" data-hotkey="Ctrl+Shift+G" title="Make mods Project Galacta compatible"
       onClick={() => void openGalacta().catch(e => console.error('[Galacta] Window error:', e))}>
       <GalactaLogo /> <span className="hdr-label">Galacta Converter</span>
     </button>

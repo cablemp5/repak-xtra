@@ -3854,6 +3854,7 @@ function App() {
           <button
             className="btn-settings btn-vfx"
             data-tour="vfx-updater-btn"
+            data-hotkey="Ctrl+M"
             title="Open the Mod Updater"
             onClick={async () => {
               await openVfxUpdaterWindow()
@@ -3870,6 +3871,7 @@ function App() {
             onClick={() => setPanel('tools', true)}
             className="btn-settings"
             data-tour="tools-btn"
+            data-hotkey="Ctrl+T"
             title="Tools"
             aria-label="Tools" // repakxtra: keeps its name when Icons only hides the label
           >

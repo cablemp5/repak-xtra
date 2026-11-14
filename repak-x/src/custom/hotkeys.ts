@@ -22,6 +22,10 @@ export const SHORTCUT_GROUPS: { title: string; items: Shortcut[] }[] = [
       { keys: ['F1'], action: 'Show this list' },
       { keys: ['Ctrl', 'G'], action: 'Launch the game' },
       { keys: ['Ctrl', 'O'], action: 'Install PAKs or archives' },
+      { keys: ['Ctrl', 'S'], action: 'Open Setup' },
+      { keys: ['Ctrl', 'M'], action: 'Open the Mod Updater' },
+      { keys: ['Ctrl', 'T'], action: 'Open Tools' },
+      { keys: ['Ctrl', 'Shift', 'G'], action: 'Open the Galacta Converter' },
       { keys: ['Ctrl', ','], action: 'Open Settings' },
       { keys: ['Ctrl', 'F'], action: 'Search (or press /)' },
       { keys: ['Esc'], action: 'Close panel / deselect' },
@@ -103,11 +107,17 @@ window.addEventListener('keydown', e => {
   }
   const key = e.key.toLowerCase()
 
+  // the header buttons open on Ctrl + their letter (Shift + the letter shows or hides them), as their tooltips say.
+  // A hidden button is not there, so its keys do nothing
   if (e.ctrlKey && !e.shiftKey && !e.altKey) {
     if (key === 'g') click('[data-tour="launch-btn"]')
     else if (key === 'o') click('[data-tour="install-btn"]')
+    else if (key === 's') click('[data-tour="setup-btn"]')
+    else if (key === 'm') click('[data-tour="vfx-updater-btn"]')
+    else if (key === 't') click('[data-tour="tools-btn"]')
     return
   }
+  if (e.ctrlKey && e.shiftKey && !e.altKey && key === 'g') { click('[data-tour="galacta-btn"]'); return } // Ctrl+G launches
   if (e.ctrlKey || e.altKey || e.metaKey) return
   const header = e.shiftKey ? HEADER.find(h => h.key === key) : undefined
   if (header) { e.preventDefault(); togglePref(header.pref, `${header.name} button`); return }
