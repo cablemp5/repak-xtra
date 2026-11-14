@@ -27,7 +27,7 @@ $stale = { param($f) -not (Test-Path $f) -or (Get-ChildItem uassettool-patches\*
 # set (the other edition: a patch it has and this one lacks changes no timestamp here)
 . .\uassettool-patches\apply.ps1 # with repakxtra's fixes, as build.ps1 builds it
 $src = 'target\uassettool-cli\UAssetTool.source'
-$was = if (Test-Path $src) { @(("$(Get-Content -Raw $src)".Trim()) -split "`r?`n") } else { @() }
+$was = @(if (Test-Path $src) { ("$(Get-Content -Raw $src)".Trim()) -split "`r?`n" }) # @(): 5.1 unwraps one line to a string
 if ((& $stale $uat) -or (& $stale $cli) -or $was[0] -ne (Get-UatSourceId)) {
     Use-UatPatches {
         Remove-Item UAssetToolRivals\src\UAssetTool\obj, UAssetToolRivals\src\UAssetTool\bin -Recurse -Force -ErrorAction SilentlyContinue
