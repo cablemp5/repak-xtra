@@ -85,7 +85,9 @@ export const useGlobalTooltips = () => {
       tooltip.offsetHeight;
 
       // Position tooltip
-      const tooltipRect = tooltip.getBoundingClientRect();
+      // repakxtra: its layout size, not getBoundingClientRect: the entrance starts at scale(0.92), so the box read 8% narrow
+      // and a tooltip near the window's edge grew past it once shown
+      const tooltipRect = { width: tooltip.offsetWidth, height: tooltip.offsetHeight };
       const viewportWidth = window.innerWidth;
 
       // Default to top placement
