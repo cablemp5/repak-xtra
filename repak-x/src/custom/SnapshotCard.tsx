@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { open as pickFile, save as pickSave } from '@tauri-apps/plugin-dialog'
 import ConfirmRow from './ConfirmRow'
-import { Camera, History, Import } from 'lucide-react'
+import { Archive, History, Import } from 'lucide-react'
 import type { useAlert } from '../components/AlertHandler'
 
 type Alert = ReturnType<typeof useAlert>
@@ -28,7 +28,7 @@ export function SnapshotCard({ alert }: { alert: Alert }) {
   useEffect(refresh, [])
   const run = async (what: string, f: () => Promise<void>) => {
     setBusy(what)
-    try { await f() } catch (e) { alert.warning('Snapshots', String(e)) } finally { setBusy(null); refresh() }
+    try { await f() } catch (e) { alert.warning('Backups', String(e)) } finally { setBusy(null); refresh() }
   }
   // making one keeps the newest 3 in all: imports can leave more, so it can drop several (newest first in the list)
   const drops = list && list.length >= 3 ? list.slice(2) : []
@@ -36,30 +36,30 @@ export function SnapshotCard({ alert }: { alert: Alert }) {
     : `the ${drops.length} oldest, from ${when(drops[drops.length - 1].created)} to ${when(drops[0].created)}`
   const make = () => run('make', async () => {
     const s = await invoke<Snapshot>('snapshot_create')
-    alert.success('Snapshot saved', `${plural(s.files, 'file')}, ${size(s.bytes)}.${drops.length ? ` Removed ${dropText}.` : ''} You can verify game files in Steam now.`)
+    alert.success('Backup saved', `${plural(s.files, 'file')}, ${size(s.bytes)}.${drops.length ? ` Removed ${dropText}.` : ''} You can verify game files in Steam now.`)
   })
   // a .zip of a snapshot or of mod files becomes the newest snapshot (snapshot_import keeps only mod files)
   const importZip = async () => {
-    const f = await pickFile({ title: 'A snapshot or mod files zip', filters: [{ name: 'Zip', extensions: ['zip'] }] }).catch(() => null)
+    const f = await pickFile({ title: 'A backup or mod files zip', filters: [{ name: 'Zip', extensions: ['zip'] }] }).catch(() => null)
     if (typeof f !== 'string') return
     await run('import', async () => {
       const s = await invoke<Snapshot>('snapshot_import', { path: f })
-      alert.success('Snapshot imported', `${plural(s.files, 'mod file')}, ${size(s.bytes)}. Restore puts them back when they go missing.`)
+      alert.success('Backup imported', `${plural(s.files, 'mod file')}, ${size(s.bytes)}. Restore puts them back when they go missing.`)
     })
   }
   // its mod files as a .zip to keep elsewhere or move to another PC (Import reads it back)
   const exportZip = async (s: Snapshot) => {
     const day = new Date(s.created * 1000).toISOString().slice(0, 10)
-    const to = await pickSave({ title: 'Export snapshot', defaultPath: `repakxtra-snapshot-${day}.zip`, filters: [{ name: 'Zip', extensions: ['zip'] }] }).catch(() => null)
+    const to = await pickSave({ title: 'Export backup', defaultPath: `repakxtra-backup-${day}.zip`, filters: [{ name: 'Zip', extensions: ['zip'] }] }).catch(() => null)
     if (!to) return
     await run(`export:${s.id}`, async () => {
       const n = await invoke<number>('snapshot_export', { id: s.id, path: to })
-      alert.success('Snapshot exported', `${plural(n, 'mod file')} saved. Import a snapshot reads it back.`)
+      alert.success('Backup exported', `${plural(n, 'mod file')} saved. Import a backup reads it back.`)
     })
   }
   const restore = (id: string) => run(`restore:${id}`, async () => {
     const r = await invoke<{ mods: number; setup: number }>('snapshot_restore', { id })
-    alert.success('Snapshot restored', r.mods + r.setup === 0 ? 'Nothing was missing.'
+    alert.success('Backup restored', r.mods + r.setup === 0 ? 'Nothing was missing.'
       : [r.mods && `${plural(r.mods, 'mod file')} put back`, r.setup && `${plural(r.setup, 'bypass file')} put back`].filter(Boolean).join(', ') + '.')
   })
   const remove = (id: string) => run(`delete:${id}`, async () => { setAsking(null); await invoke('snapshot_delete', { id }) })
@@ -69,14 +69,14 @@ export function SnapshotCard({ alert }: { alert: Alert }) {
     <section className="su-card su-snapshots">
       <div className="su-card-head">
         <div>
-          <h3>Snapshots</h3>
+          <h3>Backups</h3>
           {/* one lede: what it is, when to make one, what Restore does (was two stacked paragraphs) */}
           <p>A full copy of your mods and the bypass files. Make one before you verify game files in Steam, reinstall, or move the game. Restore puts back only what went missing, so later changes stay.</p>
         </div>
         {/* optional, so None yet is the plain gray chip, not the blue one that means an install is needed */}
         <span className={`su-chip${list?.length ? ' is-installed' : ''}`}>{failed ? 'Unknown' : !list ? 'Checking…' : list.length ? `${list.length} saved` : 'None yet'}</span>
       </div>
-      {failed && <p className="su-note">Could not read your snapshots. {failed} <button type="button" className="su-link" onClick={refresh}>Try again</button></p>}
+      {failed && <p className="su-note">Could not read your backups. {failed} <button type="button" className="su-link" onClick={refresh}>Try again</button></p>}
       {list && list.length > 0 && <ul className="su-parts">
         {list.map(s => (
           <li key={s.id} className="su-part">
@@ -87,21 +87,21 @@ export function SnapshotCard({ alert }: { alert: Alert }) {
             </div>
             <span className="su-part-links">
               <button type="button" className="su-link" disabled={locked} onClick={() => restore(s.id)}
-                title="Puts back the files this snapshot has that are gone now. Never overwrites a file">{busy === `restore:${s.id}` ? 'Restoring…' : 'Restore'}</button>
+                title="Puts back the files this backup has that are gone now. Never overwrites a file">{busy === `restore:${s.id}` ? 'Restoring…' : 'Restore'}</button>
               <button type="button" className="su-link" disabled={locked} onClick={() => void exportZip(s)}
                 title="Saves its mod files as a .zip, to keep elsewhere or import on another PC">{busy === `export:${s.id}` ? 'Exporting…' : 'Export'}</button>
               <button type="button" className="su-link" disabled={locked} onClick={() => setAsking(s.id)}>{busy === `delete:${s.id}` ? 'Deleting…' : 'Delete'}</button>
             </span>
             {/* asks in its own row, naming it, like Setup's other removes (Law of Proximity) */}
-            {asking === s.id && <ConfirmRow className="su-row-confirm" text={`Delete the ${when(s.created)} snapshot (${size(s.bytes)})? Your mods stay.`}
+            {asking === s.id && <ConfirmRow className="su-row-confirm" text={`Delete the ${when(s.created)} backup (${size(s.bytes)})? Your mods stay.`}
               yes="Delete" onYes={() => remove(s.id)} onNo={() => setAsking(null)} />}
           </li>
         ))}
       </ul>}
       <div className="su-actions">
         {/* only once the list is read: its warning about the oldest one has to be right before a snapshot can drop it */}
-        <button type="button" className="btn-primary su-main" disabled={locked || !list || Boolean(failed)} onClick={make}><Camera size={14} aria-hidden="true" />{busy === 'make' ? 'Copying…' : 'Make a snapshot'}</button>
-        <button type="button" className="lo-text-btn" disabled={locked || !list} onClick={importZip}><Import size={14} aria-hidden="true" />{busy === 'import' ? 'Importing…' : 'Import a snapshot'}</button>
+        <button type="button" className="btn-primary su-main" disabled={locked || !list || Boolean(failed)} onClick={make}><Archive size={14} aria-hidden="true" />{busy === 'make' ? 'Copying…' : 'Make a backup'}</button>
+        <button type="button" className="lo-text-btn" disabled={locked || !list} onClick={importZip}><Import size={14} aria-hidden="true" />{busy === 'import' ? 'Importing…' : 'Import a backup'}</button>
         {list && <span className="su-meta">{estimate ? `${plural(estimate[0], 'file')}, about ${size(estimate[1])} each. ` : ''}{drops.length ? `Making one removes ${dropText}.` : 'The newest 3 are kept.'}</span>}
       </div>
     </section>
@@ -119,7 +119,7 @@ export function checkSnapshotLoss(alert: Alert, openSetup: () => void) {
     // shortcut: half the snapshot gone stands in for "not a few deliberate deletes", tune it if people report noise
     if (mods * 2 < s.files && setup === 0) return
     const what = [mods && plural(mods, 'mod file'), setup && plural(setup, 'bypass file')].filter(Boolean).join(' and ')
-    const id = alert.warning('Files missing since your snapshot', `${what} from your snapshot of ${when(s.created)} are gone. A game update or a Steam verify can do this. If you removed them yourself, make a new snapshot to stop this notice.`, {
+    const id = alert.warning('Files missing since your backup', `${what} from your backup of ${when(s.created)} are gone. A game update or a Steam verify can do this. If you removed them yourself, make a new backup to stop this notice.`, {
       duration: 15000,
       action: { label: 'Restore…', onClick: () => { alert.dismissAlert(id); openSetup() } },
     })

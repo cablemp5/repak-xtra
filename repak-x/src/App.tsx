@@ -3926,7 +3926,6 @@ function App() {
               onChange={handleSearchChange}
               className="main-search-input"
             />
-            {!localSearch && <kbd className="search-kbd" aria-hidden="true">/</kbd>}{/* repakxtra: / focuses the search (hotkeys.ts) */}
             {localSearch && (
               <button
                 type="button"
