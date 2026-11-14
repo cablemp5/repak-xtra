@@ -248,11 +248,17 @@ fn carry(mod_json: &Value, game_json: &Value, mod_bytes: &[u8], game_bytes: &[u8
         let (mx, gx) = (me.get("Extras").and_then(Value::as_str).unwrap_or(""), ge.get("Extras").and_then(Value::as_str).unwrap_or(""));
         if mx != gx {
             let n = b64_len(gx);
-            if !pixels || b64_len(mx) != n || n > mod_raw.len() || n > game_raw.len() {
+            // a GPU emitter's script: its trailing data is the shader the game compiled for it, the game's own like a
+            // script's compile ID (4042190 compiled every one again). The game's stays, and the rest of the file
+            // (its value tables, the other emitters) is still carried
+            let gpu_shader = gp[i].rsplit('/').next().is_some_and(|n| n.starts_with("GPUComputeScript"));
+            if gpu_shader {
+            } else if !pixels || b64_len(mx) != n || n > mod_raw.len() || n > game_raw.len() {
                 return Err(Reject { shape: false, why: format!("{} has data UAssetTool does not read", gp[i]) });
+            } else {
+                out[gr.end - n..gr.end].copy_from_slice(&mod_raw[mod_raw.len() - n..]);
+                edits += 1;
             }
-            out[gr.end - n..gr.end].copy_from_slice(&mod_raw[mod_raw.len() - n..]);
-            edits += 1;
         }
         let mut c = Ctx { mod_raw, game_raw, game_at: gr.start, out: &mut out, edits: 0, written: &mut written };
         walk(me.get("Data").unwrap_or(&Value::Null), ge.get("Data").unwrap_or(&Value::Null), &gp[i], &mut c)?;
