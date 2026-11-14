@@ -62,7 +62,7 @@ const later = <T,>(v: T | Promise<T>) => (mock.__previewDelay ? new Promise<T>(r
 // Lazy loaders, not eager imports: the app's production build drops this dev-only branch with them (eager ones copied
 // every local preview PNG into the app's assets)
 const previewUrls: Record<string, () => Promise<string>> = import.meta.env.DEV
-  ? import.meta.glob<string>('./previews.local/*.{png,webp}', { query: '?url', import: 'default' })
+  ? import.meta.glob<string>('./previews.local/*.{png,webp,webm}', { query: '?url', import: 'default' })
   : {}
 const previewCovers: Record<string, () => Promise<{ covers?: string[]; members?: string[] }>> = import.meta.env.DEV
   ? import.meta.glob<{ covers?: string[]; members?: string[] }>('./previews.local/*.json', { import: 'default' })
@@ -160,7 +160,7 @@ if (import.meta.env.DEV && !('__TAURI_INTERNALS__' in window)) {
       // the real one lists %APPDATA%\Repak-X\previews; a loadout render made in this page shows a local copy ('mock.setImage')
       case 'list_preview_files': {
         const files: Record<string, [string, number]> = {}
-        for (const f of Object.keys(previewUrls)) files[f.replace(/^.*\//, '').replace(/\.(png|webp)$/, '')] = [f.replace(/^.*\//, ''), 0]
+        for (const f of Object.keys(previewUrls)) files[f.replace(/^.*\//, '').replace(/\.(png|webp|webm)$/, '')] = [f.replace(/^.*\//, ''), 0]
         const made = `${localStorage.getItem('mock.setImage') ?? ''}.png`
         const first = Object.keys(previewUrls)[0]?.replace(/^.*\//, '')
         for (const k of setCovers.keys()) files[k] = [previewUrls[`./previews.local/${made}`] ? made : first, Date.now()]
@@ -170,7 +170,7 @@ if (import.meta.env.DEV && !('__TAURI_INTERNALS__' in window)) {
           .then(covers => ({ dir: '/src/dev/previews.local', files, covers: Object.fromEntries(covers) })))
       }
       case 'list_mod_previews': // copies of %APPDATA%\Repak-X\previews in src/dev/previews.local
-        return Object.keys(previewUrls).map(f => f.replace(/^.*\/|\.(png|webp)$/g, ''))
+        return Object.keys(previewUrls).map(f => f.replace(/^.*\/|\.(png|webp|webm)$/g, ''))
 
       case 'generate_mod_previews': { // pretend run: each job reports back as already rendered
         const mode = previewMode()
@@ -365,6 +365,7 @@ if (import.meta.env.DEV && !('__TAURI_INTERNALS__' in window)) {
       case 'xtra_vfx_mods': return { problems: [], mods: data.mods.filter((m: any) => /vfx|(^|[^a-z])ui([^a-z]|$)/i.test(m.path) && !/_BROKEN(_\d+)?_P\./i.test(m.path)).map((m: any) => ({
         ...(/vfx/i.test(m.path) ? {} : { materials: true, ui: true }), path: m.path, utoc: m.utoc_path || m.path.replace(/\.(pak|bak_repak)$/i, '.utoc'), enabled: m.enabled, hero: m.character_name ?? null, modified: m.modified_date ?? 0,
         name: m.custom_name || m.path.split(/[\\/]/).pop().replace(/\.[^.]+$/, '').replace(/(_\d+)?_P$/i, '') })) }
+      case 'xtra_made_mods': return []
       // the mock USMAP is 3939753: localStorage 'mock.usmapBehind' = '1' puts the game a build ahead of it, so updates wait
       case 'xtra_game_build': return { updated: MOCK_GAME_UPDATED, cl: localStorage.getItem('mock.usmapBehind') === '1' ? 3962284 : 3939753 }
       // with mock.usmapBehind, mods whose name has 'wait' in it use files the patch changed
