@@ -42,7 +42,13 @@ export const uncheckedAssets = (r: Pick<VfxReport, 'counts' | 'assets'>) => r.co
  *  cancel, a wait for a newer USMAP, a lost connection, the game updating mid-run, a decrypt, or a tool that stopped on
  *  an unexpected problem (a layout check that threw included): those keep Try again and leave the mod as it is. */
 export const unsupportedFailure = (r: Pick<VfxReport, 'status' | 'error'>) =>
-  r.status === 'failed' && !/^(Not updated yet|Stopped on an unexpected problem|Not decrypted|Could not turn it off)|internet|game updated|could not be encrypted|layout could not be checked/i.test(r.error ?? '')
+  r.status === 'failed' && (/without the game's class names/.test(r.error ?? '') // that extract was already read again one-shot (xtra_uat_cli.rs)
+    || !/^(Not updated yet|Stopped on an unexpected problem|Not decrypted|Could not turn it off)|internet|game updated|could not be encrypted|layout could not be checked/i.test(r.error ?? ''))
+
+/** A failure that may pass on another try (a tool that stopped, a layout check that threw): the mod keeps Try again
+ *  once, and the same mod failing this way a second time counts as unsupported (the Mod Updater keeps the count). */
+export const repeatableFailure = (r: Pick<VfxReport, 'status' | 'error'>) =>
+  r.status === 'failed' && /^Stopped on an unexpected problem|layout could not be checked/i.test(r.error ?? '')
 
 export const repairOutcome = (r: VfxReport) => {
   if (r.status !== 'fixed') return 'Unsupported or ambiguous'
@@ -702,7 +708,9 @@ if (import.meta.env.DEV) {
   console.assert(repairOutcome({ ...sample, status: 'failed' }) === 'Unsupported or ambiguous', 'failed is never repaired')
   console.assert(unsupportedFailure({ status: 'failed', error: 'Not updated: none of its materials or blueprints could be rebuilt. Check the USMAP in Advanced, then try again.' })
     && !unsupportedFailure({ status: 'failed', error: 'Stopped on an unexpected problem: x.' }) && !unsupportedFailure({ status: 'failed', error: 'Not updated yet. Waits.' })
-    && !unsupportedFailure({ status: 'failed', error: 'Not updated: x. Check the internet connection, then try again.' }) && !unsupportedFailure({ status: 'cancelled' })
+    && !unsupportedFailure({ status: 'failed', error: 'Not updated: x. Check the internet connection, then try again.' }) && !unsupportedFailure({ status: 'cancelled' }) && repeatableFailure({ status: 'failed', error: 'Stopped on an unexpected problem: x.' })
+
+    && !repeatableFailure({ status: 'failed', error: 'Not updated yet. Waits.' }) && !repeatableFailure({ status: 'failed', error: 'Not updated: x. Check the internet connection, then try again.' })
     && !unsupportedFailure({ status: 'failed', error: 'Not updated: its material layout could not be checked. The mod was not changed. Check the USMAP in Advanced, then try again.' }), 'only a lasting failure is unsupported')
   console.assert(assetKey('A/MI_Body.uasset') !== assetKey('B/MI_Body.uasset'), 'same basename keeps distinct repair identities')
   console.assert(fixedName('C:/m/BlueColoredVFX_9999999_P.utoc') === 'BlueColoredVFX_UPDATED_9999999_P', 'fixed name drops the priority')

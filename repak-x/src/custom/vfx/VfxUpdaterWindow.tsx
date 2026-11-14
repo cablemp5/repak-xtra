@@ -22,7 +22,7 @@ import { canonKey } from '../loadoutIdentity'
 import { modKey, useLoadouts } from '../loadoutStore'
 import { FIXED_EVENT, onHandoff, openLoadoutInMain, onReport, takeHandoff, takeReport, utocOf, type Fixed } from './handoff'
 import { ASK_REVIEW, KEEP_ENCRYPTED, KEEP_NAME, ORIGINALS, REPAIR_POLICY, SAFE_OFF, claimRun, readKeepEncrypted, newRunToken, onRunChange, readAskReview, readNaming, readOriginals, readRepairPolicy, readSafety, releaseRun, retireUnsafe, runLock, type Naming, type Originals, type RunLock, type Safety } from './prefs'
-import { STEPS, fixVfxMod, repairOutcome, unsupportedFailure, type AssetKind, type VfxReport } from './pipeline'
+import { STEPS, fixVfxMod, repairOutcome, repeatableFailure, unsupportedFailure, type AssetKind, type VfxReport } from './pipeline'
 import { ENCRYPTED, isUnsupported, keptVerdict, needsUpdater, rescanForced, skipsUpdater, unsupportedName, verdictsChanged } from '../brokenMods'
 import { SCAN_DONE, modLabel, type ScanStep } from '../scanProgress'
 import { HeroFilter, heroOfName } from '../heroFilter'
@@ -92,6 +92,17 @@ const chosenMod = (utoc: string, path = utoc.replace(/\.utoc$/i, '.pak')): Mod =
 const isDone = (s?: Status) => s === 'fixed' || s === 'nothing'
 /** rename_mod's mode for the Failed mark: any mode but replace or keep_both refuses a taken name (xtra_ops.rs place), even with mod overwrite on. */
 const REFUSE = 'refuse'
+/** Mods (norm .utoc) whose last update stopped on a problem another try may pass: the second such stop in a row lists
+ *  them under Failed, so nobody retries one that never updates. Kept between sessions, cleared by any other result. */
+const FAILED_ONCE = 'repakxtra.vfx.failedOnce'
+const failedOnce = (): string[] => { try { const v: unknown = JSON.parse(localStorage.getItem(FAILED_ONCE) ?? '[]'); return Array.isArray(v) ? v.filter(x => typeof x === 'string') : [] } catch { return [] } }
+/** Notes this result for the mod. True when it is its second stop in a row. */
+function stoppedAgain(key: string, stopped: boolean) {
+  const was = failedOnce(), again = stopped && was.includes(key)
+  const next = stopped && !again ? [...was, key] : was.filter(k => k !== key)
+  if (next.length !== was.length) localStorage.setItem(FAILED_ONCE, JSON.stringify(next.slice(-500)))
+  return again
+}
 
 /** A mod not marked as needing an update, on hover: what ticking it does */
 const NO_NEED = "Not marked as needing an update. Updating it rebuilds it on the game's current files anyway."
@@ -240,7 +251,7 @@ function Row({ mod, rowKey, loadouts, run, needs, partial, waits, made, picked, 
 /** A group of mods that folds away to its heading, as a collection does on the Loadouts screen. Its heading holds the
  *  fold, the name and count, and Select all / Clear for the group. */
 function Group({ title, count, tone, open, onFold, all, none, busy, onPick, children }: {
-  title: string; count: number; tone?: 'needs' | 'done'; open: boolean; onFold: () => void; all: boolean; none: boolean; busy: boolean; onPick: (on: boolean) => void; children: React.ReactNode
+  title: string; count: number; tone?: 'needs' | 'failed' | 'done'; open: boolean; onFold: () => void; all: boolean; none: boolean; busy: boolean; onPick: (on: boolean) => void; children: React.ReactNode
 }) {
   return (
     <section className={`vf-grp${tone ? ` is-${tone}` : ''}${open ? '' : ' is-folded'}`}>
@@ -669,7 +680,8 @@ export function VfxUpdaterPanel() {
       // Unsupported or ambiguous, with a current USMAP: renamed <name>_UNSUPPORTED and off, so it waits under Failed
       // instead of coming back to Needs an update (ticked there, Update tries it again)
       const mod = byKey.get(key)
-      if (unsupportedFailure(r) && !behindRef.current && mod && !isUnsupported(mod.path)) {
+      const again = r.status !== 'cancelled' && stoppedAgain(key, repeatableFailure(r)) // a cancel says nothing about the mod
+      if ((unsupportedFailure(r) || again) && !behindRef.current && mod && !isUnsupported(mod.path)) {
         const renamed = await invoke<string>('rename_mod', { modPath: mod.path, newName: unsupportedName(mod.path, true), mode: REFUSE })
           .catch(e => { addLog(`${mod.name} could not be renamed _UNSUPPORTED: ${e}`, 'warning'); return null })
         if (renamed) {
@@ -939,7 +951,7 @@ export function VfxUpdaterPanel() {
           : shown.length === 0
             ? (loadError && !needle ? null : <p className="lp-empty">{needle || hero ? `No mods match${needle ? ` “${q.trim()}”` : ''}${hero ? ` for ${hero}` : ''}.` : 'No VFX mods in the mods folder. VFX mods and mods with material instances (MI_ files) appear here. Add .utoc takes any other mod.'}</p>)
             : <div className="vf-groups">{groups.map(g => g.mods.length > 0 && (
-              <Group key={g.id} title={g.title} count={g.count} tone={g.id === 'needs' ? 'needs' : g.id === 'updated' ? 'done' : undefined} busy={busy} all={g.all} none={g.none}
+              <Group key={g.id} title={g.title} count={g.count} tone={g.id === 'needs' ? 'needs' : g.id === 'failed' ? 'failed' : g.id === 'updated' ? 'done' : undefined} busy={busy} all={g.all} none={g.none}
                 open={Boolean(needle || hero) || !foldedIds.includes(g.id)} onFold={() => fold(g.id)} onPick={on => userPick(g.keys, on)}>
                 <ul className="mod-rows vf-rows">
                   {g.mods.map(m => {
