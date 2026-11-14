@@ -35,6 +35,7 @@ const units = (weights: number[]) => weights.reduce((a, w) => a + w, 0)
 /** The run's time left in ms: this PC's time per unit of work (a mod read by one step) from finished runs, and the run's
  *  own pace once it is 2% in. undefined when neither is known yet. */
 export const scanLeft = (r: ScanRun, now = Date.now()) => {
+  if (r.mods <= 0) return undefined // the plan is not known yet (weights is a placeholder until scanPlan)
   const per = typical('scan-unit')
   const prior = per === undefined ? undefined : per * units(r.weights) * (1 - r.pct / 100)
   const live = r.pct >= 2 && r.started ? (now - r.started) * (100 - r.pct) / r.pct : undefined
