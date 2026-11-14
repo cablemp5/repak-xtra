@@ -90,6 +90,8 @@ const norm = (p: string) => p.replace(/\//g, '\\').toLowerCase()
 const chosenMod = (utoc: string, path = utoc.replace(/\.utoc$/i, '.pak')): Mod =>
   ({ path, utoc, enabled: !/\.bak_repak$/i.test(path), name: fileName(utoc).replace(/\.[^.]+$/, '').replace(/(_\d+)?_P$/i, '') })
 const isDone = (s?: Status) => s === 'fixed' || s === 'nothing'
+/** rename_mod's mode for the Failed mark: any mode but replace or keep_both refuses a taken name (xtra_ops.rs place), even with mod overwrite on. */
+const REFUSE = 'refuse'
 
 /** A mod not marked as needing an update, on hover: what ticking it does */
 const NO_NEED = "Not marked as needing an update. Updating it rebuilds it on the game's current files anyway."
@@ -650,7 +652,7 @@ export function VfxUpdaterPanel() {
       let fixedFile = r.placed?.fixed
       if (fixedFile && isUnsupported(fixedFile)) {
         const from = fixedFile
-        fixedFile = await invoke<string>('rename_mod', { modPath: from, newName: unsupportedName(from, false) }).catch(e => { addLog(`Its update keeps the _UNSUPPORTED name: ${e}`, 'warning'); return from })
+        fixedFile = await invoke<string>('rename_mod', { modPath: from, newName: unsupportedName(from, false), mode: REFUSE }).catch(e => { addLog(`Its update keeps the _UNSUPPORTED name: ${e}`, 'warning'); return from })
       }
       if (r.placed) await emitTo('main', FIXED_EVENT, { from: r.placed.source, to: fixedFile!, swap: true, original: r.placed.original } satisfies Fixed).catch(() => {})
       // an update named _UPDATED is a new file and its original leaves the list: its result moves with it
@@ -668,17 +670,19 @@ export function VfxUpdaterPanel() {
       // instead of coming back to Needs an update (ticked there, Update tries it again)
       const mod = byKey.get(key)
       if (unsupportedFailure(r) && !behindRef.current && mod && !isUnsupported(mod.path)) {
-        try {
-          const renamed = await invoke<string>('rename_mod', { modPath: mod.path, newName: unsupportedName(mod.path, true) })
+        const renamed = await invoke<string>('rename_mod', { modPath: mod.path, newName: unsupportedName(mod.path, true), mode: REFUSE })
+          .catch(e => { addLog(`${mod.name} could not be renamed _UNSUPPORTED: ${e}`, 'warning'); return null })
+        if (renamed) {
           const off = await invoke<string | null>('xtra_vfx_turn_off', { modPath: renamed, reason: 'The Mod Updater could not update it for this game version, so it was renamed _UNSUPPORTED and turned off.' })
+            .catch(e => { addLog(`${mod.name} could not be turned off: ${e}`, 'warning'); return null })
           const now = off ?? renamed
           await emitTo('main', FIXED_EVENT, { from: mod.path, to: now, swap: true } satisfies Fixed).catch(() => {}) // loadouts follow the rename
           moveTo(now)
           // its row moves to Failed now (the list is read again only after the batch)
           setMods(ms => ms?.map(m => (norm(m.utoc) === key ? { ...m, path: now, utoc: utocOf(now), enabled: false, name: unsupportedName(mod.path, true) } : m)) ?? ms)
           pick([key], false)
-          addLog(`${mod.name} cannot be updated: renamed ${unsupportedName(mod.path, true)}, turned off, and listed under Failed.`, 'warning')
-        } catch (e) { addLog(`${mod.name} could not be renamed _UNSUPPORTED: ${e}`, 'warning') }
+          addLog(`${mod.name} cannot be updated: renamed ${unsupportedName(mod.path, true)}${off ? ', turned off,' : ''} and listed under Failed.`, 'warning')
+        }
       }
     }
     for (const key of todo) {
