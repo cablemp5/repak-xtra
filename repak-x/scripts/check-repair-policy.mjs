@@ -135,11 +135,18 @@ assert.equal(accepted.report.status, 'fixed')
 assert.ok(accepted.calls.indexOf('review') < accepted.calls.indexOf('xtra_vfx_place'))
 assert.equal(accepted.placement.partial, false, 'reviewed materials must not request the Niagara retry marker')
 assert.equal(accepted.placement.trashOriginal, true, 'a reviewed candidate follows Originals: the original goes to Recently deleted')
-// a rewritten material goes on through the usual rebuild (its shader data is the old game's, so it is never kept just
-// for having been rewritten). This one points at its own parent, which a rebuild cannot carry: kept, and installable
+// a rewritten material goes on through the usual rebuild (its shader data is the old game's). This one points at its
+// own parent, which a rebuild cannot carry: kept with a warning that it may show gray, so Strict stops and Best effort
+// asks for the review
 const relaidStrict = await repair('strict', false, false, { relayout: 'rewritten' })
-assert.equal(relaidStrict.report.status, 'fixed')
-assert.ok(relaidStrict.calls.includes('xtra_vfx_detect'), 'a rewritten material is still read for its type, not passed by')
+assert.equal(relaidStrict.report.status, 'failed')
+assert.ok(relaidStrict.report.warnings.some(w => /may show gray/.test(w)))
+assert.ok(!relaidStrict.calls.includes('xtra_vfx_place'), 'a kept old-shader material cannot pass Strict')
+for (const accept of [false, true]) {
+  const relaid = await repair('bestEffort', accept, false, { relayout: 'rewritten' })
+  assert.ok(relaid.candidate.warnings.some(w => /may show gray/.test(w)), 'the review shows the warning')
+  assert.equal(relaid.calls.includes('xtra_vfx_place'), accept)
+}
 for (const niagara of ['retry', 'permanent']) {
   const result = await repair('bestEffort', true, false, { niagara })
   assert.equal(result.report.status, 'fixed')
