@@ -111,7 +111,7 @@ $env:REPAKXTRA_BUILD = if ($Test) { 'test' } else { '' }
 Run { npm run build }
 Pop-Location
 $env:SKIP_UASSET_TOOL_BUILD = '1'
-$locked = if ($Release) { @('--locked') } else { @() }
+$locked = @(if ($Release) { '--locked' }) # @(): an if returns a one-item array as a string, and splatting a string passes each character
 Run { cargo build --release --target x86_64-pc-windows-msvc --features custom-protocol @locked }
 
 if (-not (Test-BuildOutputAvailable $out)) { throw 'The selected copy was opened during the build. Close it and run the build again.' }
