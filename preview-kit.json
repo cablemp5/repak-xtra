@@ -1,8 +1,8 @@
 {
-    "version":  "13",
-    "published":  "2026-10-31T09:38:51Z",
-    "url":  "https://github.com/cablemp5/repak-xtra/releases/tag/preview-kit-v13",
-    "asset":  "https://github.com/cablemp5/repak-xtra/releases/download/preview-kit-v13/repakxtra-preview-kit-v13.zip",
-    "size":  116985301,
-    "notes":  "- Fixed the poses of Spider-Man, White Fox, and Rogue previews\n- Hid effect parts on skins, like Spider-Man\u0027s web-punch sleeve and fire tails\n- Made eyes more lifelike with a lid shadow and an iris ring\n"
+    "version": "22",
+    "published": "2026-11-15T02:32:28Z",
+    "url": "https://github.com/cablemp5/repak-xtra/releases/tag/preview-kit-v22",
+    "asset": "https://github.com/cablemp5/repak-xtra/releases/download/preview-kit-v22/repakxtra-preview-kit-v22.zip",
+    "size": 117915175,
+    "notes": "- Added the 3D model export for repakxtra's Rotate in 3D, with the lobby idle and the parts that swing\n- Added an unmodded render beside every character preview, for the before and after compare\n- Added lobby weapons to character previews, like Punisher's and Rocket's\n- Added a texture check that names textures this game version cannot read\n- Added emote sounds for dances that carry their music in their own PAK\n- Changed each export step to run about 0.6 s faster, and a mesh mod's first 3D view to export in about 1 s instead of 6\n- Changed texture and material mods of one skin to share one exported 3D model\n- Changed VFX palette cards to label each color twice as big\n- Fixed a mod's own skin mesh being replaced by the game's mesh of another skin whose textures it ships\n- Fixed Spider-Man hanging upside down in Rotate in 3D\n- Fixed Rocket's fur rendering shiny instead of matte and brown\n- Fixed idles missing for Hulk's Bruce skins and Mister Fantastic's forms\n- Fixed the exporter closing after a dance mod\n"
 }
