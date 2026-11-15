@@ -45,7 +45,7 @@ if ($Release) {
     if ([int]$kitVer -lt [int]$minKit) { throw "preview-kit.json names kit $kitVer, older than MIN_KIT $minKit (xtra_kit.rs): every copy would get a kit its previews cannot run on. Publish kit $minKit or newer and update preview-kit.json in a PR first." }
     # The notes before the build, not after it: a missing file used to cost a whole build
     $changes = "release-notes\v$ver.md"
-    if (-not (Test-Path $changes)) { throw "Write $changes first: one '- ' line per change, like '- Added card zoom to the Loadouts screen'." }
+    if (-not (Test-Path $changes)) { throw "Write $changes first (rename release-notes\unreleased.md to it): one '- ' line per change, like '- Added card zoom to the Loadouts screen'." }
     if (-not @(Get-Content $changes | Where-Object { $_ -match '^\s*[-*]\s+\S' }).Count) { throw "$changes has no '- ' lines." }
     # Only what CI passed ships: the newest Checks run on main must be this commit's, finished and green
     $head = (git rev-parse HEAD)
