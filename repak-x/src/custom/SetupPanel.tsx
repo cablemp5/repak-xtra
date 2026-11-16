@@ -22,8 +22,8 @@ import { SnapshotCard, checkSnapshotLoss } from './SnapshotCard'
 import { SafetyCard, checkBannedPlugins } from './safetyScan'
 
 type Alert = ReturnType<typeof useAlert>
-type FileCheck = { name: string; place: string; size: number; sha256: string; found: 'missing' | 'same' | 'other' }
-type Bypass = { state: 'installed' | 'disabled' | 'partial' | 'other' | 'missing'; files: FileCheck[] }
+type FileCheck = { name: string; place: string; size: number; sha256: string; found: 'missing' | 'same' | 'old' | 'other' }
+type Bypass = { state: 'installed' | 'disabled' | 'outdated' | 'partial' | 'other' | 'missing'; files: FileCheck[] }
 type Galacta = { installed: string | null; disabled: boolean; latest: string | null; published: string | null; notes: string | null; url: string | null; up_to_date: boolean | null; other_loader: string | null }
 /** What is wrong with the loader, for Setup's warning and the header dot: missing, off, or another loader on too. */
 const loaderProblem = (g: Galacta) => g.other_loader ? `${g.other_loader} is on too. Two loaders load the same mods twice, so turn one off in the Library.`
@@ -39,8 +39,9 @@ const GALACTA_PAK = LOADER_PAK
 
 const open = (url: string) => import('@tauri-apps/plugin-shell').then(m => m.open(url)).catch(() => window.open(url, '_blank'))
 const BYPASS_LABEL: Record<Bypass['state'], string> = {
-  installed: 'Installed', disabled: 'Off', partial: 'Incomplete', other: 'Different version', missing: 'Not installed',
+  installed: 'Installed', disabled: 'Off', outdated: 'Update available', partial: 'Incomplete', other: 'Different version', missing: 'Not installed',
 }
+const UPDATED = 'Updated. Mods load in the base game and the performance DLC from the next launch.'
 const date = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }) : '')
 
 /** Release notes are short Markdown: headings, bullets and paragraphs, drawn as such (no HTML from the web). */
@@ -246,12 +247,12 @@ export function SetupPanel({ alert, onClose, focus }: { alert: Alert; onClose: (
     acted.current++
     try { return await f() } catch (e) { alert.warning('Setup', String(e)) } finally { setBusy(null) }
   }
-  const act = (action: 'install' | 'enable' | 'disable' | 'remove') => run(action, async () => {
+  const act = (action: 'install' | 'update' | 'enable' | 'disable' | 'remove') => run(action, async () => {
     setConfirmOff(null)
     const s = await invoke<Bypass>('setup_bypass', { action })
     setBypass(s)
-    if (action === 'install' || action === 'enable') finish(action)
-    alert.success('Signature bypass', { install: 'Installed. Mods load from the next game launch.', enable: 'On again.',
+    if (action === 'install' || action === 'update' || action === 'enable') finish(action)
+    alert.success('Signature bypass', { install: 'Installed. Mods load from the next game launch.', update: UPDATED, enable: 'On again.',
       disable: 'Off. Mods that need it will not load.', remove: 'Removed.' }[action])
   })
   const check = () => run('check', async () => {
@@ -287,9 +288,9 @@ export function SetupPanel({ alert, onClose, focus }: { alert: Alert; onClose: (
 
   const b = bypass
   const g = galacta
-  const bypassOn = b?.state === 'installed' || b?.state === 'disabled'
+  const bypassOn = b?.state === 'installed' || b?.state === 'disabled' || b?.state === 'outdated'
   const bypassLine = !b ? 'Checking…' : {
-    missing: 'Not installed', installed: `In ${b.files[0]?.place ?? 'the game folder'}`, disabled: 'Off, its files stay in place',
+    missing: 'Not installed', outdated: 'An older version that does not work with the performance DLC', installed: `In ${b.files[0]?.place ?? 'the game folder'}`, disabled: 'Off, its files stay in place',
     partial: `${b.files.filter(f => f.found === 'same').length} of ${b.files.length} files there`, other: 'A different loader or bypass is there',
   }[b.state]
   const galactaState = !g?.installed ? 'Not installed' : g.up_to_date === false ? 'Update available' : g.up_to_date ? 'Up to date' : g.disabled ? 'Installed, off' : 'Installed'
@@ -316,7 +317,7 @@ export function SetupPanel({ alert, onClose, focus }: { alert: Alert; onClose: (
                 <h3>Signature bypass</h3>
                 <p>Lets the game load mods that replace its files. Every mod needs it. Comes with {APP_NAME}.</p>
               </div>
-              <span className={`su-chip is-${b?.state ?? 'missing'}`}>{b ? BYPASS_LABEL[b.state] : 'Checking…'}</span>
+              <span className={`su-chip is-${b?.state === 'outdated' ? 'update' : b?.state ?? 'missing'}`}>{b ? BYPASS_LABEL[b.state] : 'Checking…'}</span>
             </div>
             {b?.state === 'other' && <p className="su-note">A different loader or bypass is installed. Installing keeps it next to the new one as a .repakxtra-backup file.</p>}
             {/* One part row like Galacta's and the preview kit's: its state, Turn off and Remove as links on the right */}
@@ -337,15 +338,18 @@ export function SetupPanel({ alert, onClose, focus }: { alert: Alert; onClose: (
             {confirmOff && <ConfirmRow yes={confirmOff === 'remove' ? 'Remove' : 'Turn off anyway'} onYes={() => act(confirmOff)} onNo={() => setConfirmOff(null)}
               text="Remove the loader and bypass? Mods stop loading." />}
             {/* its progress above the buttons, like Galacta's and the preview kit's */}
-            <BypassTrack on={busy === 'install' || busy === 'enable'}
-              done={finished === 'install' ? 'Installed. Mods load from the next game launch.' : finished === 'enable' ? 'On again. Mods load from the next game launch.' : undefined} />
+            <BypassTrack on={busy === 'install' || busy === 'update' || busy === 'enable'}
+              done={finished === 'install' ? 'Installed. Mods load from the next game launch.' : finished === 'update' ? UPDATED : finished === 'enable' ? 'On again. Mods load from the next game launch.' : undefined} />
             {/* only with a button in it: an empty row left a gap under the part row */}
-            {(!bypassOn || b?.state === 'disabled') && <div className="su-actions">
+            {(!bypassOn || b?.state === 'disabled' || b?.state === 'outdated') && <div className="su-actions">
               {!bypassOn && (
                 <button type="button" className="btn-primary su-main" disabled={!b || Boolean(busy)} onClick={() => act('install')}>
                   {busy === 'install' ? 'Installing…' : b?.state === 'missing' ? 'Install' : 'Repair'}
                 </button>
               )}
+              {b?.state === 'outdated' && <button type="button" className="btn-primary su-main" disabled={Boolean(busy)} onClick={() => act('update')}>
+                {busy === 'update' ? 'Updating…' : 'Update'}
+              </button>}
               {b?.state === 'disabled' && <button type="button" className="btn-primary su-main" disabled={Boolean(busy)} onClick={() => act('enable')}>Turn on</button>}
             </div>}
           </section>
@@ -434,6 +438,7 @@ export function SetupPanel({ alert, onClose, focus }: { alert: Alert; onClose: (
 }
 
 let startupChecked = false
+let bypassToastShown = false
 
 /** Header button. Shows a dot when the bypass is missing or Galacta has an update, and checks once at start. */
 export default function SetupButton({ alert }: { alert: Alert }) {
@@ -459,7 +464,15 @@ export default function SetupButton({ alert }: { alert: Alert }) {
     return () => window.removeEventListener('bypass-changed', recheck)
   }, [])
   useEffect(() => {
-    invoke<Bypass>('setup_bypass_status').then(b => b.state !== 'installed' && setAttention(true)).catch(() => {})
+    invoke<Bypass>('setup_bypass_status').then(b => {
+      if (b.state !== 'installed') setAttention(true)
+      if (b.state !== 'outdated' || bypassToastShown) return
+      bypassToastShown = true   // once per app start, like the update toasts below
+      const id = alert.info('Signature bypass update', 'A newer version is out. It also works with the performance DLC launcher.', {
+        duration: 12000,
+        action: { label: 'Update', onClick: () => { alert.dismissAlert(id); setOpen(true) } },
+      })
+    }).catch(() => {})
     checkSnapshotLoss(alert, () => { setFocus('snapshots'); setOpen(true) }) // repakxtra: files gone since the newest snapshot
     checkBannedPlugins(alert, () => { setFocus('safety'); setOpen(true) }) // repakxtra: a plugin the anti-cheat notice names
     if (!autoCheck() || startupChecked) return

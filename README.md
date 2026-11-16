@@ -158,7 +158,7 @@ no mod is safe from a ban: mods that match the anti-cheat notice get a **Ban ris
 <br>
 
 Marvel Rivals only loads files it has signed, so it ignores mods without the bypass. repakxtra ships it inside the app,
-and **Setup** installs, repairs, or turns it off.
+and **Setup** installs, repairs, updates, or turns it off. It works in the base game and the performance DLC launcher.
 
 </details>
 
@@ -291,7 +291,7 @@ This serves the interface in a normal browser with a mock backend (`src/dev/mock
 ## Credits
 
 - **[Repak X](https://github.com/X-zant/Repak-X)** by Xzant and Saturn, and everyone credited in its Credits panel.
-- **Ultimate ASI Loader** by [ThirteenAG](https://github.com/ThirteenAG/Ultimate-ASI-Loader) (MIT), and the **Marvel Rivals UTOC Signature Bypass** from [Nexus Mods](https://www.nexusmods.com/marvelrivals/mods/2940).
+- **Ultimate ASI Loader** by [ThirteenAG](https://github.com/ThirteenAG/Ultimate-ASI-Loader) (MIT), and the **UTOC Signature Bypass (Performance DLC Compatible)** from [Nexus Mods](https://www.nexusmods.com/marvelrivals/mods/14652).
 - **[Project Galacta](https://github.com/0xSaturno/ProjectGalacta)** by 0xSaturno.
 - [cuelume](https://cuelume-site.pages.dev/) sounds, [transitions.dev](https://transitions.dev/) motion recipes, [Geist](https://vercel.com/font) and [Lucide](https://lucide.dev/) icons.
 

@@ -41,7 +41,9 @@ import { PACK_ICON, holdToasts, setSoundChoice, useSoundChoice } from './uiPrefs
 import './onboarding.css'
 
 type Alert = ReturnType<typeof useAlert>
-type Bypass = { state: 'installed' | 'disabled' | 'partial' | 'other' | 'missing' }
+/** Off: turn it on. Older: update it in place. Anything else: install or repair. */
+const bypassAction = (s?: Bypass['state']) => s === 'disabled' ? 'enable' : s === 'outdated' ? 'update' : 'install'
+type Bypass = { state: 'installed' | 'disabled' | 'outdated' | 'partial' | 'other' | 'missing' }
 type Galacta = { installed: string | null; disabled: boolean; up_to_date?: boolean | null }
 type Pending = 'smart' | string | null // what Finish opens on Loadouts home, picked on the first loadout page (a string: that loadout's id)
 type Auto = 'checking' | 'game-open' | 'no-game' | 'working' | 'failed' | 'done'
@@ -181,6 +183,7 @@ const setup: Page = {
     const all = Boolean(f.gamePath && bypassOn && galactaOn)
     const bypassText = bypassOn ? 'Installed. Mods load from the next game launch.'
       : f.bypass?.state === 'disabled' ? 'Installed but turned off. Mods that need it will not load.'
+      : f.bypass?.state === 'outdated' ? 'An older version is installed. Update it so mods also load in the performance DLC launcher.'
       : f.bypass?.state === 'other' ? 'A different loader or bypass is installed. Installing keeps it next to the new one as a .repakxtra-backup file.'
       : f.bypass?.state === 'partial' ? 'Part of it is missing. Repair puts the missing files back.'
       : 'Lets the game load mods. Every mod needs it.'
@@ -194,7 +197,7 @@ const setup: Page = {
                 ? <button type="button" className="lo-text-btn" onClick={f.checkStatus}>Retry</button>
                 : (!bypassOn || f.finished === 'bypass') && <StepButton done={bypassOn} working={f.busy === 'bypass' && 'Installing'} disabled={noGame || !f.bypass || Boolean(f.busy)}
                     onClick={f.installBypass} title={noGame ? 'Find the game first' : undefined}
-                    label={f.bypass?.state === 'disabled' ? 'Turn on' : f.bypass?.state === 'partial' ? 'Repair' : 'Install'} />}>
+                    label={f.bypass?.state === 'disabled' ? 'Turn on' : f.bypass?.state === 'outdated' ? 'Update' : f.bypass?.state === 'partial' ? 'Repair' : 'Install'} />}>
               <p>{f.bypassError ? `Could not check it: ${f.bypassError}` : bypassText}</p>
             </Step>
             <Step n={3} done={galactaOn} title={`Install ${LOADER_NAME}`}
@@ -589,7 +592,7 @@ export default function FirstRun({ alert, gamePath, mods: allMods, details, inst
     try { await f(); finish(what) } catch (e) { alert.warning('Setup', String(e)) } finally { setBusy(null) }
   }
   const installBypass = () => run('bypass', async () => {
-    setBypass(await invoke<Bypass>('setup_bypass', { action: bypass?.state === 'disabled' ? 'enable' : 'install' }))
+    setBypass(await invoke<Bypass>('setup_bypass', { action: bypassAction(bypass?.state) }))
     window.dispatchEvent(new Event('bypass-changed')) // the Setup button's dot
   })
   const installGalacta = () => run('galacta', async () => { setGalacta(await invoke<Galacta>('setup_galacta_install', { folder: null })) })
@@ -602,7 +605,9 @@ export default function FirstRun({ alert, gamePath, mods: allMods, details, inst
       setBypass(b)
       if (b.state !== 'installed' && b.state !== 'other') {
         setBusy('bypass')
-        setBypass(await invoke<Bypass>('setup_bypass', { action: b.state === 'disabled' ? 'enable' : 'install' }))
+        let n = await invoke<Bypass>('setup_bypass', { action: bypassAction(b.state) })
+        if (n.state === 'disabled') n = await invoke<Bypass>('setup_bypass', { action: 'enable' }) // an older one that was off: updated, then on
+        setBypass(n)
         window.dispatchEvent(new Event('bypass-changed'))
         finish('bypass')
         did.push('the signature bypass')
