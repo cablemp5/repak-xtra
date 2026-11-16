@@ -1,0 +1,2 @@
+- Added the signature bypass that also loads mods in the performance DLC launcher
+- Added a one-click Update in Setup for the older signature bypass, with a reminder at start

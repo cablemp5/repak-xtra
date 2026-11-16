@@ -17,6 +17,12 @@ const BYPASS: &str = "MarvelRivalsUTOCSignatureBypass.asi";
 const LOADER_BYTES: &[u8] = include_bytes!("../resources/utoc-bypass/dsound.dll");
 const BYPASS_BYTES: &[u8] = include_bytes!("../resources/utoc-bypass/MarvelRivalsUTOCSignatureBypass.asi");
 const LICENSE_TEXT: &str = include_str!("../resources/utoc-bypass/Ultimate ASI Loader License.txt");
+/// SHA-256 of older bypass releases (Nexus mod 2940, also what repakxtra shipped before 1.0.1): shown as "outdated",
+/// replaced without a backup, and removed by Remove. It does not load mods in the game's performance DLC launcher.
+const OLD_BYPASS: &[&str] = &["2f8b183149f30c94319a5f6636491ff39aa22afbbf3f5cbc5fb8f7ecc287a62d"];
+fn is_old_bypass(bytes: &[u8]) -> bool {
+    OLD_BYPASS.contains(&sha256(bytes).as_str()) || (cfg!(test) && bytes == b"old bypass") // tests stand in for the release
+}
 const GALACTA_API: &str = "https://api.github.com/repos/0xSaturno/ProjectGalacta/releases/latest";
 pub(crate) const GALACTA_STEM: &str = "!ProjectGalacta_9999999_P";
 /// The release asset's zip matches the SHA-256 GitHub published for it ("sha256:<hex>" in the listing, computed by GitHub
@@ -78,13 +84,14 @@ pub struct FileCheck {
     place: String,
     size: usize,
     sha256: String,
-    /// "missing", "same" (byte for byte the bundled file) or "other" (a different file under that name)
+    /// "missing", "same" (byte for byte the bundled file), "old" (an older bypass release) or "other" (a different file)
     found: String,
 }
 
 #[derive(Serialize)]
 pub struct BypassStatus {
-    /// "installed", "disabled" (dsound.dll renamed to .disabled), "partial", "other" (a different loader or bypass) or "missing"
+    /// "installed", "disabled" (dsound.dll renamed to .disabled), "outdated" (an older bypass .asi with a loader, on or off),
+    /// "partial", "other" (a different loader or bypass) or "missing"
     state: String,
     files: Vec<FileCheck>,
     license: String,
@@ -93,6 +100,7 @@ pub struct BypassStatus {
 fn check(path: &Path, name: &str, place: &str, bundled: &[u8]) -> FileCheck {
     let found = match fs::read(path) {
         Ok(b) if b == bundled => "same",
+        Ok(b) if b.len() < 1 << 20 && is_old_bypass(&b) => "old",
         Ok(_) => "other",
         Err(_) => "missing",
     };
@@ -107,6 +115,7 @@ fn bypass_status(win64: &Path) -> BypassStatus {
         ("same", "same") => "installed",
         ("missing", "same") if disabled => "disabled",
         ("missing", "missing") if !disabled => "missing",
+        (l, "old") if l != "missing" || disabled => "outdated",
         (a, b) if a == "other" || b == "other" => "other",
         _ => "partial",
     };
@@ -127,16 +136,21 @@ pub(crate) fn galacta_on(mods: &Path) -> bool {
     find_enabled_loader(mods, GALACTA_STEM).is_some()
 }
 
-/// Whether the file is byte for byte the bundled loader or bypass (the setup report leaves those out of a crash's
-/// third-party modules: the Signature bypass line already names them).
-pub(crate) fn is_bundled_bypass(path: &Path) -> bool {
-    // the size first, so an overlay DLL of another size is never read whole
-    let len = fs::metadata(path).map(|m| m.len()).unwrap_or(0);
-    [LOADER_BYTES, BYPASS_BYTES].iter().any(|bytes| len == bytes.len() as u64 && fs::read(path).is_ok_and(|b| b == *bytes))
+/// The bundled loader or bypass, or an older bypass release.
+fn is_ours(b: &[u8]) -> bool {
+    b == LOADER_BYTES || b == BYPASS_BYTES || is_old_bypass(b)
 }
 
-/// install: writes both files (a different dsound.dll or .asi already there is kept as <name>.repakxtra-backup);
-/// disable / enable: renames dsound.dll like the Tools panel does; remove: deletes the two bundled files only.
+/// Whether the file is byte for byte the bundled loader or bypass, or an older bypass release (the setup report leaves
+/// those out of a crash's third-party modules: the Signature bypass line already names them).
+pub(crate) fn is_bundled_bypass(path: &Path) -> bool {
+    // the size first, so a big overlay DLL is never read whole
+    fs::metadata(path).is_ok_and(|m| m.len() < 1 << 20) && fs::read(path).is_ok_and(|b| is_ours(&b))
+}
+
+/// install: writes both files (a different dsound.dll or .asi already there is kept as <name>.repakxtra-backup, an older
+/// bypass is replaced); update: replaces an older bypass .asi only, the loader and its on or off stay as they are;
+/// disable / enable: renames dsound.dll like the Tools panel does; remove: deletes the bundled or older files only.
 fn bypass_action(win64: &Path, action: &str) -> Result<(), String> {
     let loader = win64.join(LOADER);
     let off = win64.join(format!("{LOADER}.disabled"));
@@ -150,7 +164,7 @@ fn bypass_action(win64: &Path, action: &str) -> Result<(), String> {
             }
             fs::create_dir_all(&plugins).map_err(|e| io("make the plugins folder", e))?;
             for (path, bytes) in [(&loader, LOADER_BYTES), (&asi, BYPASS_BYTES)] {
-                if fs::read(path).is_ok_and(|b| b != bytes) {
+                if fs::read(path).is_ok_and(|b| b != bytes && !is_old_bypass(&b)) {
                     let keep = path.with_file_name(format!("{}.repakxtra-backup", path.file_name().unwrap().to_string_lossy()));
                     fs::rename(path, &keep).map_err(|e| io("back up the file that was there", e))?;
                 }
@@ -160,11 +174,17 @@ fn bypass_action(win64: &Path, action: &str) -> Result<(), String> {
                 let _ = fs::remove_file(&off);
             }
         }
+        "update" => {
+            if !fs::read(&asi).is_ok_and(|b| is_old_bypass(&b)) {
+                return Err("No older bypass to update. Use Install or Repair.".into());
+            }
+            fs::write(&asi, BYPASS_BYTES).map_err(|e| io("write the bypass", e))?;
+        }
         "disable" => fs::rename(&loader, &off).map_err(|e| io("turn the loader off", e))?,
         "enable" => fs::rename(&off, &loader).map_err(|e| io("turn the loader on", e))?,
         "remove" => {
             for path in [&loader, &off, &asi] {
-                if fs::read(path).is_ok_and(|b| b == LOADER_BYTES || b == BYPASS_BYTES) {
+                if fs::read(path).is_ok_and(|b| is_ours(&b)) {
                     fs::remove_file(path).map_err(|e| io("remove the bypass", e))?;
                 }
             }
@@ -494,7 +514,8 @@ mod tests {
     #[test]
     fn bundled_files_are_the_checked_release() {
         assert_eq!(sha256(LOADER_BYTES), "bb8767f918c52a2ad055d2de9baffd2478598643b9894f09abd20d1f1ffd170c");
-        assert_eq!(sha256(BYPASS_BYTES), "2f8b183149f30c94319a5f6636491ff39aa22afbbf3f5cbc5fb8f7ecc287a62d");
+        assert_eq!(sha256(BYPASS_BYTES), "39a5ec6e27f419e019402a362ad02ea37b1f8f4b3550882ab924ca775d774282");
+        assert!(!is_old_bypass(BYPASS_BYTES));
         assert!(LICENSE_TEXT.contains("MIT License"));
     }
 
@@ -520,6 +541,39 @@ mod tests {
         assert_eq!(bypass_status(&win).state, "missing");
         assert!(win.join("plugins").join("SigeonLoader.asi").exists(), "another loader's own files stay");
         assert!(bypass_action(&win, "explode").is_err());
+        let _ = fs::remove_dir_all(&win);
+    }
+
+    #[test]
+    fn an_older_bypass_updates_in_place() {
+        let win = temp("bypass-old");
+        let (plugins, asi) = (win.join("plugins"), win.join("plugins").join(BYPASS));
+        fs::create_dir_all(&plugins).unwrap();
+        fs::write(&asi, b"old bypass").unwrap();
+        assert_eq!(bypass_status(&win).state, "partial", "no loader: Repair, not Update");
+        fs::write(win.join(LOADER), b"someone else's loader").unwrap();
+        assert_eq!(bypass_status(&win).state, "outdated", "any loader with the old .asi");
+        assert!(is_bundled_bypass(&asi));
+        bypass_action(&win, "update").unwrap();
+        assert_eq!(fs::read(&asi).unwrap(), BYPASS_BYTES);
+        assert_eq!(fs::read(win.join(LOADER)).unwrap(), b"someone else's loader", "update leaves the loader alone");
+        assert!(bypass_action(&win, "update").is_err(), "nothing older left to update");
+        // switched off, then updated: stays off
+        fs::write(win.join(LOADER), LOADER_BYTES).unwrap();
+        fs::write(&asi, b"old bypass").unwrap();
+        bypass_action(&win, "disable").unwrap();
+        assert_eq!(bypass_status(&win).state, "outdated");
+        bypass_action(&win, "update").unwrap();
+        assert_eq!(bypass_status(&win).state, "disabled");
+        // Install and Repair replace the old .asi without a backup, Remove takes it too
+        bypass_action(&win, "enable").unwrap();
+        fs::write(&asi, b"old bypass").unwrap();
+        bypass_action(&win, "install").unwrap();
+        assert_eq!(bypass_status(&win).state, "installed");
+        assert!(!plugins.join(format!("{BYPASS}.repakxtra-backup")).exists());
+        fs::write(&asi, b"old bypass").unwrap();
+        bypass_action(&win, "remove").unwrap();
+        assert!(!asi.exists() && bypass_status(&win).state == "missing");
         let _ = fs::remove_dir_all(&win);
     }
 

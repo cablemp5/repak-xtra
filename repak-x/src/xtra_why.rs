@@ -178,6 +178,12 @@ pub async fn xtra_why_mod(mod_path: String, state: State<'_, Arc<Mutex<crate::Ap
         if let Some(win64) = crate::xtra_setup::win64_dir(&mods_dir) {
             match crate::xtra_setup::bypass_state(&win64).as_str() {
                 "installed" | "other" => {}
+                "outdated" => {
+                    if !win64.join("dsound.dll").exists() { // the older one, switched off
+                        out.push(f("problem", "The signature bypass is off", "No mod loads without it. Turn it on in Setup.").act("setup"));
+                    }
+                    out.push(f("info", "The signature bypass is an older version", "Mods do not load in the performance DLC launcher with it. Update it in Setup.").act("setup"));
+                }
                 "disabled" => out.push(f("problem", "The signature bypass is off", "No mod loads without it. Turn it on in Setup.").act("setup")),
                 _ => out.push(f("problem", "The signature bypass is not installed", "No mod loads without it. Install it in Setup.").act("setup")),
             }
