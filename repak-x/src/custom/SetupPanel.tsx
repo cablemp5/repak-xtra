@@ -41,7 +41,8 @@ const open = (url: string) => import('@tauri-apps/plugin-shell').then(m => m.ope
 const BYPASS_LABEL: Record<Bypass['state'], string> = {
   installed: 'Installed', disabled: 'Off', outdated: 'Update available', partial: 'Incomplete', other: 'Different version', missing: 'Not installed',
 }
-const UPDATED = 'Updated. Mods load in the base game and the performance DLC from the next launch.'
+/** Update keeps the loader off when it was off, so the words follow the state it left */
+const updated = (s?: string) => s === 'disabled' ? 'Updated. It is still off, so turn it on to load mods.' : 'Updated. Mods load in the base game and the performance DLC from the next launch.'
 const date = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }) : '')
 
 /** Release notes are short Markdown: headings, bullets and paragraphs, drawn as such (no HTML from the web). */
@@ -252,7 +253,7 @@ export function SetupPanel({ alert, onClose, focus }: { alert: Alert; onClose: (
     const s = await invoke<Bypass>('setup_bypass', { action })
     setBypass(s)
     if (action === 'install' || action === 'update' || action === 'enable') finish(action)
-    alert.success('Signature bypass', { install: 'Installed. Mods load from the next game launch.', update: UPDATED, enable: 'On again.',
+    alert.success('Signature bypass', { install: 'Installed. Mods load from the next game launch.', update: updated(s.state), enable: 'On again.',
       disable: 'Off. Mods that need it will not load.', remove: 'Removed.' }[action])
   })
   const check = () => run('check', async () => {
@@ -339,7 +340,7 @@ export function SetupPanel({ alert, onClose, focus }: { alert: Alert; onClose: (
               text="Remove the loader and bypass? Mods stop loading." />}
             {/* its progress above the buttons, like Galacta's and the preview kit's */}
             <BypassTrack on={busy === 'install' || busy === 'update' || busy === 'enable'}
-              done={finished === 'install' ? 'Installed. Mods load from the next game launch.' : finished === 'update' ? UPDATED : finished === 'enable' ? 'On again. Mods load from the next game launch.' : undefined} />
+              done={finished === 'install' ? 'Installed. Mods load from the next game launch.' : finished === 'update' ? updated(b?.state) : finished === 'enable' ? 'On again. Mods load from the next game launch.' : undefined} />
             {/* only with a button in it: an empty row left a gap under the part row */}
             {(!bypassOn || b?.state === 'disabled' || b?.state === 'outdated') && <div className="su-actions">
               {!bypassOn && (
