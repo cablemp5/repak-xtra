@@ -291,7 +291,7 @@ export function SetupPanel({ alert, onClose, focus }: { alert: Alert; onClose: (
   const g = galacta
   const bypassOn = b?.state === 'installed' || b?.state === 'disabled' || b?.state === 'outdated'
   const bypassLine = !b ? 'Checking…' : {
-    missing: 'Not installed', outdated: 'An older version that does not work with the performance DLC', installed: `In ${b.files[0]?.place ?? 'the game folder'}`, disabled: 'Off, its files stay in place',
+    missing: 'Not installed', outdated: 'An older version that does not work with the performance DLC', installed: `Performance DLC compatible · in ${b.files[0]?.place ?? 'the game folder'}`, disabled: 'Off, its files stay in place',
     partial: `${b.files.filter(f => f.found === 'same').length} of ${b.files.length} files there`, other: 'A different loader or bypass is there',
   }[b.state]
   const galactaState = !g?.installed ? 'Not installed' : g.up_to_date === false ? 'Update available' : g.up_to_date ? 'Up to date' : g.disabled ? 'Installed, off' : 'Installed'
