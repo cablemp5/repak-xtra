@@ -330,7 +330,7 @@ export function SetupPanel({ alert, onClose, focus }: { alert: Alert; onClose: (
                   <span>{bypassLine}</span>
                 </div>
                 {bypassOn && <span className="su-part-links">
-                  {b.state === 'installed' && <button type="button" className="su-link" disabled={Boolean(busy)}
+                  {(b.state === 'installed' || (b.state === 'outdated' && b.files[0]?.found !== 'missing')) && <button type="button" className="su-link" disabled={Boolean(busy)}
                     onClick={() => act('disable')}>Turn off</button>}
                   <button type="button" className="su-link" disabled={Boolean(busy)} onClick={() => setConfirmOff('remove')}>Remove</button>
                 </span>}
