@@ -344,6 +344,37 @@ mod tests {
         assert!(ids.windows(2).all(|w| w[0] < w[1]), "DIDX stays sorted");
     }
 
+    /// The whole build on the game's real banks, without the app: SOUNDS_BANKS = a folder holding Marvel/Content/WwiseAudio
+    /// as extracted from the game, SOUNDS_OUT = where the rebuilt banks and streamed files go. Each slot gets a tone of
+    /// its own pitch (440 Hz + 20 Hz x its place in the table), to check by decoding them.
+    /// `SOUNDS_BANKS=... SOUNDS_OUT=... cargo test --bin REPAK-X real_banks -- --ignored`
+    #[test]
+    #[ignore]
+    fn real_banks() {
+        let (Ok(src), Ok(out)) = (std::env::var("SOUNDS_BANKS"), std::env::var("SOUNDS_OUT")) else { return };
+        let all = slots();
+        let wems: Vec<Vec<u8>> = all.iter().enumerate().map(|(i, _)| {
+            let f = 440.0 + 20.0 * i as f32;
+            let pcm: Vec<i16> = (0..48000).map(|n| ((n as f32 * f * std::f32::consts::TAU / 48000.0).sin() * 12000.0) as i16).collect();
+            crate::xtra_wem::encode(&pcm, 48000, 1).unwrap()
+        }).collect();
+        let keys: BTreeSet<&str> = all.iter().flat_map(|s| s.banks.iter().map(|b| b.as_str())).collect();
+        for key in keys {
+            let rel = key.strip_prefix("wwiseaudio/").unwrap();
+            let path = std::fs::read_dir(format!("{src}/Marvel/Content/WwiseAudio")).unwrap().flatten()
+                .flat_map(|e| if e.path().is_dir() { std::fs::read_dir(e.path()).unwrap().flatten().map(|f| f.path()).collect() } else { vec![e.path()] })
+                .find(|p| p.to_string_lossy().replace('\\', "/").to_lowercase().ends_with(rel)).unwrap();
+            let game = std::fs::read(&path).unwrap();
+            let picks: Vec<(&[u32], &[u8])> = all.iter().zip(&wems).filter(|(s, _)| s.banks.iter().any(|b| b == key)).map(|(s, w)| (&s.sounds[..], &w[..])).collect();
+            let mut taken: BTreeSet<u32> = media(&game).unwrap().iter().map(|(id, _)| *id).collect();
+            let (bank, streamed) = put_sounds(&game, &picks, &mut taken).unwrap();
+            let dest = PathBuf::from(&out).join(rel);
+            std::fs::create_dir_all(dest.parent().unwrap()).unwrap();
+            std::fs::write(&dest, bank).unwrap();
+            for (id, wem) in streamed { std::fs::write(dest.parent().unwrap().join(format!("stream_{id}.wem")), wem).unwrap() }
+        }
+    }
+
     #[test]
     fn slot_table_is_whole() {
         let s = slots();
