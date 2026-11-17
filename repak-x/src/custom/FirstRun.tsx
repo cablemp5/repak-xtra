@@ -591,8 +591,11 @@ export default function FirstRun({ alert, gamePath, mods: allMods, details, inst
     setBusy(what)
     try { await f(); finish(what) } catch (e) { alert.warning('Setup', String(e)) } finally { setBusy(null) }
   }
+  // a failed one (an antivirus took a file) still shows where the files stand, so the row's next try is the right action
+  const bypassAct = (action: string) => invoke<Bypass>('setup_bypass', { action })
+    .catch(e => { invoke<Bypass>('setup_bypass_status').then(setBypass, () => undefined); throw e })
   const installBypass = () => run('bypass', async () => {
-    setBypass(await invoke<Bypass>('setup_bypass', { action: bypassAction(bypass?.state) }))
+    setBypass(await bypassAct(bypassAction(bypass?.state)))
     window.dispatchEvent(new Event('bypass-changed')) // the Setup button's dot
   })
   const installGalacta = () => run('galacta', async () => { setGalacta(await invoke<Galacta>('setup_galacta_install', { folder: null })) })
@@ -605,7 +608,7 @@ export default function FirstRun({ alert, gamePath, mods: allMods, details, inst
       setBypass(b)
       if (b.state !== 'installed' && b.state !== 'other') {
         setBusy('bypass')
-        let n = await invoke<Bypass>('setup_bypass', { action: bypassAction(b.state) })
+        let n = await bypassAct(bypassAction(b.state))
         if (n.state === 'disabled') n = await invoke<Bypass>('setup_bypass', { action: 'enable' }) // an older one that was off: updated, then on
         setBypass(n)
         window.dispatchEvent(new Event('bypass-changed'))

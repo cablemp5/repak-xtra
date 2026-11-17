@@ -22,7 +22,7 @@ import { SnapshotCard, checkSnapshotLoss } from './SnapshotCard'
 import { SafetyCard, checkBannedPlugins } from './safetyScan'
 
 type Alert = ReturnType<typeof useAlert>
-type FileCheck = { name: string; place: string; size: number; sha256: string; found: 'missing' | 'same' | 'old' | 'other' }
+type FileCheck = { name: string; place: string; size: number; sha256: string; found: 'missing' | 'same' | 'old' | 'other' | 'blocked' }
 type Bypass = { state: 'installed' | 'disabled' | 'outdated' | 'partial' | 'other' | 'missing'; files: FileCheck[] }
 type Galacta = { installed: string | null; disabled: boolean; latest: string | null; published: string | null; notes: string | null; url: string | null; up_to_date: boolean | null; other_loader: string | null }
 /** What is wrong with the loader, for Setup's warning and the header dot: missing, off, or another loader on too. */
@@ -250,7 +250,8 @@ export function SetupPanel({ alert, onClose, focus }: { alert: Alert; onClose: (
   }
   const act = (action: 'install' | 'update' | 'enable' | 'disable' | 'remove') => run(action, async () => {
     setConfirmOff(null)
-    const s = await invoke<Bypass>('setup_bypass', { action })
+    // a failed one still shows where the files stand, so Repair is never left saying nothing
+    const s = await invoke<Bypass>('setup_bypass', { action }).catch(e => { invoke<Bypass>('setup_bypass_status').then(setBypass).catch(() => {}); throw e })
     setBypass(s)
     if (action === 'install' || action === 'update' || action === 'enable') finish(action)
     alert.success('Signature bypass', { install: 'Installed. Mods load from the next game launch.', update: updated(s.state), enable: 'On again.',
@@ -292,7 +293,7 @@ export function SetupPanel({ alert, onClose, focus }: { alert: Alert; onClose: (
   const bypassOn = b?.state === 'installed' || b?.state === 'disabled' || b?.state === 'outdated'
   const bypassLine = !b ? 'Checking…' : {
     missing: 'Not installed', outdated: 'An older version that does not work with the performance DLC', installed: `Performance DLC compatible · in ${b.files[0]?.place ?? 'the game folder'}`, disabled: 'Off, its files stay in place',
-    partial: `${b.files.filter(f => f.found === 'same').length} of ${b.files.length} files there`, other: 'A different loader or bypass is there',
+    partial: b.files.filter(f => f.found !== 'same').map(f => `${f.name} is ${({ blocked: 'blocked', old: 'an older version' } as Record<string, string>)[f.found] ?? 'missing'}`).join(', '), other: 'A different loader or bypass is there',
   }[b.state]
   const galactaState = !g?.installed ? 'Not installed' : g.up_to_date === false ? 'Update available' : g.up_to_date ? 'Up to date' : g.disabled ? 'Installed, off' : 'Installed'
   const where = g?.installed?.replace(/^.*[\\/]~mods/i, '~mods') ?? ''
@@ -320,6 +321,7 @@ export function SetupPanel({ alert, onClose, focus }: { alert: Alert; onClose: (
               </div>
               <span className={`su-chip is-${b?.state === 'outdated' ? 'update' : b?.state ?? 'missing'}`}>{b ? BYPASS_LABEL[b.state] : 'Checking…'}</span>
             </div>
+            {b?.state === 'partial' && <p className="su-note">Repair puts it back. If it goes missing again, an antivirus removed it. Allow it in Windows Security &gt; Virus &amp; threat protection &gt; Protection history, then press Repair.</p>}
             {b?.state === 'other' && <p className="su-note">A different loader or bypass is installed. Installing keeps it next to the new one as a .repakxtra-backup file.</p>}
             {/* One part row like Galacta's and the preview kit's: its state, Turn off and Remove as links on the right */}
             <ul className="su-parts">
