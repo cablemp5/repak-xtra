@@ -1493,6 +1493,7 @@ html[data-view="library"] .container > .main-panels { animation: t-page-from-rig
 /* each tab as wide as its label (custom/segSlide.ts measures the pill under the picked one), a little tighter in a
    narrow window so four tabs and the header buttons fit at the 1200x800 minimum */
 @media (max-width: 1100px) { .view-tabs button { padding: 0 12px !important; } }
+.view-tabs:has(> button:nth-child(5)) button { padding: 0 12px !important; }   /* five tabs: the same tighter fit at every width */
 /* The same pill on every segmented bar (custom/segSlide.ts measures the picked button into --seg-x/y/w/h) */
 .has-seg-pill { position: relative; isolation: isolate; }
 .has-seg-pill::before { content: ''; position: absolute; top: 0; left: 0; z-index: -1; width: var(--seg-w); height: var(--seg-h);
