@@ -69,6 +69,7 @@ export default function SoundsScreen({ alert, blocked, reload }: SoundsProps) {
   const [making, setMaking] = useState<string | null>(null)
   const [made, setMade] = useState(false)
   const audio = useRef<{ el: HTMLAudioElement; url: string } | null>(null)
+  const edits = useRef(0) // counts slot changes, so a build that ran while one changed is not shown as current
   const playToken = useRef(0) // a play still loading when another starts (or Stop) never starts after it
 
   const refresh = () => invoke<State>('sounds_state').then(setSt).catch(() => undefined)
@@ -89,6 +90,7 @@ export default function SoundsScreen({ alert, blocked, reload }: SoundsProps) {
       const bytes = await invoke<ArrayBuffer>('sounds_read', { path })
       const { wav, cut } = await toWav(bytes).catch(() => { throw new Error(`${fileName(path)} could not be read as audio. Use a .wav, .mp3, or .ogg.`) })
       await invoke('sounds_set', wav, { headers: { slot: slot.id, name: encodeURIComponent(fileName(path)) } })
+      edits.current++
       if (cut) alert.info(slot.name, `Only its first ${MAX_SECONDS} seconds are used.`)
       setMade(false)
       return true
@@ -161,7 +163,7 @@ export default function SoundsScreen({ alert, blocked, reload }: SoundsProps) {
   }
   const clear = async (slot: Slot) => {
     if (playing?.startsWith(`${slot.id}:`)) stop()
-    await invoke('sounds_clear', { slot: slot.id }).catch(e => alert.warning(slot.name, String(e)))
+    await invoke('sounds_clear', { slot: slot.id }).then(() => { edits.current++ }, e => alert.warning(slot.name, String(e)))
     setMade(false)
     await refresh()
   }
@@ -189,9 +191,10 @@ export default function SoundsScreen({ alert, blocked, reload }: SoundsProps) {
   const count = Object.keys(st.names).length
   const make = async () => {
     setMaking('Encoding sounds')
+    const at = edits.current
     try {
       const path = await invoke<string>('sounds_make')
-      setMade(true)
+      setMade(edits.current === at) // a slot changed mid-build: the button offers Update mod again
       cue('success')
       alert.success(st.made ? 'Sounds mod updated' : 'Sounds mod made', path.endsWith('.pak')
         ? 'repakxtra-sounds is in your Library and on. Your sounds play in the next match.'

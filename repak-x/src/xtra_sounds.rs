@@ -135,11 +135,15 @@ fn stamp_of(p: &std::path::Path) -> Option<String> {
 /// that name from anywhere else is never taken for it.
 fn made_path(paks: &std::path::Path) -> Option<PathBuf> {
     let rec = std::fs::read_to_string(made_record_path()).ok()?;
-    let (sha, stamp) = rec.trim().split_once(' ').unwrap_or((rec.trim(), ""));
+    let mut f = rec.trim().split('\t');
+    let (sha, stamp, at) = (f.next()?, f.next().unwrap_or(""), PathBuf::from(f.next().unwrap_or("")));
+    let ours = |p: &std::path::Path| stamp_of(p).as_deref() == Some(stamp) || sha256_of(p).as_deref() == Some(sha);
+    // where it was put, unless the Library moved, renamed, or switched it since (a backup copy elsewhere never wins)
+    if at.is_file() && ours(&at) { return Some(at) }
     walkdir::WalkDir::new(paks.join("~mods")).into_iter().flatten().map(|e| e.into_path())
         .filter(|p| p.file_name().and_then(|n| n.to_str()).map(str::to_lowercase).is_some_and(|n| n.trim_start_matches('!').starts_with("repakxtra-sounds")
             && [".pak", ".bak_repak", ".pak_disabled"].iter().any(|x| n.ends_with(x))))
-        .find(|p| stamp_of(p).as_deref() == Some(stamp) || sha256_of(p).as_deref() == Some(sha))
+        .find(|p| ours(p))
 }
 
 /// Where a bank's streamed files sit, as sound keys: wwiseaudio/media/ or wwiseaudio/media/english(us)/.
@@ -314,27 +318,33 @@ pub async fn sounds_make(state: State<'_, Arc<Mutex<crate::AppState>>>) -> Resul
             }
         }
         if entries.is_empty() { return Err("The game's sound banks were not found.".into()) }
-        let dest = match made_path(&paks) {
-            Some(p) => p,
-            None => {
-                let p = paks.join("~mods").join(format!("{MOD_STEM}.pak"));
-                if p.exists() || p.with_extension("bak_repak").exists() {
-                    return Err("A mod named repakxtra-sounds that this tab did not make is in your mods folder. Rename or delete it first.".into());
-                }
-                p
-            }
-        };
-        std::fs::create_dir_all(dest.parent().unwrap()).map_err(|e| e.to_string())?;
-        // written beside it, then swapped in: a failed build never leaves half a pak where the game loads it
-        let part = dest.with_extension("part");
-        let made = uasset_toolkit::create_pak(&part.to_string_lossy(), entries, Some("../../../"), Some(0), Some(AES_KEY_HEX))
+        // packed beside the mods first, then swapped in: a failed build never leaves half a pak where the game loads it
+        let mods = paks.join("~mods");
+        std::fs::create_dir_all(&mods).map_err(|e| e.to_string())?;
+        let part = mods.join(format!("{MOD_STEM}.part"));
+        let placed = uasset_toolkit::create_pak(&part.to_string_lossy(), entries, Some("../../../"), Some(0), Some(AES_KEY_HEX))
             .map_err(|e| format!("Could not pack the sounds: {e}"))
-            .and_then(|_| std::fs::rename(&part, &dest).map_err(|e| format!("Could not put the sounds mod in place: {e}")));
-        if let Err(e) = made {
-            let _ = std::fs::remove_file(&part);
-            return Err(e);
-        }
-        if let (Some(h), Some(t)) = (sha256_of(&dest), stamp_of(&dest)) { let _ = std::fs::write(made_record_path(), format!("{h} {t}")); }
+            .and_then(|_| {
+                // where it goes is looked up only now, so a switch on or off in the Library during the build is followed
+                let dest = match made_path(&paks) {
+                    Some(p) => p,
+                    None => {
+                        let p = mods.join(format!("{MOD_STEM}.pak"));
+                        if ["pak", "bak_repak", "pak_disabled"].iter().any(|x| p.with_extension(x).exists()) {
+                            return Err("A mod named repakxtra-sounds that this tab did not make is in your mods folder. Rename or delete it first.".into());
+                        }
+                        p
+                    }
+                };
+                std::fs::rename(&part, &dest).map(|_| dest).map_err(|e| format!("Could not put the sounds mod in place: {e}"))
+            });
+        let dest = match placed {
+            Ok(d) => d,
+            Err(e) => { let _ = std::fs::remove_file(&part); return Err(e) }
+        };
+        let rec = sha256_of(&dest).zip(stamp_of(&dest)).map(|(h, t)| format!("{h}\t{t}\t{}", dest.to_string_lossy()));
+        rec.ok_or_else(|| "The mod was made, but could not be read back.".to_string())
+            .and_then(|r| std::fs::write(made_record_path(), r).map_err(|e| format!("The mod was made, but its record could not be saved ({e}). Make it again before changing it.")))?;
         Ok(dest.to_string_lossy().to_string())
     }).await.map_err(|e| e.to_string())?
 }
