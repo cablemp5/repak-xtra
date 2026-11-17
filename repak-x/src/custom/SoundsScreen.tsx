@@ -187,6 +187,7 @@ export default function SoundsScreen({ alert, blocked, reload }: SoundsProps) {
     if (typeof path === 'string') await fillByName([path])
   }
   const clear = async (slot: Slot) => {
+    newest.current[slot.id] = ++dropSeq.current // a folder import still running never fills it again
     if (playing?.startsWith(`${slot.id}:`)) stop()
     await invoke('sounds_clear', { slot: slot.id }).then(() => { edits.current++ }, e => alert.warning(slot.name, String(e)))
     setMade(false)
