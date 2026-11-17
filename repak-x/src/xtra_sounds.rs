@@ -121,9 +121,10 @@ pub struct SoundsState {
 
 /// Every copy of the mod in the mods folder: the name repakxtra-sounds is this tab's, so any file under it is the mod
 /// it made, at any priority the Library renamed it to (repakxtra-sounds_<n>_P, !repakxtra-sounds for the top one), on or
-/// off (.pak, .bak_repak, .pak.bak_repak, .pak_disabled), and in any Library folder. Normally one.
+/// off (.pak, .bak_repak, .pak.bak_repak, .pak_disabled), and in any Library folder: the files the Library lists, so
+/// a copy in a staging folder it hides never counts. Normally one.
 fn made_copies(paks: &std::path::Path) -> Vec<PathBuf> {
-    walkdir::WalkDir::new(paks.join("~mods")).into_iter().flatten().filter(|e| e.file_type().is_file()).map(|e| e.into_path())
+    walkdir::WalkDir::new(paks.join("~mods")).into_iter().filter_entry(crate::xtra_bundle::library_walk).flatten().filter(|e| e.file_type().is_file()).map(|e| e.into_path())
         .filter(|p| p.file_name().and_then(|n| n.to_str()).map(str::to_lowercase).is_some_and(|n| n.trim_start_matches('!').starts_with("repakxtra-sounds")
             && [".pak", ".bak_repak", ".pak_disabled"].iter().any(|x| n.ends_with(x))))
         .collect()
@@ -422,7 +423,8 @@ mod tests {
         let t = tempfile::tempdir().unwrap();
         let mods = t.path().join("~mods");
         std::fs::create_dir_all(mods.join("Sounds")).unwrap();
-        for f in ["!repakxtra-sounds_9999999_P.pak", "Sounds/repakxtra-sounds_99999999_P.pak.bak_repak", "repakxtra-sounds_9999999_P.part", "other_9999999_P.pak", "repakxtra-sounds.txt"] {
+        std::fs::create_dir_all(mods.join(".repakxtra-staging")).unwrap(); // hidden from the Library, so never counted
+        for f in [".repakxtra-staging/repakxtra-sounds_9999999_P.pak", "!repakxtra-sounds_9999999_P.pak", "Sounds/repakxtra-sounds_99999999_P.pak.bak_repak", "repakxtra-sounds_9999999_P.part", "other_9999999_P.pak", "repakxtra-sounds.txt"] {
             std::fs::write(mods.join(f), b"x").unwrap();
         }
         let mut names: Vec<String> = made_copies(t.path()).iter().map(|p| p.file_name().unwrap().to_string_lossy().into_owned()).collect();

@@ -72,8 +72,9 @@ export default function SoundsScreen({ alert, blocked, reload }: SoundsProps) {
   const [making, setMaking] = useState<string | null>(null)
   const [made, setMade] = useState(false)
   const audio = useRef<{ el: HTMLAudioElement; url: string } | null>(null)
-  const newest = useRef<Record<string, number>>({}) // per slot, the newest file put on it: an older, slower read never lands over it
-  const [batch, setBatch] = useState(false) // a folder or several files are being read: Make waits for all of them
+  const newest = useRef<Record<string, number>>({}) // per slot, the latest drop or pick that reached it: an earlier one never lands over it
+  const dropSeq = useRef(0) // numbers each drop or pick when it happens (a folder's files share their drop's number)
+  const [batches, setBatches] = useState(0) // folders or file sets being read: Make waits for all of them
   const edits = useRef(0) // counts slot changes, so a build that ran while one changed is not shown as current
   const playToken = useRef(0) // a play still loading when another starts (or Stop) never starts after it
 
@@ -93,15 +94,15 @@ export default function SoundsScreen({ alert, blocked, reload }: SoundsProps) {
   useEffect(() => { if (!shown) stop() }, [shown])
 
   /** True when the slot got its sound. */
-  const assign = async (slot: Slot, path: string): Promise<boolean> => {
+  const assign = async (slot: Slot, path: string, seq = ++dropSeq.current): Promise<boolean> => {
     if (playingNow.current?.startsWith(`${slot.id}:`)) stop()
-    const mine = (newest.current[slot.id] ?? 0) + 1
-    newest.current[slot.id] = mine
+    if (seq < (newest.current[slot.id] ?? 0)) return false // a later drop already filled this slot
+    newest.current[slot.id] = seq
     setReading(r => ({ ...r, [slot.id]: { name: fileName(path), n: (r[slot.id]?.n ?? 0) + 1 } }))
     try {
       const bytes = await invoke<ArrayBuffer>('sounds_read', { path })
       const { wav, cut } = await toWav(bytes).catch(() => { throw new Error(`${fileName(path)} could not be read as audio. Use a .wav, .mp3, or .ogg.`) })
-      if (newest.current[slot.id] !== mine) return false // a newer file was put on this slot while this one was read
+      if (newest.current[slot.id] !== seq) return false // a newer file was put on this slot while this one was read
       await invoke('sounds_set', wav, { headers: { slot: slot.id, name: encodeURIComponent(fileName(path)) } })
       edits.current++
       if (cut) alert.info(slot.name, `Only its first ${MAX_SECONDS} seconds are used.`)
@@ -118,6 +119,7 @@ export default function SoundsScreen({ alert, blocked, reload }: SoundsProps) {
 
   /** Several files or folders: each file fills the slots its name stands for. */
   const fillByName = async (paths: string[]) => {
+    const seq = ++dropSeq.current
     const files = (await Promise.all(paths.map(async p => {
       const inside = await invoke<string[]>('sounds_folder', { path: p }).catch(() => [])
       return inside.length ? inside : [p]
@@ -137,8 +139,8 @@ export default function SoundsScreen({ alert, blocked, reload }: SoundsProps) {
     }
     // one at a time: each file is read and decoded whole, a folder of songs at once would fill the WebView's memory
     let added = 0
-    setBatch(true)
-    try { for (const [s, f] of pairs) if (await assign(s, f)) added++ } finally { setBatch(false) }
+    setBatches(n => n + 1)
+    try { for (const [s, f] of pairs) if (await assign(s, f, seq)) added++ } finally { setBatches(n => n - 1) }
     const left = files.length - pairs.length
     if (added) { cue('success'); alert.success(`${added} ${added === 1 ? 'sound' : 'sounds'} added`, left ? `${left} ${left === 1 ? 'file was' : 'files were'} not used: no slot matched, or another file filled it.` : undefined) }
   }
@@ -222,7 +224,7 @@ export default function SoundsScreen({ alert, blocked, reload }: SoundsProps) {
       setMaking(null)
     }
   }
-  const why = blocked ? 'Close Marvel Rivals first' : batch || Object.keys(reading).length ? 'Wait for the sounds being read'
+  const why = blocked ? 'Close Marvel Rivals first' : batches || Object.keys(reading).length ? 'Wait for the sounds being read'
     : !count ? (st.made ? "Every slot is back to the game. Delete repakxtra-sounds in the Library to hear the game's sounds again" : 'Add a sound to a slot first') : null
   const shownMade = made && Boolean(st.made) && !why // the mod is still there, and nothing has changed since
   const inGroup = SLOTS.filter(s => s.group === group)
