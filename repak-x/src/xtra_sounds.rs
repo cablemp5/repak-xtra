@@ -119,31 +119,14 @@ pub struct SoundsState {
     can_play_original: bool,
 }
 
-fn made_record_path() -> PathBuf { dir().join("made.sha256") }
-fn sha256_of(p: &std::path::Path) -> Option<String> {
-    use sha2::Digest;
-    std::fs::read(p).ok().map(|b| sha2::Sha256::digest(b).iter().map(|x| format!("{x:02x}")).collect())
-}
-/// A file's size and modified time, the cheap half of the made record (hashing every refresh would stall the page).
-fn stamp_of(p: &std::path::Path) -> Option<String> {
-    let m = std::fs::metadata(p).ok()?;
-    Some(format!("{} {:?}", m.len(), m.modified().ok()?))
-}
-
-/// The mod this tab made, by the record saved when it was made (its hash, size, and time): on or off, renamed to any
-/// priority (repakxtra-sounds_<n>_P, or !repakxtra-sounds for the top one), or moved into a Library folder. A file of
-/// that name from anywhere else is never taken for it.
-fn made_path(paks: &std::path::Path) -> Option<PathBuf> {
-    let rec = std::fs::read_to_string(made_record_path()).ok()?;
-    let mut f = rec.trim().split('\t');
-    let (sha, stamp, at) = (f.next()?, f.next().unwrap_or(""), PathBuf::from(f.next().unwrap_or("")));
-    let ours = |p: &std::path::Path| stamp_of(p).as_deref() == Some(stamp) || sha256_of(p).as_deref() == Some(sha);
-    // where it was put, unless the Library moved, renamed, or switched it since (a backup copy elsewhere never wins)
-    if at.is_file() && ours(&at) { return Some(at) }
-    walkdir::WalkDir::new(paks.join("~mods")).into_iter().flatten().map(|e| e.into_path())
+/// Every copy of the mod in the mods folder: the name repakxtra-sounds is this tab's, so any file under it is the mod
+/// it made, at any priority the Library renamed it to (repakxtra-sounds_<n>_P, !repakxtra-sounds for the top one), on or
+/// off (.pak, .bak_repak, .pak.bak_repak, .pak_disabled), and in any Library folder. Normally one.
+fn made_copies(paks: &std::path::Path) -> Vec<PathBuf> {
+    walkdir::WalkDir::new(paks.join("~mods")).into_iter().flatten().filter(|e| e.file_type().is_file()).map(|e| e.into_path())
         .filter(|p| p.file_name().and_then(|n| n.to_str()).map(str::to_lowercase).is_some_and(|n| n.trim_start_matches('!').starts_with("repakxtra-sounds")
             && [".pak", ".bak_repak", ".pak_disabled"].iter().any(|x| n.ends_with(x))))
-        .find(|p| ours(p))
+        .collect()
 }
 
 /// The folder a streamed file sits in under Media: its id's first two digits.
@@ -157,11 +140,16 @@ fn media_dir(bank_key: &str) -> String {
 
 fn vgmstream() -> PathBuf { crate::xtra_kit::kit_dir().join("vgmstream").join("vgmstream-cli.exe") }
 
+/// Off the main thread: it walks the mods folder.
 #[tauri::command]
-pub fn sounds_state(state: State<'_, Arc<Mutex<crate::AppState>>>) -> SoundsState {
-    let mut n = names();
-    n.retain(|slot, _| dir().join(format!("{slot}.wav")).is_file());
-    SoundsState { names: n, made: paks_of(&state).and_then(|p| made_path(&p)).map(|p| p.to_string_lossy().to_string()), can_play_original: vgmstream().is_file() }
+pub async fn sounds_state(state: State<'_, Arc<Mutex<crate::AppState>>>) -> Result<SoundsState, String> {
+    let paks = paks_of(&state);
+    tauri::async_runtime::spawn_blocking(move || {
+        let mut n = names();
+        n.retain(|slot, _| dir().join(format!("{slot}.wav")).is_file());
+        let made = paks.and_then(|p| made_copies(&p).into_iter().next()).map(|p| p.to_string_lossy().to_string());
+        SoundsState { names: n, made, can_play_original: vgmstream().is_file() }
+    }).await.map_err(|e| e.to_string())
 }
 
 /// Saves a slot's sound: the raw body is a 48 kHz 16-bit WAV the page rendered, `slot` and `name` (the dropped file's
@@ -329,15 +317,10 @@ pub async fn sounds_make(state: State<'_, Arc<Mutex<crate::AppState>>>) -> Resul
             .map_err(|e| format!("Could not pack the sounds: {e}"))
             .and_then(|_| {
                 // where it goes is looked up only now, so a switch on or off in the Library during the build is followed
-                let dest = match made_path(&paks) {
-                    Some(p) => p,
-                    None => {
-                        let p = mods.join(format!("{MOD_STEM}.pak"));
-                        if ["pak", "bak_repak", "pak_disabled"].iter().any(|x| p.with_extension(x).exists()) {
-                            return Err("A mod named repakxtra-sounds that this tab did not make is in your mods folder. Rename or delete it first.".into());
-                        }
-                        p
-                    }
+                let dest = match made_copies(&paks).as_slice() {
+                    [] => mods.join(format!("{MOD_STEM}.pak")),
+                    [one] => one.clone(),
+                    many => return Err(format!("There are {} copies of repakxtra-sounds in your mods folder. Delete all but one in the Library, then make it again.", many.len())),
                 };
                 std::fs::rename(&part, &dest).map(|_| dest).map_err(|e| format!("Could not put the sounds mod in place: {e}"))
             });
@@ -345,9 +328,6 @@ pub async fn sounds_make(state: State<'_, Arc<Mutex<crate::AppState>>>) -> Resul
             Ok(d) => d,
             Err(e) => { let _ = std::fs::remove_file(&part); return Err(e) }
         };
-        let rec = sha256_of(&dest).zip(stamp_of(&dest)).map(|(h, t)| format!("{h}\t{t}\t{}", dest.to_string_lossy()));
-        rec.ok_or_else(|| "The mod was made, but could not be read back.".to_string())
-            .and_then(|r| std::fs::write(made_record_path(), r).map_err(|e| format!("The mod was made, but its record could not be saved ({e}). Make it again before changing it.")))?;
         Ok(dest.to_string_lossy().to_string())
     }).await.map_err(|e| e.to_string())?
 }
@@ -435,6 +415,19 @@ mod tests {
             std::fs::write(&dest, bank).unwrap();
             for (id, wem) in streamed { std::fs::write(dest.parent().unwrap().join(format!("stream_{id}.wem")), wem).unwrap() }
         }
+    }
+
+    #[test]
+    fn finds_every_copy_of_the_mod() {
+        let t = tempfile::tempdir().unwrap();
+        let mods = t.path().join("~mods");
+        std::fs::create_dir_all(mods.join("Sounds")).unwrap();
+        for f in ["!repakxtra-sounds_9999999_P.pak", "Sounds/repakxtra-sounds_99999999_P.pak.bak_repak", "repakxtra-sounds_9999999_P.part", "other_9999999_P.pak", "repakxtra-sounds.txt"] {
+            std::fs::write(mods.join(f), b"x").unwrap();
+        }
+        let mut names: Vec<String> = made_copies(t.path()).iter().map(|p| p.file_name().unwrap().to_string_lossy().into_owned()).collect();
+        names.sort();
+        assert_eq!(names, ["!repakxtra-sounds_9999999_P.pak", "repakxtra-sounds_99999999_P.pak.bak_repak"]);
     }
 
     #[test]
