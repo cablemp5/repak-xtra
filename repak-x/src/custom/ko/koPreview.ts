@@ -12,7 +12,7 @@ const SIZE = { w: 640, h: 904 } // the kit's preview size (640 by 905), even for
 
 let heroes: Promise<Hero[]> | null = null
 // The clip format each saved preview was made with: an older one is recorded again even when the mod did not change
-const VERSIONS = 'repakxtra.koPreviewVersion', CLIP = 2 // 2: encoded offline at 60 fps (record.ts)
+const VERSIONS = 'repakxtra.koPreviewVersion', CLIP = 3 // 2: encoded offline at 60 fps (record.ts), 3: draws another hero's sheets the widget uses
 const versions = (): Record<string, number> => { try { return JSON.parse(localStorage.getItem(VERSIONS) || '{}') } catch { return {} } }
 
 /** Makes and saves the mod's KO preview: 'made', or 'kept' when its saved one is newer than the mod and `force` is off.

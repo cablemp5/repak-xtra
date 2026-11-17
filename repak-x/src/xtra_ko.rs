@@ -341,7 +341,8 @@ pub struct KoMod {
     hero: String,
     /// The mod's widget as JSON
     widget_json: String,
-    /// The mod's own material instances (JSON) and textures (PNG), by package path: they replace the game's
+    /// The mod's material instances (JSON) and textures (PNG), with the game's ones its widget draws (another hero's KO
+    /// sheet, say), by package path: they replace the game's
     materials: Vec<(String, String)>,
     textures: Vec<(String, String)>,
 }
@@ -361,14 +362,16 @@ pub async fn xtra_ko_mod(usmap_path: String, mod_path: String, state: State<'_, 
     let _ = std::fs::remove_dir_all(&base);
     let (ex, json, png) = (base.join("extract"), base.join("json"), base.join("png"));
     std::fs::create_dir_all(&ex).map_err(|e| e.to_string())?;
-    uat(VfxUatRequest { action: "extract_iostore_legacy", game_paks: Some(paks.to_string_lossy().to_string()), mod_path: Some(utoc.to_string_lossy().to_string()), output_path: Some(ex.to_string_lossy().to_string()), with_deps: Some(false), ..Default::default() }, "Reading the mod").await?;
+    uat(VfxUatRequest { action: "extract_iostore_legacy", game_paks: Some(paks.to_string_lossy().to_string()), mod_path: Some(utoc.to_string_lossy().to_string()), output_path: Some(ex.to_string_lossy().to_string()), with_deps: Some(true), ..Default::default() }, "Reading the mod").await?;
     let mut files = Vec::new();
     uassets(&ex, &mut files);
     let text = |p: &PathBuf| p.to_string_lossy().to_string();
     let Some(widget) = files.iter().find(|p| is_ko_widget(&text(p))).cloned() else { return Ok(None) };
     let r = rel(&ex, &widget);
     let Some(hero) = r.split('/').rev().nth(1).filter(|id| id.chars().all(|c| c.is_ascii_digit())).map(str::to_string) else { return Ok(None) };
-    let to_json: Vec<String> = files.iter().filter(|p| **p == widget || norm(&text(p)).contains("/ui/materials/")).map(text).collect();
+    // its dependencies come along too: the materials and textures it points at, which need not be its own hero's
+    let mi = |p: &PathBuf| norm(&text(p)).contains("/ui/materials/") && p.file_name().is_some_and(|n| n.to_string_lossy().to_ascii_lowercase().starts_with("mi_"));
+    let to_json: Vec<String> = files.iter().filter(|p| **p == widget || mi(p)).map(text).collect();
     let pngs: Vec<String> = files.iter().filter(|p| norm(&text(p)).contains("/ui/textures/")).map(text).collect();
     let base_path = Some(ex.to_string_lossy().to_string());
     uat(VfxUatRequest { action: "batch_to_json", file_paths: Some(to_json), usmap_path: Some(&usmap_path), output_path: Some(json.to_string_lossy().to_string()), base_path: base_path.clone(), ..Default::default() }, "Reading the mod's KO prompt").await?;
