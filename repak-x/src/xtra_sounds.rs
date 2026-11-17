@@ -53,7 +53,7 @@ fn sound_objects(b: &[u8]) -> Result<HashMap<u32, SoundObj>, String> {
     for _ in 0..count {
         let (t, size, id) = (*b.get(p).ok_or("HIRC runs short")?, u32_at(p + 1)? as usize, u32_at(p + 5)?);
         if t == 2 && size >= 17 {
-            out.insert(id, SoundObj { body: p + 9, stream: b[p + 13], source: u32_at(p + 14)? });
+            out.insert(id, SoundObj { body: p + 9, stream: *b.get(p + 13).ok_or("HIRC runs short")?, source: u32_at(p + 14)? });
         }
         p += 5 + size;
     }
@@ -80,7 +80,7 @@ fn put_sounds(game: &[u8], slots: &[(&[u32], &[u8])], taken: &mut BTreeSet<u32>)
             let to = *done.entry(o.source).or_insert_with(|| {
                 if users[&o.source].iter().all(|u| mine.contains(u)) { return o.source } // only this slot plays it: in place
                 let mut n = o.source; // shared: a new id, the Sound object points at it
-                while taken.contains(&n) { n = n.wrapping_mul(16777619).wrapping_add(0x9e37) & 0x7fff_ffff | 1 }
+                while taken.contains(&n) || n < 100_000_000 { n = n.wrapping_mul(16777619).wrapping_add(0x9e37) & 0x7fff_ffff | 1 } // as long as the game's ids
                 taken.insert(n);
                 n
             });
@@ -146,6 +146,9 @@ fn made_path(paks: &std::path::Path) -> Option<PathBuf> {
         .find(|p| ours(p))
 }
 
+/// The folder a streamed file sits in under Media: its id's first two digits.
+fn first2(id: u32) -> String { id.to_string().chars().take(2).collect() }
+
 /// Where a bank's streamed files sit, as sound keys: wwiseaudio/media/ or wwiseaudio/media/english(us)/.
 fn media_dir(bank_key: &str) -> String {
     let lang = bank_key.rsplit_once('/').map(|(d, _)| d.trim_start_matches("wwiseaudio").trim_start_matches('/')).unwrap_or("");
@@ -200,7 +203,7 @@ pub fn sounds_get(slot: String) -> Result<tauri::ipc::Response, String> {
 #[tauri::command]
 pub fn sounds_read(path: String) -> Result<tauri::ipc::Response, String> {
     let p = PathBuf::from(&path);
-    let ok = p.extension().and_then(|x| x.to_str()).is_some_and(|x| ["wav", "mp3", "ogg", "flac", "m4a", "aac", "opus", "webm"].contains(&x.to_lowercase().as_str()));
+    let ok = p.extension().and_then(|x| x.to_str()).is_some_and(|x| ["wav", "mp3", "ogg", "flac", "m4a"].contains(&x.to_lowercase().as_str()));
     if !ok { return Err("Not a sound file. Use a .wav, .mp3, or .ogg.".into()) }
     if std::fs::metadata(&p).map(|m| m.len()).unwrap_or(0) > 64 << 20 { return Err("That file is over 64 MB.".into()) }
     std::fs::read(&p).map(tauri::ipc::Response::new).map_err(|e| e.to_string())
@@ -229,7 +232,7 @@ pub async fn sounds_original(slot: String, state: State<'_, Arc<Mutex<crate::App
         let objs = sound_objects(&bank)?;
         let src = objs.get(&s.sounds[0]).ok_or("The game changed this sound.")?.source;
         // a streamed sound's bank copy is only its start: the whole file sits in Media
-        let loose = format!("{}{}/{src}.wem", media_dir(&s.banks[0]), &src.to_string()[..2]);
+        let loose = format!("{}{}/{src}.wem", media_dir(&s.banks[0]), first2(src));
         let wem = files.get(&loose).and_then(|(p, e)| extract(p, e)).map(|b| b.to_vec())
             .or_else(|| media(&bank).ok()?.into_iter().find(|(m, _)| *m == src).map(|(_, d)| d.to_vec()))
             .ok_or("The game's sound could not be found.")?;
@@ -312,7 +315,7 @@ pub async fn sounds_make(state: State<'_, Arc<Mutex<crate::AppState>>>) -> Resul
             let bank_file = match &real_lang { Some(l) => format!("Marvel/Content/WwiseAudio/{l}/{}", key.rsplit('/').next().unwrap()), None => format!("Marvel/Content/WwiseAudio/{}", key.rsplit('/').next().unwrap()) };
             write_entry(tmp.path(), key, &bank_file, bank, &mut entries)?;
             for (id, wem) in streamed {
-                let first2 = &id.to_string()[..2];
+                let first2 = first2(id);
                 let file = match &real_lang { Some(l) => format!("Marvel/Content/WwiseAudio/Media/{l}/{first2}/{id}.wem"), None => format!("Marvel/Content/WwiseAudio/Media/{first2}/{id}.wem") };
                 write_entry(tmp.path(), &format!("{media_dir}{first2}/{id}.wem"), &file, wem, &mut entries)?;
             }

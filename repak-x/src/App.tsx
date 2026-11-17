@@ -1591,7 +1591,7 @@ function App() {
 
     // Listen for Tauri drag-drop event
     const unlistenDragDrop = listen('tauri://drag-drop', (event: any) => {
-      if (document.documentElement.dataset.view === 'sounds') return // repakxtra: the Sounds tab takes its own drops
+      if (document.documentElement.dataset.view === 'sounds' && !modalOpen()) return // repakxtra: the Sounds tab takes its own drops, a dialog over it gets them
       const files = event.payload.paths || event.payload
       setIsDragging(false)
       handleFileDrop(files).finally(() => window.dispatchEvent(new Event('repakxtra-drop-done'))) // repakxtra: the first-launch flow comes back when no install panel opened
@@ -1664,7 +1664,7 @@ function App() {
     // Listen for Tauri drag-enter event (when files first enter the window)
     const unlistenDragEnter = listen('tauri://drag-enter', () => {
       console.log('Tauri drag-enter detected')
-      if (!panelsRef.current.install && document.documentElement.dataset.view !== 'sounds') { // repakxtra: no install overlay over the Sounds tab
+      if (!panelsRef.current.install && (document.documentElement.dataset.view !== 'sounds' || modalOpen())) { // repakxtra: no install overlay over the Sounds tab
         setIsDragging(true)
       }
     })

@@ -12,6 +12,7 @@ import { Check, FolderOpen, Play, Square, Volume2, X } from 'lucide-react'
 import data from '../data/sound_slots.json'
 import type { LoadoutProps } from './Loadouts'
 import { useView } from './loadoutStore'
+import { modalOpen } from './dialogFocus'
 import { cue } from './sounds'
 import { Num } from './motion'
 
@@ -74,6 +75,10 @@ export default function SoundsScreen({ alert, blocked, reload }: SoundsProps) {
 
   const refresh = () => invoke<State>('sounds_state').then(setSt).catch(() => undefined)
   useEffect(() => { if (shown) void refresh() }, [shown])
+  useEffect(() => { // the preview kit installed in Setup turns the Game buttons on
+    window.addEventListener('preview-kit-changed', refresh)
+    return () => window.removeEventListener('preview-kit-changed', refresh)
+  }, [])
 
   const stop = () => {
     playToken.current++
@@ -85,6 +90,7 @@ export default function SoundsScreen({ alert, blocked, reload }: SoundsProps) {
 
   /** True when the slot got its sound. */
   const assign = async (slot: Slot, path: string): Promise<boolean> => {
+    if (playing?.startsWith(`${slot.id}:`)) stop()
     setReading(r => ({ ...r, [slot.id]: { name: fileName(path), n: (r[slot.id]?.n ?? 0) + 1 } }))
     try {
       const bytes = await invoke<ArrayBuffer>('sounds_read', { path })
@@ -140,10 +146,11 @@ export default function SoundsScreen({ alert, blocked, reload }: SoundsProps) {
     if (!shown) return
     type P = { paths?: string[]; position?: { x: number; y: number } }
     const offs = [
-      listen<P>('tauri://drag-over', e => setOver(slotAt(e.payload.position))),
+      listen<P>('tauri://drag-over', e => setOver(modalOpen() ? null : slotAt(e.payload.position))),
       listen('tauri://drag-leave', () => setOver(null)),
       listen<P>('tauri://drag-drop', e => {
         setOver(null)
+        if (modalOpen()) return // a dialog over the tab (Setup takes a preview kit zip) gets the drop, App.tsx sends it there
         const paths = e.payload.paths ?? []
         const slot = SLOTS.find(s => s.id === slotAt(e.payload.position))
         if (slot && paths.length === 1) void invoke<string[]>('sounds_folder', { path: paths[0] }).then(async inside => { if (inside.length) await fillByName(paths); else await assign(slot, paths[0]) })
@@ -209,6 +216,7 @@ export default function SoundsScreen({ alert, blocked, reload }: SoundsProps) {
   }
   const why = blocked ? 'Close Marvel Rivals first' : Object.keys(reading).length ? 'Wait for the sounds being read'
     : !count ? (st.made ? "Every slot is back to the game. Delete repakxtra-sounds in the Library to hear the game's sounds again" : 'Add a sound to a slot first') : null
+  const shownMade = made && Boolean(st.made) && !why // the mod is still there, and nothing has changed since
   const inGroup = SLOTS.filter(s => s.group === group)
   const groupDone = inGroup.filter(s => st.names[s.id]).length
 
@@ -240,11 +248,11 @@ export default function SoundsScreen({ alert, blocked, reload }: SoundsProps) {
             <span className="snd-meta">{inGroup.length} slots · {groupDone ? `${groupDone} replaced` : 'none replaced'}</span>
           </h2>
           <span className="snd-total">{count ? `${count} of ${SLOTS.length} sounds replaced` : 'Nothing replaced yet'}</span>
-          <button type="button" className={`lo-text-btn snd-make${making ? ' is-working' : made ? ' is-installed' : why ? ' is-locked' : ' is-primary'}`}
+          <button type="button" className={`lo-text-btn snd-make${making ? ' is-working' : shownMade ? ' is-installed' : why ? ' is-locked' : ' is-primary'}`}
             onClick={() => { if (!making && !why) void make() }} disabled={Boolean(making) || Boolean(why)} aria-busy={Boolean(making)}
             title={why ?? 'Build one mod with every sound you added, into the Library'}>
             {making ? <span className="t-text-in"><span className="t-shimmer">{making}</span></span>
-              : made ? <span className="t-text-in snd-btn-in"><Check size={16} aria-hidden />In your Library</span>
+              : shownMade ? <span className="t-text-in snd-btn-in"><Check size={16} aria-hidden />In your Library</span>
               : st.made ? 'Update mod' : 'Make mod'}
           </button>
         </div>
@@ -272,7 +280,7 @@ export default function SoundsScreen({ alert, blocked, reload }: SoundsProps) {
                     <button type="button" className="snd-play" onClick={() => void play(s, 'yours')} title={playing === `${s.id}:yours` ? 'Stop' : 'Play yours'} aria-label={`Play your ${s.name}`}>
                       {playing === `${s.id}:yours` ? <Square size={12} aria-hidden /> : <Play size={12} aria-hidden />}Yours
                     </button>
-                    <button type="button" className="lo-icon" onClick={() => void clear(s)} title="Back to the game's sound" aria-label={`Remove your ${s.name}`}><X size={14} /></button>
+                    <button type="button" className="lo-icon" disabled={Boolean(busy)} onClick={() => void clear(s)} title="Back to the game's sound" aria-label={`Remove your ${s.name}`}><X size={14} /></button>
                   </>}
                   <button type="button" className="lo-text-btn snd-browse" disabled={Boolean(busy)} onClick={() => void browse(s)}>{name ? 'Replace' : 'Browse'}</button>
                 </span>
