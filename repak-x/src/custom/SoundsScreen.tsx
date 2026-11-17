@@ -78,7 +78,8 @@ export default function SoundsScreen({ alert, blocked, reload }: SoundsProps) {
   const edits = useRef(0) // counts slot changes, so a build that ran while one changed is not shown as current
   const playToken = useRef(0) // a play still loading when another starts (or Stop) never starts after it
 
-  const refresh = () => invoke<State>('sounds_state').then(setSt).catch(() => undefined)
+  const asked = useRef(0) // only the newest state read lands: a slower, older one never overwrites it
+  const refresh = () => { const n = ++asked.current; return invoke<State>('sounds_state').then(v => { if (n === asked.current) setSt(v) }).catch(() => undefined) }
   useEffect(() => { if (shown) void refresh() }, [shown])
   useEffect(() => { // the preview kit installed in Setup turns the Game buttons on
     window.addEventListener('preview-kit-changed', refresh)
@@ -120,6 +121,10 @@ export default function SoundsScreen({ alert, blocked, reload }: SoundsProps) {
   /** Several files or folders: each file fills the slots its name stands for. */
   const fillByName = async (paths: string[]) => {
     const seq = ++dropSeq.current
+    setBatches(n => n + 1) // from the drop on, listing the folder included: Make waits until every file is in
+    try { await fillFiles(paths, seq) } finally { setBatches(n => n - 1) }
+  }
+  const fillFiles = async (paths: string[], seq: number) => {
     const files = (await Promise.all(paths.map(async p => {
       const inside = await invoke<string[]>('sounds_folder', { path: p }).catch(() => [])
       return inside.length ? inside : [p]
@@ -139,8 +144,7 @@ export default function SoundsScreen({ alert, blocked, reload }: SoundsProps) {
     }
     // one at a time: each file is read and decoded whole, a folder of songs at once would fill the WebView's memory
     let added = 0
-    setBatches(n => n + 1)
-    try { for (const [s, f] of pairs) if (await assign(s, f, seq)) added++ } finally { setBatches(n => n - 1) }
+    for (const [s, f] of pairs) if (await assign(s, f, seq)) added++
     const left = files.length - pairs.length
     if (added) { cue('success'); alert.success(`${added} ${added === 1 ? 'sound' : 'sounds'} added`, left ? `${left} ${left === 1 ? 'file was' : 'files were'} not used: no slot matched, or another file filled it.` : undefined) }
   }
