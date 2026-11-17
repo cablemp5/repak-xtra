@@ -67,6 +67,8 @@ export default function SoundsScreen({ alert, blocked, reload }: SoundsProps) {
   const [reading, setReading] = useState<Record<string, { name: string; n: number }>>({}) // slot -> the newest file being read, and how many are
   const [over, setOver] = useState<string | null>(null) // the slot (or 'folder') a drag is over
   const [playing, setPlaying] = useState<string | null>(null) // `${slot}:yours` or `${slot}:game`
+  const playingNow = useRef<string | null>(null) // the same, for the drop listener (bound once per view, so its state is stale)
+  playingNow.current = playing
   const [making, setMaking] = useState<string | null>(null)
   const [made, setMade] = useState(false)
   const audio = useRef<{ el: HTMLAudioElement; url: string } | null>(null)
@@ -92,7 +94,7 @@ export default function SoundsScreen({ alert, blocked, reload }: SoundsProps) {
 
   /** True when the slot got its sound. */
   const assign = async (slot: Slot, path: string): Promise<boolean> => {
-    if (playing?.startsWith(`${slot.id}:`)) stop()
+    if (playingNow.current?.startsWith(`${slot.id}:`)) stop()
     const mine = (newest.current[slot.id] ?? 0) + 1
     newest.current[slot.id] = mine
     setReading(r => ({ ...r, [slot.id]: { name: fileName(path), n: (r[slot.id]?.n ?? 0) + 1 } }))
