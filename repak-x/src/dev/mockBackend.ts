@@ -41,14 +41,14 @@ const baseName = (p: string) => (p.split(/[\\/]/).pop() || p).replace(/(_\d+_P)?
 
 // 'mock.unset' = '1': the library as it is, but neither installed yet (the README's have-mods demo)
 const unset = fresh || localStorage.getItem('mock.unset') === '1'
-let mockBypass = unset ? 'missing' : localStorage.getItem('mock.oldBypass') === '1' ? 'outdated' : 'installed'   // a fresh PC has neither, 'mock.oldBypass' = '1': the older release
+let mockBypass = unset ? 'missing' : localStorage.getItem('mock.oldBypass') === '1' ? 'outdated' : localStorage.getItem('mock.bypassBlocked') === '1' ? 'partial' : 'installed'   // a fresh PC has neither, 'mock.oldBypass' = '1': the older release
 let mockSnapshots: any[] = [] // Setup > Snapshots
 let mockGalacta: any = { installed: unset ? null : 'C:/Game/~mods', disabled: false, up_to_date: false }
 const galactaRelease = { latest: 'v1.4.1', published: '2026-10-14T14:29:44Z', url: 'https://github.com/0xSaturno/ProjectGalacta/releases/tag/v1.4.1',
   notes: "## What's new:\n\n### Mod Loader:\n- Mods that add custom VFX to abilities are no longer blocked." }
 const setupBypass = () => ({ state: mockBypass, license: 'MIT License\n\nCopyright (c) 2023 ThirteenAG',
-  files: [{ name: 'dsound.dll', place: 'Binaries\\Win64', size: 415232, sha256: 'bb8767f918c52a2ad055d2de9baffd2478598643b9894f09abd20d1f1ffd170c', found: mockBypass === 'installed' ? 'same' : 'missing' },
-    { name: 'MarvelRivalsUTOCSignatureBypass.asi', place: 'Binaries\\Win64\\plugins', size: 45056, sha256: '39a5ec6e27f419e019402a362ad02ea37b1f8f4b3550882ab924ca775d774282', found: mockBypass === 'missing' ? 'missing' : mockBypass === 'outdated' ? 'old' : 'same' }] })
+  files: [{ name: 'dsound.dll', place: 'Binaries\\Win64', size: 415232, sha256: 'bb8767f918c52a2ad055d2de9baffd2478598643b9894f09abd20d1f1ffd170c', found: mockBypass === 'installed' || mockBypass === 'partial' ? 'same' : 'missing' },
+    { name: 'MarvelRivalsUTOCSignatureBypass.asi', place: 'Binaries\\Win64\\plugins', size: 45056, sha256: '39a5ec6e27f419e019402a362ad02ea37b1f8f4b3550882ab924ca775d774282', found: mockBypass === 'missing' ? 'missing' : mockBypass === 'outdated' ? 'old' : mockBypass === 'partial' ? 'blocked' : 'same' }] })
 const trash = new Map<string, any>() // trash id -> the deleted mod record
 const clearAtStart = new Set<string>(['browser']) // Settings > Storage sections marked to clear at the next start
 // Browser checks flip window.__mockGameRunning live (polled every 5 s); localStorage 'mock.bypass' = 'false' turns the
@@ -147,6 +147,8 @@ if (import.meta.env.DEV && !('__TAURI_INTERNALS__' in window)) {
       case 'snapshot_delete': mockSnapshots = mockSnapshots.filter((s: any) => s.id !== args?.id); return null
       case 'snapshot_missing': return null
       case 'setup_bypass': return wait(0.6).then(() => {
+        // 'mock.bypassBlocked' = '1': an antivirus takes the .asi again right after Repair writes it
+        if (mockBypass === 'partial') throw 'MarvelRivalsUTOCSignatureBypass.asi was removed or blocked right after it was written. An antivirus most likely blocked it.'
         mockBypass = ({ install: 'installed', update: 'installed', enable: 'installed', disable: 'disabled', remove: 'missing' } as any)[args?.action] ?? mockBypass
         return setupBypass()
       })

@@ -84,7 +84,8 @@ pub struct FileCheck {
     place: String,
     size: usize,
     sha256: String,
-    /// "missing", "same" (byte for byte the bundled file), "old" (an older bypass release) or "other" (a different file)
+    /// "missing", "same" (byte for byte the bundled file), "old" (an older bypass release), "other" (a different file) or
+    /// "blocked" (there but unreadable, as when an antivirus holds or quarantines it)
     found: String,
 }
 
@@ -102,7 +103,8 @@ fn check(path: &Path, name: &str, place: &str, bundled: &[u8]) -> FileCheck {
         Ok(b) if b == bundled => "same",
         Ok(b) if b.len() < 1 << 20 && is_old_bypass(&b) => "old",
         Ok(_) => "other",
-        Err(_) => "missing",
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => "missing",
+        Err(_) => "blocked",
     };
     FileCheck { name: name.into(), place: place.into(), size: bundled.len(), sha256: sha256(bundled), found: found.into() }
 }
@@ -148,6 +150,22 @@ pub(crate) fn is_bundled_bypass(path: &Path) -> bool {
     fs::metadata(path).is_ok_and(|m| m.len() < 1 << 20) && fs::read(path).is_ok_and(|b| is_ours(&b))
 }
 
+/// What to do when an antivirus blocks or removes a bypass file, for install and update errors.
+fn av_hint(name: &str) -> String {
+    format!("An antivirus most likely blocked it. Open Windows Security > Virus & threat protection > Protection history, pick the {name} entry,         choose Actions > Allow on device (or Restore), then press Repair. With another antivirus, allow the file there.")
+}
+
+/// Writes a bypass file and reads it back: an antivirus that removes it right away otherwise left Setup at Repair with
+/// nothing said.
+fn write_checked(path: &Path, bytes: &[u8]) -> Result<(), String> {
+    let name = path.file_name().unwrap().to_string_lossy();
+    fs::write(path, bytes).map_err(|e| format!("Could not write {name}: {e}. {}", av_hint(&name)))?;
+    if fs::read(path).is_ok_and(|b| b == bytes) {
+        return Ok(());
+    }
+    Err(format!("{name} was removed or blocked right after it was written. {}", av_hint(&name)))
+}
+
 /// install: writes both files (a different dsound.dll or .asi already there is kept as <name>.repakxtra-backup, an older
 /// bypass is replaced); update: replaces an older bypass .asi only, the loader and its on or off stay as they are;
 /// disable / enable: renames dsound.dll like the Tools panel does; remove: deletes the bundled or older files only.
@@ -168,7 +186,7 @@ fn bypass_action(win64: &Path, action: &str) -> Result<(), String> {
                     let keep = path.with_file_name(format!("{}.repakxtra-backup", path.file_name().unwrap().to_string_lossy()));
                     fs::rename(path, &keep).map_err(|e| io("back up the file that was there", e))?;
                 }
-                fs::write(path, bytes).map_err(|e| io("write the bypass", e))?;
+                write_checked(path, bytes)?;
             }
             if off.exists() && fs::read(&off).is_ok_and(|b| b == LOADER_BYTES) {
                 let _ = fs::remove_file(&off);
@@ -178,7 +196,7 @@ fn bypass_action(win64: &Path, action: &str) -> Result<(), String> {
             if !fs::read(&asi).is_ok_and(|b| is_old_bypass(&b)) {
                 return Err("No older bypass to update. Use Install or Repair.".into());
             }
-            fs::write(&asi, BYPASS_BYTES).map_err(|e| io("write the bypass", e))?;
+            write_checked(&asi, BYPASS_BYTES)?;
         }
         "disable" => fs::rename(&loader, &off).map_err(|e| io("turn the loader off", e))?,
         "enable" => fs::rename(&off, &loader).map_err(|e| io("turn the loader on", e))?,
@@ -574,6 +592,18 @@ mod tests {
         fs::write(&asi, b"old bypass").unwrap();
         bypass_action(&win, "remove").unwrap();
         assert!(!asi.exists() && bypass_status(&win).state == "missing");
+        let _ = fs::remove_dir_all(&win);
+    }
+
+    #[test]
+    fn unreadable_files_are_blocked_not_missing() {
+        let win = temp("bypass-blocked");
+        fs::create_dir_all(win.join("plugins").join(BYPASS)).unwrap(); // a folder under the name: there but unreadable
+        fs::write(win.join(LOADER), LOADER_BYTES).unwrap();
+        let s = bypass_status(&win);
+        assert_eq!((s.state.as_str(), s.files[1].found.as_str()), ("partial", "blocked"));
+        let err = bypass_action(&win, "install").unwrap_err();
+        assert!(err.contains(BYPASS) && err.contains("Protection history"), "{err}");
         let _ = fs::remove_dir_all(&win);
     }
 
