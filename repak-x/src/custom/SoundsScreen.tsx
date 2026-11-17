@@ -96,8 +96,8 @@ export default function SoundsScreen({ alert, blocked, reload }: SoundsProps) {
 
   /** True when the slot got its sound. */
   const assign = async (slot: Slot, path: string, seq = ++dropSeq.current): Promise<boolean> => {
-    if (playingNow.current?.startsWith(`${slot.id}:`)) stop()
     if (seq < (newest.current[slot.id] ?? 0)) return false // a later drop already filled this slot
+    if (playingNow.current?.startsWith(`${slot.id}:`)) stop()
     newest.current[slot.id] = seq
     setReading(r => ({ ...r, [slot.id]: { name: fileName(path), n: (r[slot.id]?.n ?? 0) + 1 } }))
     try {
@@ -119,8 +119,7 @@ export default function SoundsScreen({ alert, blocked, reload }: SoundsProps) {
   }
 
   /** Several files or folders: each file fills the slots its name stands for. */
-  const fillByName = async (paths: string[]) => {
-    const seq = ++dropSeq.current
+  const fillByName = async (paths: string[], seq = ++dropSeq.current) => {
     setBatches(n => n + 1) // from the drop on, listing the folder included: Make waits until every file is in
     try { await fillFiles(paths, seq) } finally { setBatches(n => n - 1) }
   }
@@ -167,8 +166,13 @@ export default function SoundsScreen({ alert, blocked, reload }: SoundsProps) {
         if (modalOpen()) return // a dialog over the tab (Setup takes a preview kit zip) gets the drop, App.tsx sends it there
         const paths = e.payload.paths ?? []
         const slot = SLOTS.find(s => s.id === slotAt(e.payload.position))
-        if (slot && paths.length === 1) void invoke<string[]>('sounds_folder', { path: paths[0] }).then(async inside => { if (inside.length) await fillByName(paths); else await assign(slot, paths[0]) })
-        else if (paths.length) void fillByName(paths)
+        const seq = ++dropSeq.current // numbered now, as dropped, not when the folder check below comes back
+        if (slot && paths.length === 1) {
+          setBatches(n => n + 1) // Make waits through the check too
+          void invoke<string[]>('sounds_folder', { path: paths[0] })
+            .then(async inside => { if (inside.length) await fillByName(paths, seq); else await assign(slot, paths[0], seq) })
+            .finally(() => setBatches(n => n - 1))
+        } else if (paths.length) void fillByName(paths, seq)
       }),
     ]
     return () => offs.forEach(o => void o.then(f => f()))
