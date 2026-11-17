@@ -119,20 +119,27 @@ pub struct SoundsState {
     can_play_original: bool,
 }
 
-fn made_hash_path() -> PathBuf { dir().join("made.sha256") }
+fn made_record_path() -> PathBuf { dir().join("made.sha256") }
 fn sha256_of(p: &std::path::Path) -> Option<String> {
     use sha2::Digest;
     std::fs::read(p).ok().map(|b| sha2::Sha256::digest(b).iter().map(|x| format!("{x:02x}")).collect())
 }
+/// A file's size and modified time, the cheap half of the made record (hashing every refresh would stall the page).
+fn stamp_of(p: &std::path::Path) -> Option<String> {
+    let m = std::fs::metadata(p).ok()?;
+    Some(format!("{} {:?}", m.len(), m.modified().ok()?))
+}
 
-/// The mod this tab made, by the hash saved when it was made: on or off, and whatever priority the Library renamed it
-/// to (repakxtra-sounds_<n>_P). A file of that name from anywhere else is never taken for it.
+/// The mod this tab made, by the record saved when it was made (its hash, size, and time): on or off, renamed to any
+/// priority (repakxtra-sounds_<n>_P, or !repakxtra-sounds for the top one), or moved into a Library folder. A file of
+/// that name from anywhere else is never taken for it.
 fn made_path(paks: &std::path::Path) -> Option<PathBuf> {
-    let want = std::fs::read_to_string(made_hash_path()).ok()?;
-    std::fs::read_dir(paks.join("~mods")).ok()?.flatten().map(|e| e.path())
-        .filter(|p| p.file_name().and_then(|n| n.to_str()).map(str::to_lowercase)
-            .is_some_and(|n| n.starts_with("repakxtra-sounds") && (n.ends_with(".pak") || n.ends_with(".bak_repak"))))
-        .find(|p| sha256_of(p).as_deref() == Some(want.trim()))
+    let rec = std::fs::read_to_string(made_record_path()).ok()?;
+    let (sha, stamp) = rec.trim().split_once(' ').unwrap_or((rec.trim(), ""));
+    walkdir::WalkDir::new(paks.join("~mods")).into_iter().flatten().map(|e| e.into_path())
+        .filter(|p| p.file_name().and_then(|n| n.to_str()).map(str::to_lowercase).is_some_and(|n| n.trim_start_matches('!').starts_with("repakxtra-sounds")
+            && [".pak", ".bak_repak", ".pak_disabled"].iter().any(|x| n.ends_with(x))))
+        .find(|p| stamp_of(p).as_deref() == Some(stamp) || sha256_of(p).as_deref() == Some(sha))
 }
 
 /// Where a bank's streamed files sit, as sound keys: wwiseaudio/media/ or wwiseaudio/media/english(us)/.
@@ -250,7 +257,15 @@ fn read_wav(b: &[u8]) -> Result<(Vec<i16>, u32, u16), String> {
 #[tauri::command]
 pub async fn sounds_make(state: State<'_, Arc<Mutex<crate::AppState>>>) -> Result<String, String> {
     let paks = paks_of(&state).ok_or("The game folder is not set.")?;
+    let bypass = state.lock().map(|s| s.bypass_game_running_lock).unwrap_or(false);
     tauri::async_runtime::spawn_blocking(move || {
+        // the guards every ~mods writer takes: no snapshot restore or cleanup mid-write, not while Repak X is open, and
+        // not while the game runs (it holds the banks), unless Settings turned that lock off
+        let _mutation = crate::xtra_mutation::edit()?;
+        crate::xtra_identity::upstream_guard()?;
+        if !bypass && crate::is_game_process_running() {
+            return Err("Marvel Rivals is running. Close it, then make the mod again.".into());
+        }
         // one build at a time (a page reload mid-build could start a second over the same files)
         static BUSY: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
         if BUSY.swap(true, std::sync::atomic::Ordering::SeqCst) { return Err("The sounds mod is already being made.".to_string()) }
@@ -319,7 +334,7 @@ pub async fn sounds_make(state: State<'_, Arc<Mutex<crate::AppState>>>) -> Resul
             let _ = std::fs::remove_file(&part);
             return Err(e);
         }
-        if let Some(h) = sha256_of(&dest) { let _ = std::fs::write(made_hash_path(), h); }
+        if let (Some(h), Some(t)) = (sha256_of(&dest), stamp_of(&dest)) { let _ = std::fs::write(made_record_path(), format!("{h} {t}")); }
         Ok(dest.to_string_lossy().to_string())
     }).await.map_err(|e| e.to_string())?
 }

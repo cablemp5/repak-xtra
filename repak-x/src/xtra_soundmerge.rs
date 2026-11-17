@@ -152,7 +152,10 @@ pub(crate) fn extract(pak: &Path, inner: &str) -> Option<Arc<Vec<u8>>> {
     let bytes = if ok { std::fs::read(&out).ok().map(Arc::new) } else { None };
     let _ = std::fs::remove_file(&out);
     if let Some(b) = &bytes {
-        cache().lock().unwrap().insert(id, b.clone());
+        let mut c = cache().lock().unwrap();
+        let pak_key = id.0.split('|').next().unwrap_or("").to_string();
+        c.retain(|(k, inner_k), _| !(k.split('|').next() == Some(pak_key.as_str()) && *inner_k == id.1)); // an older read of this file
+        c.insert(id, b.clone());
     }
     bytes
 }

@@ -63,7 +63,7 @@ export default function SoundsScreen({ alert, blocked, reload }: SoundsProps) {
   const shown = useView() === 'sounds'
   const [group, setGroup] = useState(GROUPS[0].id)
   const [st, setSt] = useState<State>({ names: {}, made: null, can_play_original: false })
-  const [reading, setReading] = useState<Record<string, string>>({}) // slot -> file being read
+  const [reading, setReading] = useState<Record<string, { name: string; n: number }>>({}) // slot -> the newest file being read, and how many are
   const [over, setOver] = useState<string | null>(null) // the slot (or 'folder') a drag is over
   const [playing, setPlaying] = useState<string | null>(null) // `${slot}:yours` or `${slot}:game`
   const [making, setMaking] = useState<string | null>(null)
@@ -84,7 +84,7 @@ export default function SoundsScreen({ alert, blocked, reload }: SoundsProps) {
 
   /** True when the slot got its sound. */
   const assign = async (slot: Slot, path: string): Promise<boolean> => {
-    setReading(r => ({ ...r, [slot.id]: fileName(path) }))
+    setReading(r => ({ ...r, [slot.id]: { name: fileName(path), n: (r[slot.id]?.n ?? 0) + 1 } }))
     try {
       const bytes = await invoke<ArrayBuffer>('sounds_read', { path })
       const { wav, cut } = await toWav(bytes).catch(() => { throw new Error(`${fileName(path)} could not be read as audio. Use a .wav, .mp3, or .ogg.`) })
@@ -96,7 +96,7 @@ export default function SoundsScreen({ alert, blocked, reload }: SoundsProps) {
       cue('warning'); alert.warning(slot.name, e instanceof Error ? e.message : String(e))
       return false
     } finally {
-      setReading(r => { const { [slot.id]: _, ...rest } = r; return rest })
+      setReading(r => { const { [slot.id]: was, ...rest } = r; return was && was.n > 1 ? { ...r, [slot.id]: { ...was, n: was.n - 1 } } : rest })
       await refresh()
     }
   }
@@ -107,7 +107,14 @@ export default function SoundsScreen({ alert, blocked, reload }: SoundsProps) {
       const inside = await invoke<string[]>('sounds_folder', { path: p }).catch(() => [])
       return inside.length ? inside : [p]
     }))).flat().filter(p => AUDIO.includes(p.split('.').pop()?.toLowerCase() ?? ''))
-    const pairs = files.flatMap(f => { const s = slotFor(f); return s ? [[s, f] as const] : [] })
+    // one file per slot: a group-and-name file ("Combat Bodyshot kill") wins over a plain one, else the first found
+    const bySlot = new Map<string, readonly [Slot, string]>()
+    for (const f of files) {
+      const s = slotFor(f)
+      const full = s && norm(fileName(f)) !== norm(s.name)
+      if (s && (!bySlot.has(s.id) || full)) bySlot.set(s.id, [s, f])
+    }
+    const pairs = [...bySlot.values()]
     if (!pairs.length) {
       cue('warning')
       alert.warning('No file matched a slot', files.length ? 'Name each file like its slot, for example Double kill.wav, or drop one file on a slot.' : 'Drop .wav, .mp3, or .ogg files.')
@@ -117,7 +124,7 @@ export default function SoundsScreen({ alert, blocked, reload }: SoundsProps) {
     let added = 0
     for (const [s, f] of pairs) if (await assign(s, f)) added++
     const left = files.length - pairs.length
-    if (added) { cue('success'); alert.success(`${added} ${added === 1 ? 'sound' : 'sounds'} added`, left ? `${left} ${left === 1 ? 'file' : 'files'} matched no slot.` : undefined) }
+    if (added) { cue('success'); alert.success(`${added} ${added === 1 ? 'sound' : 'sounds'} added`, left ? `${left} ${left === 1 ? 'file was' : 'files were'} not used: no slot matched, or another file filled it.` : undefined) }
   }
 
   // Files dropped on the window: on a slot they fill it, anywhere else they fill the slots their names match.
@@ -242,7 +249,7 @@ export default function SoundsScreen({ alert, blocked, reload }: SoundsProps) {
         <ul className="snd-slots" key={group}>
           {inGroup.map(s => {
             const name = st.names[s.id]
-            const busy = reading[s.id]
+            const busy = reading[s.id]?.name
             return (
               <li key={s.id} data-snd-slot={s.id} className={`snd-slot${name ? ' is-set' : ''}${over === s.id ? ' is-over' : ''}`}
                 onClick={e => { if (!(e.target as HTMLElement).closest('button') && !busy) void browse(s) }}>
