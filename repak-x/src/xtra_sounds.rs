@@ -119,9 +119,20 @@ pub struct SoundsState {
     can_play_original: bool,
 }
 
+fn made_hash_path() -> PathBuf { dir().join("made.sha256") }
+fn sha256_of(p: &std::path::Path) -> Option<String> {
+    use sha2::Digest;
+    std::fs::read(p).ok().map(|b| sha2::Sha256::digest(b).iter().map(|x| format!("{x:02x}")).collect())
+}
+
+/// The mod this tab made, by the hash saved when it was made: on or off, and whatever priority the Library renamed it
+/// to (repakxtra-sounds_<n>_P). A file of that name from anywhere else is never taken for it.
 fn made_path(paks: &std::path::Path) -> Option<PathBuf> {
-    let mods = paks.join("~mods");
-    ["pak", "bak_repak"].iter().map(|x| mods.join(format!("{MOD_STEM}.{x}"))).find(|p| p.exists())
+    let want = std::fs::read_to_string(made_hash_path()).ok()?;
+    std::fs::read_dir(paks.join("~mods")).ok()?.flatten().map(|e| e.path())
+        .filter(|p| p.file_name().and_then(|n| n.to_str()).map(str::to_lowercase)
+            .is_some_and(|n| n.starts_with("repakxtra-sounds") && (n.ends_with(".pak") || n.ends_with(".bak_repak"))))
+        .find(|p| sha256_of(p).as_deref() == Some(want.trim()))
 }
 
 /// Where a bank's streamed files sit, as sound keys: wwiseaudio/media/ or wwiseaudio/media/english(us)/.
@@ -149,7 +160,9 @@ pub fn sounds_set(request: tauri::ipc::Request<'_>) -> Result<(), String> {
     let path = wav_of(&slot)?;
     read_wav(bytes)?; // only a WAV the encoder can take is kept
     std::fs::create_dir_all(dir()).map_err(|e| e.to_string())?;
-    std::fs::write(&path, bytes).map_err(|e| e.to_string())?;
+    // written beside it, then swapped in: a failed write keeps the slot's last sound
+    let part = path.with_extension("part");
+    std::fs::write(&part, bytes).and_then(|_| std::fs::rename(&part, &path)).map_err(|e| { let _ = std::fs::remove_file(&part); e.to_string() })?;
     let mut n = names();
     n.insert(slot, name.chars().take(200).collect());
     std::fs::write(names_path(), serde_json::to_string(&n).unwrap()).map_err(|e| e.to_string())
@@ -158,7 +171,9 @@ pub fn sounds_set(request: tauri::ipc::Request<'_>) -> Result<(), String> {
 #[tauri::command]
 pub fn sounds_clear(slot: String) -> Result<(), String> {
     let path = wav_of(&slot)?;
-    let _ = std::fs::remove_file(path);
+    if let Err(e) = std::fs::remove_file(&path) {
+        if path.exists() { return Err(format!("Its sound could not be removed: {e}")) }
+    }
     let mut n = names();
     n.remove(&slot);
     std::fs::write(names_path(), serde_json::to_string(&n).unwrap()).map_err(|e| e.to_string())
@@ -222,10 +237,11 @@ fn read_wav(b: &[u8]) -> Result<(Vec<i16>, u32, u16), String> {
         p += 8 + size + (size & 1);
     }
     let (fmt, data) = (fmt.ok_or("WAV without fmt")?, data.ok_or("WAV without data")?);
-    let (ch, rate, bits) = (u16::from_le_bytes([fmt[2], fmt[3]]), u32::from_le_bytes(fmt[4..8].try_into().unwrap()), u16::from_le_bytes([fmt[14], fmt[15]]));
-    if bits != 16 || !(ch == 1 || ch == 2) || rate == 0 { return Err("Not a 16-bit mono or stereo WAV".into()) }
+    let (tag, ch, rate, bits) = (u16::from_le_bytes([fmt[0], fmt[1]]), u16::from_le_bytes([fmt[2], fmt[3]]), u32::from_le_bytes(fmt[4..8].try_into().unwrap()), u16::from_le_bytes([fmt[14], fmt[15]]));
+    if tag != 1 || bits != 16 || !(ch == 1 || ch == 2) || !(8000..=192000).contains(&rate) { return Err("Not a 16-bit mono or stereo PCM WAV".into()) }
     let pcm: Vec<i16> = data.chunks_exact(2).map(|c| i16::from_le_bytes([c[0], c[1]])).collect();
     if pcm.len() < ch as usize { return Err("The sound is empty".into()) }
+    if pcm.len() / ch as usize > rate as usize * 31 { return Err("The sound is over 30 seconds".into()) } // the page cuts at 30
     Ok((pcm, rate, ch))
 }
 
@@ -235,7 +251,12 @@ fn read_wav(b: &[u8]) -> Result<(Vec<i16>, u32, u16), String> {
 pub async fn sounds_make(state: State<'_, Arc<Mutex<crate::AppState>>>) -> Result<String, String> {
     let paks = paks_of(&state).ok_or("The game folder is not set.")?;
     tauri::async_runtime::spawn_blocking(move || {
-        if crate::xtra_vfx::game_running() { return Err("Close the game first: it holds the sound files while it runs.".to_string()) }
+        // one build at a time (a page reload mid-build could start a second over the same files)
+        static BUSY: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+        if BUSY.swap(true, std::sync::atomic::Ordering::SeqCst) { return Err("The sounds mod is already being made.".to_string()) }
+        struct Done;
+        impl Drop for Done { fn drop(&mut self) { BUSY.store(false, std::sync::atomic::Ordering::SeqCst) } }
+        let _done = Done;
         let chosen: Vec<(Slot, Vec<u8>)> = slots().into_iter().filter_map(|s| {
             let wav = std::fs::read(dir().join(format!("{}.wav", s.id))).ok()?;
             Some((s, wav))
@@ -256,7 +277,10 @@ pub async fn sounds_make(state: State<'_, Arc<Mutex<crate::AppState>>>) -> Resul
         let tmp = tempfile::tempdir().map_err(|e| e.to_string())?;
         let mut entries = vec![];
         for (key, slots) in by_bank {
-            let Some((pak, entry)) = files.get(key) else { continue }; // a voice language this install lacks
+            let Some((pak, entry)) = files.get(key) else {
+                if media_dir(key) != "wwiseaudio/media/" { continue } // a voice language this install lacks
+                return Err("The game's sound bank was not found. Check the game folder in Setup.".into());
+            };
             let game = extract(pak, entry).ok_or_else(|| format!("{key} could not be read"))?;
             // ids in use: this bank's files and the streamed files in its language folder
             let media_dir = media_dir(key);
@@ -275,7 +299,16 @@ pub async fn sounds_make(state: State<'_, Arc<Mutex<crate::AppState>>>) -> Resul
             }
         }
         if entries.is_empty() { return Err("The game's sound banks were not found.".into()) }
-        let dest = made_path(&paks).unwrap_or_else(|| paks.join("~mods").join(format!("{MOD_STEM}.pak")));
+        let dest = match made_path(&paks) {
+            Some(p) => p,
+            None => {
+                let p = paks.join("~mods").join(format!("{MOD_STEM}.pak"));
+                if p.exists() || p.with_extension("bak_repak").exists() {
+                    return Err("A mod named repakxtra-sounds that this tab did not make is in your mods folder. Rename or delete it first.".into());
+                }
+                p
+            }
+        };
         std::fs::create_dir_all(dest.parent().unwrap()).map_err(|e| e.to_string())?;
         // written beside it, then swapped in: a failed build never leaves half a pak where the game loads it
         let part = dest.with_extension("part");
@@ -286,6 +319,7 @@ pub async fn sounds_make(state: State<'_, Arc<Mutex<crate::AppState>>>) -> Resul
             let _ = std::fs::remove_file(&part);
             return Err(e);
         }
+        if let Some(h) = sha256_of(&dest) { let _ = std::fs::write(made_hash_path(), h); }
         Ok(dest.to_string_lossy().to_string())
     }).await.map_err(|e| e.to_string())?
 }

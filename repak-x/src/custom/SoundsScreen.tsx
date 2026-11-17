@@ -24,15 +24,18 @@ const AUDIO = ['wav', 'mp3', 'ogg', 'flac', 'm4a']
 
 const norm = (s: string) => s.toLowerCase().replace(/\.[a-z0-9]+$/, '').replace(/[^a-z0-9]/g, '')
 const fileName = (p: string) => p.split(/[\\/]/).pop() ?? p
-/** The slots a file's name stands for: the slot's name ("Double kill.wav"), its id, or group and name ("announcer overtime"). */
-const slotsFor = (path: string) => {
+/** The slot a file's name stands for: group and name ("Announcer Victory.wav"), or the name alone when only one slot has
+ *  it ("Double kill.wav", while a plain "Victory.wav" fills neither Match's nor the announcer's) */
+const slotFor = (path: string) => {
   const n = norm(fileName(path))
-  return SLOTS.filter(s => [s.name, s.id, `${GROUPS.find(g => g.id === s.group)?.name} ${s.name}`].some(k => norm(k) === n))
+  const full = SLOTS.find(s => norm(`${GROUPS.find(g => g.id === s.group)?.name} ${s.name}`) === n)
+  const plain = SLOTS.filter(s => norm(s.name) === n)
+  return full ?? (plain.length === 1 ? plain[0] : undefined)
 }
 
 /** Any audio file the WebView can decode, as a 48 kHz 16-bit WAV of at most MAX_SECONDS (mono stays mono). */
 async function toWav(bytes: ArrayBuffer): Promise<{ wav: Uint8Array; cut: boolean }> {
-  const ctx = new AudioContext()
+  const ctx = new AudioContext({ sampleRate: 48000 }) // decoded at 48 kHz, so the render below resamples nothing
   const buf = await ctx.decodeAudioData(bytes).finally(() => void ctx.close())
   const ch = Math.min(2, buf.numberOfChannels)
   const cut = buf.duration > MAX_SECONDS
@@ -65,15 +68,22 @@ export default function SoundsScreen({ alert, blocked, reload }: SoundsProps) {
   const [playing, setPlaying] = useState<string | null>(null) // `${slot}:yours` or `${slot}:game`
   const [making, setMaking] = useState<string | null>(null)
   const [made, setMade] = useState(false)
-  const audio = useRef<HTMLAudioElement | null>(null)
+  const audio = useRef<{ el: HTMLAudioElement; url: string } | null>(null)
+  const playToken = useRef(0) // a play still loading when another starts (or Stop) never starts after it
 
   const refresh = () => invoke<State>('sounds_state').then(setSt).catch(() => undefined)
   useEffect(() => { if (shown) void refresh() }, [shown])
 
-  const stop = () => { audio.current?.pause(); audio.current = null; setPlaying(null) }
+  const stop = () => {
+    playToken.current++
+    if (audio.current) { audio.current.el.pause(); URL.revokeObjectURL(audio.current.url) }
+    audio.current = null
+    setPlaying(null)
+  }
   useEffect(() => { if (!shown) stop() }, [shown])
 
-  const assign = async (slot: Slot, path: string) => {
+  /** True when the slot got its sound. */
+  const assign = async (slot: Slot, path: string): Promise<boolean> => {
     setReading(r => ({ ...r, [slot.id]: fileName(path) }))
     try {
       const bytes = await invoke<ArrayBuffer>('sounds_read', { path })
@@ -81,8 +91,10 @@ export default function SoundsScreen({ alert, blocked, reload }: SoundsProps) {
       await invoke('sounds_set', wav, { headers: { slot: slot.id, name: encodeURIComponent(fileName(path)) } })
       if (cut) alert.info(slot.name, `Only its first ${MAX_SECONDS} seconds are used.`)
       setMade(false)
+      return true
     } catch (e) {
       cue('warning'); alert.warning(slot.name, e instanceof Error ? e.message : String(e))
+      return false
     } finally {
       setReading(r => { const { [slot.id]: _, ...rest } = r; return rest })
       await refresh()
@@ -95,15 +107,17 @@ export default function SoundsScreen({ alert, blocked, reload }: SoundsProps) {
       const inside = await invoke<string[]>('sounds_folder', { path: p }).catch(() => [])
       return inside.length ? inside : [p]
     }))).flat().filter(p => AUDIO.includes(p.split('.').pop()?.toLowerCase() ?? ''))
-    const pairs = files.flatMap(f => slotsFor(f).map(s => [s, f] as const))
+    const pairs = files.flatMap(f => { const s = slotFor(f); return s ? [[s, f] as const] : [] })
     if (!pairs.length) {
       cue('warning')
       alert.warning('No file matched a slot', files.length ? 'Name each file like its slot, for example Double kill.wav, or drop one file on a slot.' : 'Drop .wav, .mp3, or .ogg files.')
       return
     }
-    await Promise.all(pairs.map(([s, f]) => assign(s, f)))
-    const left = files.length - new Set(pairs.map(([, f]) => f)).size
-    cue('success'); alert.success(`${pairs.length} ${pairs.length === 1 ? 'sound' : 'sounds'} added`, left ? `${left} ${left === 1 ? 'file' : 'files'} matched no slot.` : undefined)
+    // one at a time: each file is read and decoded whole, a folder of songs at once would fill the WebView's memory
+    let added = 0
+    for (const [s, f] of pairs) if (await assign(s, f)) added++
+    const left = files.length - pairs.length
+    if (added) { cue('success'); alert.success(`${added} ${added === 1 ? 'sound' : 'sounds'} added`, left ? `${left} ${left === 1 ? 'file' : 'files'} matched no slot.` : undefined) }
   }
 
   // Files dropped on the window: on a slot they fill it, anywhere else they fill the slots their names match.
@@ -123,12 +137,12 @@ export default function SoundsScreen({ alert, blocked, reload }: SoundsProps) {
         setOver(null)
         const paths = e.payload.paths ?? []
         const slot = SLOTS.find(s => s.id === slotAt(e.payload.position))
-        if (slot && paths.length === 1) void invoke<string[]>('sounds_folder', { path: paths[0] }).then(inside => inside.length ? fillByName(paths) : assign(slot, paths[0]))
+        if (slot && paths.length === 1) void invoke<string[]>('sounds_folder', { path: paths[0] }).then(async inside => { if (inside.length) await fillByName(paths); else await assign(slot, paths[0]) })
         else if (paths.length) void fillByName(paths)
       }),
     ]
     return () => offs.forEach(o => void o.then(f => f()))
-  }, [shown, st]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [shown]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const browse = async (slot: Slot) => {
     const path = await pick({ multiple: false, filters: [{ name: 'Audio', extensions: AUDIO }] })
@@ -148,15 +162,18 @@ export default function SoundsScreen({ alert, blocked, reload }: SoundsProps) {
     const key = `${slot.id}:${kind}`
     if (playing === key) { stop(); return }
     stop()
+    const token = playToken.current
     setPlaying(key)
     try {
       const wav = await invoke<ArrayBuffer>(kind === 'yours' ? 'sounds_get' : 'sounds_original', { slot: slot.id })
+      if (token !== playToken.current) return // stopped, or another sound started, while this one loaded
       const url = URL.createObjectURL(new Blob([wav], { type: 'audio/wav' }))
-      const a = new Audio(url)
-      audio.current = a
-      a.onended = () => { URL.revokeObjectURL(url); if (audio.current === a) setPlaying(null) }
-      await a.play()
+      const el = new Audio(url)
+      audio.current = { el, url }
+      el.onended = () => { if (audio.current?.el === el) stop() }
+      await el.play()
     } catch (e) {
+      if (token !== playToken.current) return
       setPlaying(null)
       cue('warning'); alert.warning(slot.name, e instanceof Error ? e.message : String(e))
     }
@@ -180,7 +197,8 @@ export default function SoundsScreen({ alert, blocked, reload }: SoundsProps) {
       setMaking(null)
     }
   }
-  const why = blocked ? 'Close Marvel Rivals first' : !count ? 'Add a sound to a slot first' : null
+  const why = blocked ? 'Close Marvel Rivals first' : Object.keys(reading).length ? 'Wait for the sounds being read'
+    : !count ? (st.made ? "Every slot is back to the game. Delete repakxtra-sounds in the Library to hear the game's sounds again" : 'Add a sound to a slot first') : null
   const inGroup = SLOTS.filter(s => s.group === group)
   const groupDone = inGroup.filter(s => st.names[s.id]).length
 

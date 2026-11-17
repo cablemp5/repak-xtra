@@ -137,7 +137,9 @@ fn build_bank(game: &[u8], mods: &[BTreeMap<u32, &[u8]>], hircs: &[Option<&[u8]>
 /// One file out of a pak (the bundled UAssetTool's extract_pak_file), as bytes; None when the pak has no such file.
 /// Kept for the window's life (a bank is read once for the list, every play, and the build).
 pub(crate) fn extract(pak: &Path, inner: &str) -> Option<Arc<Vec<u8>>> {
-    let id = (pak.to_string_lossy().to_lowercase(), inner.to_string());
+    // the pak's time and size in the key: a game update rewriting a pak in place is read again
+    let stamp = std::fs::metadata(pak).map(|m| format!("{:?}:{}", m.modified().ok(), m.len())).unwrap_or_default();
+    let id = (format!("{}|{stamp}", pak.to_string_lossy().to_lowercase()), inner.to_string());
     if let Some(b) = cache().lock().unwrap().get(&id) {
         return Some(b.clone());
     }
@@ -410,20 +412,18 @@ pub async fn sound_merge_play(path: String, key: String, id: u32) -> Result<taur
 
 /// A .wem as WAV bytes, through the preview kit's vgmstream (`exe`). Also the Sounds tab's Play original.
 pub(crate) fn decode_wem(exe: &Path, wem: Vec<u8>) -> Result<Vec<u8>, String> {
+    let dir = tempfile::tempdir().map_err(|e| e.to_string())?;
+    let (inp, out) = (dir.path().join("in.wem"), dir.path().join("out.wav"));
+    std::fs::write(&inp, wem).map_err(|e| e.to_string())?;
+    let mut cmd = std::process::Command::new(exe);
+    cmd.arg("-o").arg(&out).arg(&inp).stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null());
+    #[cfg(windows)]
     {
-        let dir = tempfile::tempdir().map_err(|e| e.to_string())?;
-        let (inp, out) = (dir.path().join("in.wem"), dir.path().join("out.wav"));
-        std::fs::write(&inp, wem).map_err(|e| e.to_string())?;
-        let mut cmd = std::process::Command::new(exe);
-        cmd.arg("-o").arg(&out).arg(&inp).stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null());
-        #[cfg(windows)]
-        {
-            use std::os::windows::process::CommandExt;
-            cmd.creation_flags(0x0800_0000); // no console window
-        }
-        let ok = cmd.status().map(|s| s.success()).unwrap_or(false);
-        std::fs::read(&out).ok().filter(|_| ok).ok_or_else(|| "The sound could not be decoded.".to_string())
+        use std::os::windows::process::CommandExt;
+        cmd.creation_flags(0x0800_0000); // no console window
     }
+    let ok = cmd.status().map(|s| s.success()).unwrap_or(false);
+    std::fs::read(&out).ok().filter(|_| ok).ok_or_else(|| "The sound could not be decoded.".to_string())
 }
 
 /// What a merged pack was made from, by its file stem (lowercase): its name, its sources (paths without extension, so

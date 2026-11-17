@@ -5,6 +5,7 @@
 //! codebook as a 10-bit index into the aoTuV table the runtime carries (wem_codebooks.bin, aoTuV's data), audio packets
 //! without their type bit and long-block window flags, and the fmt chunk's 48-byte extension (uMaxPacketSize is the
 //! field the game needs: zero plays silent). Quality 0.5 is the value XzoundWave measured as decoding cleanly.
+//! The MIT notice of XzoundWave and the Xiph.org BSD notice of the codebook table are in xtra_wem.NOTICE.md beside this file.
 
 use std::num::{NonZeroU32, NonZeroU8};
 
