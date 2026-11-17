@@ -1,2 +1,0 @@
-- Fixed Repair in Setup saying Installed when an antivirus removed or blocked the signature bypass right away, it now names the file and where to allow it
-- Changed the signature bypass row to name the file that is missing or blocked instead of a file count
