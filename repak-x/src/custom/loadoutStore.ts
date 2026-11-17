@@ -541,9 +541,9 @@ if (!localStorage.getItem('repakxtra.hotkeysPinned')) {
 
 /** Which main view shows: Home (loadout cards) or Library (the full mod list). Remembered; Home on first start.
  *  Mirrored on <html data-view> so theme.css hides the other view (both stay mounted, keeping their state). */
-export type View = 'home' | 'library' | 'nexus' | 'ko'
+export type View = 'home' | 'library' | 'nexus' | 'ko' | 'sounds'
 const savedView = savedItem('repakxtra.view')
-let view: View = savedView === 'library' || savedView === 'nexus' || savedView === 'ko' ? savedView : 'home'
+let view: View = savedView === 'library' || savedView === 'nexus' || savedView === 'ko' || savedView === 'sounds' ? savedView : 'home'
 const applyView = () => { document.documentElement.dataset.view = view }
 applyView()
 export const setView = (v: View) => { view = v; localStorage.setItem('repakxtra.view', v); applyView(); notify() }

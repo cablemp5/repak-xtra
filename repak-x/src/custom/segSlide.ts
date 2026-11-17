@@ -1,9 +1,9 @@
 // repakxtra: the header tabs' sliding pill (transitions.dev Tabs sliding) on every segmented bar, in every window
 // (main.tsx). One pill sits under the picked button and glides to the next pick. Buttons differ in width (labels,
-// counts), so the pill's place and size are measured, not set in CSS as the two equal header tabs are (theme.css).
+// counts), so the pill's place and size are measured, the header tabs' too.
 
-const BARS = '.mod-state-filter, .ob-seg, .segmented-control, .ae-view-switch'
-const PICKED = ':scope > [aria-pressed="true"], :scope > [aria-checked="true"], :scope > .active'
+const BARS = '.mod-state-filter, .ob-seg, .segmented-control, .ae-view-switch, .view-tabs'
+const PICKED = ':scope > [aria-pressed="true"], :scope > [aria-checked="true"], :scope > [aria-selected="true"], :scope > .active'
 
 // repakxtra: several bars at once (a screen mounting) read all offsets first, then write, so they share one layout
 // instead of forcing one per bar.
@@ -41,7 +41,7 @@ new MutationObserver(list => {
     m.removedNodes.forEach(n => barsIn(n).forEach(bar => sized.unobserve(bar)))
   }
   if (dirty.size) place(...dirty)
-}).observe(document.documentElement, { subtree: true, childList: true, attributes: true, attributeFilter: ['aria-pressed', 'aria-checked', 'class'] })
+}).observe(document.documentElement, { subtree: true, childList: true, attributes: true, attributeFilter: ['aria-pressed', 'aria-checked', 'aria-selected', 'class'] })
 const first = [...document.querySelectorAll<HTMLElement>(BARS)]
 first.forEach(bar => sized.observe(bar))
 if (first.length) place(...first)
