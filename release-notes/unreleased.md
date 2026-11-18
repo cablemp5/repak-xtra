@@ -1,1 +1,1 @@
-- Added a Sounds tab that replaces hit, kill, killstreak, healing, kill feed, alert, match, and announcer sounds with your own .wav, .mp3, or .ogg files and makes them into one mod
+- Added a Sounds tab that replaces hit, kill, killstreak, healing, kill feed, alert, match, and announcer sounds with your own .wav, .mp3, or .ogg files or 15 built-in sounds, and makes them into a mod you install from the install card

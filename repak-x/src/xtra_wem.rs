@@ -342,5 +342,9 @@ mod tests {
             assert_eq!(u32::from_le_bytes(wem[38 + 6..38 + 10].try_into().unwrap()), n as u32, "total frames");
             assert_ne!(u16::from_le_bytes([wem[38 + 0x1e], wem[38 + 0x1f]]), 0, "uMaxPacketSize must be set");
         }
+        // the Sounds tab's shortest built-in sound (Soft tick) is 0.05 s
+        let tick: Vec<i16> = (0..2400).map(|i| ((i as f32 * 0.3).sin() * 9000.0) as i16).collect();
+        let wem = encode(&tick, 48000, 1).unwrap();
+        assert_eq!(u32::from_le_bytes(wem[38 + 6..38 + 10].try_into().unwrap()), 2400, "total frames of a short sound");
     }
 }

@@ -5,17 +5,20 @@
 // keeps it per slot. Make mod builds a mod from every filled slot and opens the install card. Play compares yours with the
 // game's own (that one needs the preview kit's decoder).
 // Make mod is a maker, not one mod's switch: each build is a new pak handed to the install card (as the KO Editor's)
-import { useEffect, useRef, useState } from 'react'
+// Built-in on a slot offers the app's own sounds (soundPresets.ts): play one, or pick it for the slot.
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
 import { open as pick } from '@tauri-apps/plugin-dialog'
-import { Download, FolderOpen, Lock, Play, Square, Volume2, X } from 'lucide-react'
+import { ChevronDown, Download, FolderOpen, Lock, Play, Square, Volume2, X } from 'lucide-react'
 import data from '../data/sound_slots.json'
 import type { LoadoutProps } from './Loadouts'
 import { useView } from './loadoutStore'
 import { modalOpen } from './dialogFocus'
 import { cue } from './sounds'
 import { Num } from './motion'
+import { PRESETS, renderPreset, type Preset } from './soundPresets'
 
 type Slot = { id: string; group: string; name: string }
 type State = { names: Record<string, string>; can_play_original: boolean }
@@ -35,6 +38,20 @@ const slotFor = (path: string) => {
   return full ?? (plain.length === 1 ? plain[0] : undefined)
 }
 
+/** Audio as a 16-bit WAV at its own rate (48 kHz here), at most two channels. */
+function encodeWav(out: AudioBuffer): Uint8Array {
+  const ch = Math.min(2, out.numberOfChannels), frames = out.length, rate = out.sampleRate
+  const planes = Array.from({ length: ch }, (_, c) => out.getChannelData(c))
+  const wav = new DataView(new ArrayBuffer(44 + frames * ch * 2))
+  const text = (o: number, s: string) => [...s].forEach((c, i) => wav.setUint8(o + i, c.charCodeAt(0)))
+  text(0, 'RIFF'); wav.setUint32(4, 36 + frames * ch * 2, true); text(8, 'WAVEfmt ')
+  wav.setUint32(16, 16, true); wav.setUint16(20, 1, true); wav.setUint16(22, ch, true); wav.setUint32(24, rate, true)
+  wav.setUint32(28, rate * ch * 2, true); wav.setUint16(32, ch * 2, true); wav.setUint16(34, 16, true)
+  text(36, 'data'); wav.setUint32(40, frames * ch * 2, true)
+  for (let i = 0, o = 44; i < frames; i++) for (let c = 0; c < ch; c++, o += 2) wav.setInt16(o, Math.max(-1, Math.min(1, planes[c][i])) * 32767, true)
+  return new Uint8Array(wav.buffer)
+}
+
 /** Any audio file the WebView can decode, as a 48 kHz 16-bit WAV of at most MAX_SECONDS (mono stays mono). */
 async function toWav(bytes: ArrayBuffer): Promise<{ wav: Uint8Array; cut: boolean }> {
   const ctx = new AudioContext({ sampleRate: 48000 }) // decoded at 48 kHz, so the render below resamples nothing
@@ -47,16 +64,46 @@ async function toWav(bytes: ArrayBuffer): Promise<{ wav: Uint8Array; cut: boolea
   src.buffer = buf
   src.connect(off.destination)
   src.start()
-  const out = await off.startRendering()
-  const planes = Array.from({ length: ch }, (_, c) => out.getChannelData(c))
-  const wav = new DataView(new ArrayBuffer(44 + frames * ch * 2))
-  const text = (o: number, s: string) => [...s].forEach((c, i) => wav.setUint8(o + i, c.charCodeAt(0)))
-  text(0, 'RIFF'); wav.setUint32(4, 36 + frames * ch * 2, true); text(8, 'WAVEfmt ')
-  wav.setUint32(16, 16, true); wav.setUint16(20, 1, true); wav.setUint16(22, ch, true); wav.setUint32(24, 48000, true)
-  wav.setUint32(28, 48000 * ch * 2, true); wav.setUint16(32, ch * 2, true); wav.setUint16(34, 16, true)
-  text(36, 'data'); wav.setUint32(40, frames * ch * 2, true)
-  for (let i = 0, o = 44; i < frames; i++) for (let c = 0; c < ch; c++, o += 2) wav.setInt16(o, Math.max(-1, Math.min(1, planes[c][i])) * 32767, true)
-  return { wav: new Uint8Array(wav.buffer), cut }
+  return { wav: encodeWav(await off.startRendering()), cut }
+}
+
+/** A slot's Built-in menu: each of the app's own sounds, with a play button to hear it and its name to pick it. In a
+ *  portal under the button (fixed, flipped up near the window's foot), so the scrolling slot list never clips it. */
+function PresetMenu({ anchor, onPick, onClose }: { anchor: HTMLElement; onPick: (p: Preset) => void; onClose: () => void }) {
+  const menu = useRef<HTMLDivElement>(null)
+  const [pos, setPos] = useState<{ top: number; right: number } | null>(null)
+  useLayoutEffect(() => {
+    const r = anchor.getBoundingClientRect(), h = menu.current?.offsetHeight ?? 320
+    setPos({ top: r.bottom + 6 + h > innerHeight - 8 ? Math.max(8, r.top - 6 - h) : r.bottom + 6, right: innerWidth - r.right })
+  }, [anchor])
+  useEffect(() => {
+    const away = (e: PointerEvent) => { if (!menu.current?.contains(e.target as Node) && !anchor.contains(e.target as Node)) onClose() }
+    const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') { e.stopPropagation(); onClose() } }
+    window.addEventListener('pointerdown', away)
+    window.addEventListener('keydown', esc, true)
+    return () => { window.removeEventListener('pointerdown', away); window.removeEventListener('keydown', esc, true) }
+  }, [anchor, onClose])
+  const ctx = useRef<AudioContext | null>(null)
+  useEffect(() => () => void ctx.current?.close(), [])
+  const hear = async (p: Preset) => {
+    ctx.current ??= new AudioContext()
+    const src = ctx.current.createBufferSource()
+    src.buffer = await renderPreset(p)
+    src.connect(ctx.current.destination)
+    src.start()
+  }
+  return createPortal(
+    <div ref={menu} className="xtra-menu snd-preset-menu" role="menu" aria-label="Built-in sounds"
+      style={{ position: 'fixed', top: pos?.top ?? -9999, right: pos?.right ?? 0, visibility: pos ? 'visible' : 'hidden' }}>
+      {PRESETS.map(p => (
+        <div key={p.id} className="snd-preset-row">
+          <button type="button" className="lo-icon" title={`Play ${p.name}`} aria-label={`Play ${p.name}`} onClick={() => void hear(p)}><Play size={14} /></button>
+          <button type="button" role="menuitem" className="xtra-item" onClick={() => onPick(p)} title={`Use ${p.name} for this slot`}>
+            <span className="snd-preset-name">{p.name}</span><small>{p.hint}</small>
+          </button>
+        </div>
+      ))}
+    </div>, document.body)
 }
 
 export type SoundsProps = Pick<LoadoutProps, 'alert' | 'blocked'> & { onInstall: (path: string) => Promise<void> }
@@ -75,6 +122,7 @@ export default function SoundsScreen({ alert, blocked, onInstall }: SoundsProps)
   const newest = useRef<Record<string, number>>({}) // per slot, the latest drop or pick that reached it: an earlier one never lands over it
   const dropSeq = useRef(0) // numbers each drop or pick when it happens (a folder's files share their drop's number)
   const [batches, setBatches] = useState(0) // folders or file sets being read: Make waits for all of them
+  const [menuFor, setMenuFor] = useState<{ slot: Slot; anchor: HTMLElement } | null>(null) // the slot whose Built-in menu is open
   const playToken = useRef(0) // a play still loading when another starts (or Stop) never starts after it
 
   const asked = useRef(0) // only the newest state read lands: a slower, older one never overwrites it
@@ -93,17 +141,22 @@ export default function SoundsScreen({ alert, blocked, onInstall }: SoundsProps)
   }
   useEffect(() => { if (!shown) stop() }, [shown])
 
-  /** True when the slot got its sound. */
-  const assign = async (slot: Slot, path: string, seq = ++dropSeq.current): Promise<boolean> => {
+  /** A dropped or browsed file into a slot. True when the slot got its sound. */
+  const assign = (slot: Slot, path: string, seq = ++dropSeq.current) => put(slot, fileName(path), async () => {
+    const bytes = await invoke<ArrayBuffer>('sounds_read', { path })
+    return toWav(bytes).catch(() => { throw new Error(`${fileName(path)} could not be read as audio. Use a .wav, .mp3, or .ogg.`) })
+  }, seq)
+  /** A built-in sound into a slot, under its name. */
+  const pickPreset = (slot: Slot, p: Preset) => { setMenuFor(null); void put(slot, p.name, async () => ({ wav: encodeWav(await renderPreset(p)), cut: false }), ++dropSeq.current) }
+  const put = async (slot: Slot, name: string, load: () => Promise<{ wav: Uint8Array; cut: boolean }>, seq: number): Promise<boolean> => {
     if (seq < (newest.current[slot.id] ?? 0)) return false // a later drop already filled this slot
     if (playingNow.current?.startsWith(`${slot.id}:`)) stop()
     newest.current[slot.id] = seq
-    setReading(r => ({ ...r, [slot.id]: { name: fileName(path), n: (r[slot.id]?.n ?? 0) + 1 } }))
+    setReading(r => ({ ...r, [slot.id]: { name, n: (r[slot.id]?.n ?? 0) + 1 } }))
     try {
-      const bytes = await invoke<ArrayBuffer>('sounds_read', { path })
-      const { wav, cut } = await toWav(bytes).catch(() => { throw new Error(`${fileName(path)} could not be read as audio. Use a .wav, .mp3, or .ogg.`) })
+      const { wav, cut } = await load()
       if (newest.current[slot.id] !== seq) return false // a newer file was put on this slot while this one was read
-      await invoke('sounds_set', wav, { headers: { slot: slot.id, name: encodeURIComponent(fileName(path)) } })
+      await invoke('sounds_set', wav, { headers: { slot: slot.id, name: encodeURIComponent(name) } })
       if (cut) alert.info(slot.name, `Only its first ${MAX_SECONDS} seconds are used.`)
       return true
     } catch (e) {
@@ -287,12 +340,17 @@ export default function SoundsScreen({ alert, blocked, onInstall }: SoundsProps)
                     </button>
                     <button type="button" className="lo-icon" disabled={Boolean(busy)} onClick={() => void clear(s)} title="Back to the game's sound" aria-label={`Remove your ${s.name}`}><X size={14} /></button>
                   </>}
+                  <button type="button" className="lo-text-btn snd-browse" aria-haspopup="menu" aria-expanded={menuFor?.slot.id === s.id} disabled={Boolean(busy)}
+                    onClick={e => { const anchor = e.currentTarget; setMenuFor(m => m?.slot.id === s.id ? null : { slot: s, anchor }) }} title="Pick one of the app's own sounds">
+                    Built-in<ChevronDown size={14} aria-hidden />
+                  </button>
                   <button type="button" className="lo-text-btn snd-browse" disabled={Boolean(busy)} onClick={() => void browse(s)}>{name ? 'Replace' : 'Browse'}</button>
                 </span>
               </li>
             )
           })}
         </ul>
+        {menuFor && <PresetMenu anchor={menuFor.anchor} onPick={p => pickPreset(menuFor.slot, p)} onClose={() => setMenuFor(null)} />}
       </div>
     </section>
   )

@@ -1227,6 +1227,12 @@ html:not([data-view="library"]) .container > .vfx-notice { margin: 24px 0 4px; }
 .snd-play:hover:not(:disabled) { background: var(--quiet-active) !important; color: var(--text-primary) !important; }
 .snd-play:disabled { opacity: 0.45; cursor: not-allowed; }
 .snd-browse { margin-left: 4px; }
+.snd-preset-menu { width: 300px; max-height: min(420px, 70vh); overflow-y: auto; scrollbar-width: thin; scrollbar-color: rgba(255, 255, 255, 0.12) transparent; animation: t-dropdown-open var(--dropdown-open-dur) var(--dropdown-ease) backwards; }
+.snd-preset-row { display: flex; align-items: center; gap: 2px; }
+.snd-preset-row .lo-icon { width: 28px; height: 28px !important; display: grid; place-items: center; flex: none; }
+.snd-preset-row .xtra-item { flex: 1; min-width: 0; gap: 8px; padding: 0 8px !important; }
+.snd-preset-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.snd-preset-row small { flex: none; margin-left: auto; color: var(--text-secondary); font-size: 12px; }
 
 /* Mod rows (New strip, loadout page): switch, type code, name, actions */
 .mod-rows { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; border: 1px solid var(--panel-border); border-radius: 10px; overflow: visible; }   /* visible: a row's Add to loadout menu opens past the list's edge */
