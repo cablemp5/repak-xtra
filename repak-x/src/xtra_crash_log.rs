@@ -350,7 +350,7 @@ fn redact_log(text: &str, users: &[String], known: &[String]) -> Result<String, 
     let rules = RULES.get_or_init(|| [
         // base64 of '{"', '{ "', '{\n': JWTs and the login JSON the SDK logs encoded
         // only at a word start: "GameFramework.cpp" holds "ewo" and stays
-        (Regex::new(r"\b(?:eyJ|eyAi|eyAg|ewo[\w+/])[\w+/=.-]{6,}").unwrap(), "<token>"),
+        (Regex::new(r"\b(?:eyJ|eyAi|eyAg|ewo[\w+/]|ew0K)[\w+/=.-]{6,}").unwrap(), "<token>"),
         (Regex::new(r"[\w.+-]+@[A-Za-z][\w-]*").unwrap(), "<handle>"),
     ]);
     let out = names.replace_all(text, "${1}<redacted>");
@@ -605,9 +605,9 @@ LogPakFile: Warning: Invalid Pak file ../../../Marvel/Content/Paks/~mods/Cool_99
         let both = vec!["tag.ABC123456".to_string(), "ABC123456".to_string()];
         assert_eq!(redact_log("Saved/Config/Xtag.ABC123456/ and ABC123456/ABC123456", &[], &both).unwrap(),
             "Saved/Config/Xtag.<id>/ and <id>/<id>", "a longer id failing its edge leaves the shorter one to match, side by side too");
-        let inner = r#"msg={\"nickname\":\"Jane \\\"Ace\\\" Doe\",\"x\":1} ewoJImFpZCI6IjEifQ=="#;
+        let inner = r#"msg={\"nickname\":\"Jane \\\"Ace\\\" Doe\",\"x\":1} ewoJImFpZCI6IjEifQ== {\"role_name\":\"\\u5f20\\u4e09\"} ew0KCSJhaWQiOiIxIn0="#;
         let out = redact_log(inner, &[], &[]).unwrap();
-        for part in ["Jane", "Ace", "Doe", "ewoJ"] {
+        for part in ["Jane", "Ace", "Doe", "ewoJ", "u5f20", "u4e09", "ew0K"] {
             assert!(!out.contains(part), "{part} left in {out}");
         }
         let paths = "Runtime/Engine/Private/GameFramework/Character.cpp KeyAimAssist";
