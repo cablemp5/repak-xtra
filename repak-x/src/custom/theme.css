@@ -2444,6 +2444,28 @@ html[data-motion="off"] .lp-saved { animation: none !important; opacity: 1 !impo
 .crs-row .rd-name { white-space: normal; overflow-wrap: anywhere; }
 .crs-row .rd-name b { font-weight: 600; }
 .crs-time { font-size: 12px; font-variant-numeric: tabular-nums; }
+/* A crash's Details from the game's log (CrashLog.tsx): the fold toggle under the row's lines, then small labeled parts */
+.crs-row .crl-toggle { align-self: flex-start; margin-top: 4px; }
+.crl-body { display: flex; flex-direction: column; gap: 12px; padding: 8px 0 4px 22px; }   /* under the words, past the caret */
+.crl-part { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.crl-label { margin: 0; font-size: 12px; font-weight: 500; color: var(--text-secondary); }
+.crl-text { margin: 0; display: flex; flex-wrap: wrap; align-items: center; column-gap: 12px; row-gap: 2px; font-size: 13px; color: var(--text-primary); }
+.crl-events, .crl-errors, .crl-names { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 2px; font-size: 13px; color: var(--text-primary); }
+.crl-events li { display: grid; grid-template-columns: 6ch 1fr; gap: 8px; align-items: baseline; }
+.crl-secs { color: var(--text-secondary); font-variant-numeric: tabular-nums; text-align: right; }
+.crl-events li > span:last-child { min-width: 0; }
+.crl-events .crl-count { display: inline-flex; height: 18px; margin-left: 8px; vertical-align: 1px; }   /* right after the words, also when they wrap */
+.crl-errors li { display: flex; align-items: flex-start; gap: 8px; min-width: 0; }
+.crl-errors code { font-family: var(--font-mono); font-size: 12px; line-height: 20px; color: var(--text-secondary); overflow-wrap: anywhere; min-width: 0; }
+.crl-count { flex: none; min-width: 20px; justify-content: center; }
+.crl-errors .crl-count { min-width: 36px; }   /* one column for the error text, counts up to three digits */
+.crl-names { color: var(--text-secondary); max-height: 240px; overflow-y: auto; }
+.crl-names .mn, .crl-warn .mn { min-width: 0; }
+.crl-warn { margin: 0; grid-template-columns: 14px 1fr; }
+.crl-warn > svg { margin-top: 3px; }
+.crl-actions { display: flex; gap: 8px; }
+.crl-body :is(li, p, span) { font-weight: 400; }   /* settings rows bold their text, these are plain lines */
+.su-trust-btn:is(.crl-toggle, .crl-names-btn) svg.lucide:first-child { color: currentColor; }   /* a caret, not Setup's green shield */
 .settings-content .setting-section > .setting-subtext.crs-note { margin-top: 4px !important; }   /* beats the -8px every section note gets */
 .cf-modal:focus { outline: none; }   /* the dialog itself takes focus when it opens; its controls show the ring */
 

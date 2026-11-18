@@ -178,6 +178,8 @@ fn newest_crash() -> Option<NewestCrash> {
 
 #[derive(Serialize)]
 pub struct RecentCrash {
+    /// the UECC folder's name (xtra_crash_log.rs reads its engine log by it)
+    id: String,
     time: u64,
     crash_type: Option<String>,
     asset_path: Option<String>,
@@ -193,10 +195,11 @@ pub async fn xtra_recent_crashes() -> Vec<RecentCrash> {
             .into_iter().flatten().flatten()
             .filter_map(|e| Some((e.metadata().ok().filter(|m| m.is_dir())?.created().ok()?, e.path()))).collect();
         folders.sort_by(|a, b| b.0.cmp(&a.0));
-        folders.iter().filter_map(|(_, folder)| crash_monitor::parse_crash_info(folder, Vec::new())).take(5)
-            .map(|info| {
+        folders.iter().filter_map(|(_, folder)| Some((folder.file_name()?.to_string_lossy().into_owned(), crash_monitor::parse_crash_info(folder, Vec::new())?))).take(5)
+            .map(|(id, info)| {
                 let (asset_path, error_type, _) = crash_monitor::parse_error_details(info.error_message.as_deref().unwrap_or(""));
                 RecentCrash {
+                    id,
                     time: info.timestamp.duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0),
                     crash_type: error_type.or(info.crash_type).map(|s| redact(&s, &users)),
                     asset_path: asset_path.map(|s| redact(&s, &[])),
@@ -367,7 +370,7 @@ fn classify(module: &str, modules: &[String], root: &str) -> ModuleClass {
 }
 
 /// The Windows user name and the home folder's name, 3 characters or more (shorter would cut common words apart).
-fn user_names() -> Vec<String> {
+pub(crate) fn user_names() -> Vec<String> {
     let mut names: Vec<String> = [std::env::var("USERNAME").ok(), dirs::home_dir().and_then(|h| h.file_name().map(|n| n.to_string_lossy().into_owned()))]
         .into_iter().flatten().filter(|n| n.chars().count() >= 3).collect();
     names.dedup_by(|a, b| a.eq_ignore_ascii_case(b));
