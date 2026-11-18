@@ -43,7 +43,7 @@ fn record(payload: &[u8], room: usize) -> Vec<u8> {
     let mut data = payload.to_vec();
     ctr(&mut data);
     // a zlib header (deflate, 0x78, header check), not just raw text that starts with "x"
-    let zlib = data.len() >= 2 && data[0] == 0x78 && u16::from_be_bytes([data[0], data[1]]) % 31 == 0;
+    let zlib = data.len() >= 2 && data[0] == 0x78 && u16::from_be_bytes([data[0], data[1]]) % 31 == 0 && data[1] & 0x20 == 0; // no preset dictionary: "x " is text
     if !zlib {
         data.truncate(room);
         return data;
@@ -52,6 +52,11 @@ fn record(payload: &[u8], room: usize) -> Vec<u8> {
     // read_to_end keeps the bytes read before an error, so a truncated record keeps its first part
     let _ = flate2::read::ZlibDecoder::new(&data[..]).take(room as u64).read_to_end(&mut text);
     if text.is_empty() {
+        // text that only looked like a zlib header ("x^...") is kept as it is
+        if std::str::from_utf8(&data).is_ok() {
+            data.truncate(room);
+            return data;
+        }
         text.extend_from_slice(b"[a log record would not decompress]\n");
     }
     text
@@ -83,13 +88,11 @@ pub(crate) fn decode(blob: &[u8]) -> Option<String> {
             continue;
         }
         // the last record, cut off by the crash: up to its size or the trailer that follows the cut, whichever is first.
-        // A trailer within a few bytes means the "size" was the trailer's own padding, not a record.
+        // The trailer is looked for a marker's length past the size too, so one that starts just before it is kept whole.
         let cut = body.len().min(size);
-        let shm = find(&body[..cut], SHM_BEGIN);
-        if shm.is_none_or(|at| at >= 28) {
-            out.extend(record(&body[..shm.unwrap_or(cut)], room));
-        }
-        rest = &body[shm.unwrap_or(cut)..];
+        let end = find(&body[..body.len().min(size + SHM_BEGIN.len())], SHM_BEGIN).map_or(cut, |at| at.min(cut));
+        out.extend(record(&body[..end], room));
+        rest = &body[end..];
         break;
     }
     if let Some(at) = find(rest, SHM_BEGIN) {
@@ -239,6 +242,7 @@ fn summarize(text: &str, on: Option<Vec<String>>, names: &dyn Fn(&str) -> Option
     let end = text.lines().rev().find_map(stamp);
     let mut s = LogSummary::default();
     let (mut errors, mut error_at): (Vec<ErrorGroup>, std::collections::HashMap<String, usize>) = Default::default();
+    let mut cleaned: std::collections::HashMap<String, String> = Default::default();
     let mut paks: Vec<String> = Vec::new();
     let mut iostore = std::collections::HashSet::new();
     let (mut last_ms, mut me): (Option<i64>, Option<String>) = (None, None);
@@ -266,8 +270,10 @@ fn summarize(text: &str, on: Option<Vec<String>>, names: &dyn Fn(&str) -> Option
             (me, s.hero_id) = (Some(c[1].to_string()), Some(c[2].to_string()));
         }
         // "Invalid Pak file ... recorded" is printed for every working legacy pak: never a problem
-        if let Some(t) = line.find(": Error: ").filter(|_| ago.is_some_and(|a| a <= ERROR_MS) && !line.contains("Invalid Pak file")) {
-            let msg: String = clean(&hex.replace_all(line[t + 9..].trim(), "0x…")).chars().take(200).collect();
+        if let Some(t) = line.find(": Error: ").filter(|_| ago.is_some_and(|a| a <= ERROR_MS) && !(line.contains("Invalid Pak file") && line.trim_end().ends_with("recorded"))) {
+            // an error printed every frame is redacted once, not once per line
+            let raw = hex.replace_all(line[t + 9..].trim(), "0x…").into_owned();
+            let msg = cleaned.entry(raw).or_insert_with_key(|r| clean(r).chars().take(200).collect()).clone();
             match error_at.get(&msg) {
                 Some(&i) => errors[i].count += 1,
                 None => {
@@ -323,7 +329,7 @@ fn summarize(text: &str, on: Option<Vec<String>>, names: &dyn Fn(&str) -> Option
 /// The game also prints them bare (Saved/Config/732639096/, a dict key), so redact_log takes them out everywhere.
 fn learned_ids(text: &str) -> Vec<String> {
     static KEYED: OnceLock<Regex> = OnceLock::new();
-    let re = KEYED.get_or_init(|| Regex::new(r#"(?i)\b(?:\w*(?:uid|udid|token|ticket|machine_?id|device_?id|account_?id|session_?id|transid|transaction_?id|client_?id|player_?id|user_?id|role_?id|open_?id)|aid|ci)["']?\s*[:=]\s*["']?([^\s"'&,;<>(){}\[\]\\]+)"#).unwrap());
+    let re = KEYED.get_or_init(|| Regex::new(r#"(?i)\b(?:\w*(?:uid|udid|token|ticket|machine_?id|device_?id|account_?id|session_?id|transid|transaction_?id|client_?id|player_?id|user_?id|role_?id|open_?id)|aid|ci)\\?["']?\s*[:=]\s*\\?["']?([^\s"'&,;<>(){}\[\]\\]+)"#).unwrap());
     let mut ids: Vec<String> = re.captures_iter(text)
         // "732639096." at the end of a sentence is the id "732639096", so its bare uses match too
         .map(|c| c[1].trim_end_matches(|ch: char| !ch.is_ascii_alphanumeric()).to_string())
@@ -340,10 +346,11 @@ fn redact_log(text: &str, users: &[String], known: &[String]) -> Result<String, 
     static NAMES: OnceLock<Regex> = OnceLock::new();
     static RULES: OnceLock<[(Regex, &'static str); 2]> = OnceLock::new();
     // names first and whole, quoted ones with their spaces ("nickname":"Jane Doe"), before redact() cuts them at a space
-    let names = NAMES.get_or_init(|| Regex::new(r#"(?i)(["']?\b(?:aid|nick_?name|role_?name|user_?name|player_?name|open_?id|login_?name|phone)["']?\s*[:=]\s*)(?:"[^"\n]*"|'[^'\n]*'|[^\s"'&,;<>)}\]]+)"#).unwrap());
+    let names = NAMES.get_or_init(|| Regex::new(r#"(?i)(\\?["']?\b(?:aid|nick_?name|role_?name|user_?name|player_?name|open_?id|login_?name|phone)\\?["']?\s*[:=]\s*)(?:\\"[^"\n\\]*(?:\\")?|"(?:[^"\\\n]|\\.)*"?|'[^'\n]*'?|[^\s"'&,;<>)}\]\\]+)"#).unwrap());
     let rules = RULES.get_or_init(|| [
         // base64 of '{"', '{ "', '{\n': JWTs and the login JSON the SDK logs encoded
-        (Regex::new(r"(?:eyJ|eyAi|eyAg|ewo)[\w+/=.-]{6,}").unwrap(), "<token>"),
+        // only at a word start: "GameFramework.cpp" holds "ewo" and stays
+        (Regex::new(r"\b(?:eyJ|eyAi|eyAg|ewo[gi])[\w+/=.-]{6,}").unwrap(), "<token>"),
         (Regex::new(r"[\w.+-]+@[A-Za-z][\w-]*").unwrap(), "<handle>"),
     ]);
     let out = names.replace_all(text, "${1}<redacted>");
@@ -354,10 +361,24 @@ fn redact_log(text: &str, users: &[String], known: &[String]) -> Result<String, 
     }
     // in batches, so a log with many ids stays under the regex size limit
     for batch in known.chunks(64) {
-        let any = batch.iter().map(|v| regex_lite::escape(v)).collect::<Vec<_>>().join("|");
-        let re = Regex::new(&format!("(?i){any}")).map_err(|e| format!("Could not take the ids out of the log: {e}"))?;
-        out = crate::xtra_crash::replace_words(&out, &re, "<id>");
+        out = replace_ids(&out, batch)?;
     }
+    Ok(out)
+}
+
+/// Every id of `ids` that stands as a whole word (no ASCII letter or digit next to it) replaced by "<id>". The edges are
+/// part of the pattern, so where a longer id fails its edge a shorter one at the same place still matches.
+fn replace_ids(text: &str, ids: &[String]) -> Result<String, String> {
+    let any = ids.iter().map(|v| regex_lite::escape(v)).collect::<Vec<_>>().join("|");
+    let re = Regex::new(&format!("(?i)(?:^|[^A-Za-z0-9])({any})(?:[^A-Za-z0-9]|$)")).map_err(|e| format!("Could not take the ids out of the log: {e}"))?;
+    let (mut out, mut last) = (String::with_capacity(text.len()), 0);
+    // resume at the id's end, so the edge after it can be the edge before the next one
+    while let Some(id) = re.captures_at(text, last).and_then(|c| c.get(1)) {
+        out.push_str(&text[last..id.start()]);
+        out.push_str("<id>");
+        last = id.end();
+    }
+    out.push_str(&text[last..]);
     Ok(out)
 }
 
@@ -436,6 +457,16 @@ mod tests {
         log.extend(cut);
         log.extend(ring);
         assert_eq!(decode(&log).unwrap(), format!("0123456789abcdefghijklmnopqrst{TRAILER}ring"));
+        // a size of 40 with the trailer after 20 or 35 bytes: those bytes, and the trailer whole
+        let payload: Vec<u8> = (b'a'..=b'z').chain(b'A'..=b'N').collect(); // 40 bytes
+        for at in [20, 35] {
+            let mut log = MAGIC.to_vec();
+            let mut rec = framed(&payload);
+            rec.truncate(4 + at);
+            log.extend(rec);
+            log.extend(ring);
+            assert_eq!(decode(&log).unwrap(), format!("{}{TRAILER}ring", String::from_utf8_lossy(&payload[..at])), "trailer after {at} bytes");
+        }
         // only the closing size is missing (two of its four bytes written): the payload, none of those bytes
         let mut log = MAGIC.to_vec();
         let mut rec = framed(b"raw line\n");
@@ -448,10 +479,12 @@ mod tests {
         log.extend(b"\n");
         log.extend(ring);
         assert_eq!(decode(&log).unwrap(), format!("hi\n{TRAILER}ring"));
-        // raw text that starts with "x" is text, not a failed zlib stream
-        let mut log = MAGIC.to_vec();
-        log.extend(framed(b"xyz\n"));
-        assert_eq!(decode(&log).unwrap(), "xyz\n");
+        // raw text that starts with "x" is text, not a failed zlib stream ("x " passes the header check alone)
+        for raw in ["xyz\n", "x marks\n", "x^ not zlib\n"] {
+            let mut log = MAGIC.to_vec();
+            log.extend(framed(raw.as_bytes()));
+            assert_eq!(decode(&log).unwrap(), raw);
+        }
     }
 
     #[test]
@@ -562,6 +595,18 @@ LogPakFile: Warning: Invalid Pak file ../../../Marvel/Content/Paks/~mods/Cool_99
         }
         assert!(out.contains(r"C:\Users\<user>\AppData"), "{out}");
         assert_eq!(redact_log(r#"{"aid":46466993}"#, &[], &[]).unwrap(), r#"{"aid":<redacted>}"#, "the closing brace stays");
+        let escaped = r#"msg={\"nickname\":\"Jane Doe\",\"uid\":\"123456789\"}"#;
+        let out = redact_log(escaped, &[], &learned_ids(escaped)).unwrap();
+        assert!(!out.contains("Jane") && !out.contains("123456789"), "JSON inside a logged string: {out}");
+        let cut = r#"x "nickname":"Jane Doe"#;
+        assert!(!redact_log(cut, &[], &[]).unwrap().contains("Jane"), "a name cut off by the crash");
+        let quoted = r#""nickname":"Jane \"Ace\" Doe", next"#;
+        assert_eq!(redact_log(quoted, &[], &[]).unwrap(), r#""nickname":<redacted>, next"#, "escaped quotes inside a name");
+        let both = vec!["tag.ABC123456".to_string(), "ABC123456".to_string()];
+        assert_eq!(redact_log("Saved/Config/Xtag.ABC123456/ and ABC123456/ABC123456", &[], &both).unwrap(),
+            "Saved/Config/Xtag.<id>/ and <id>/<id>", "a longer id failing its edge leaves the shorter one to match, side by side too");
+        let paths = "Runtime/Engine/Private/GameFramework/Character.cpp KeyAimAssist";
+        assert_eq!(redact_log(paths, &[], &[]).unwrap(), paths, "no token inside a word");
         assert_eq!(redact_log("PracticeRange_S1 TripleKill 7326390961", &[], &["732639096".into()]).unwrap(), "PracticeRange_S1 TripleKill 7326390961", "only whole ids");
         let many: Vec<String> = (0..500).map(|i| format!("id{i:07}x")).collect();
         assert_eq!(redact_log("id0000499x", &[], &many).unwrap(), "<id>", "many ids still all go");

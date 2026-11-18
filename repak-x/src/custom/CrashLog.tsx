@@ -42,8 +42,8 @@ export default function CrashLog({ id, time, alert, modPaths }: { id: string; ti
   const [names, setNames] = useState(false)
   const [copied, setCopied] = useState(false)
   // reading and redacting a long log takes a second or more: the button says it is working (Doherty)
-  const [busy, setBusy] = useState<'copy' | 'save' | null>(null)
-  const spin = useShownBusy(busy !== null)
+  const [busy, setBusy] = useState<'copy' | 'pick' | 'save' | null>(null)
+  const spin = useShownBusy(busy === 'copy' || busy === 'save')
   useEffect(() => {
     let live = true
     invoke<Summary | null>('xtra_crash_log_summary', { id }).then(r => { if (live) setS(r) }).catch(() => {})
@@ -63,6 +63,7 @@ export default function CrashLog({ id, time, alert, modPaths }: { id: string; ti
   }
   const save = async () => {
     if (busy) return
+    setBusy('pick') // both buttons off while the Save dialog is open, no working look
     try {
       const stamp = new Date(time * 1000).toISOString().slice(0, 16).replace(/[-:T]/g, '')
       const { save } = await import('@tauri-apps/plugin-dialog')
