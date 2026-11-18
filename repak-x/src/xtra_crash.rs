@@ -409,7 +409,7 @@ pub(crate) fn redact(text: &str, users: &[String]) -> String {
 
 /// `re`'s matches that stand as a whole word (no letter or digit right before or after) replaced by `with`, so the
 /// user "art" leaves "Particles" alone.
-fn replace_words(text: &str, re: &Regex, with: &str) -> String {
+pub(crate) fn replace_words(text: &str, re: &Regex, with: &str) -> String {
     let mut out = String::with_capacity(text.len());
     let mut last = 0;
     for m in re.find_iter(text) {

@@ -23,8 +23,9 @@ const secs = (s: number) => `${s < 10 ? s.toFixed(1) : Math.round(s)} s`
 export function summaryLine(s: Summary): string {
   const hero = s.hero || (s.hero_id ? `hero ${s.hero_id}` : '')
   const where = s.map && hero ? `${s.map} as ${hero}` : s.map || (hero ? `As ${hero}` : '')
-  const last = s.events[s.events.length - 1]
-  const what = last ? `${last.text} ${secs(last.secs)} before the crash` : ''
+  // the last event that says something: bots respawn every few seconds in the Practice Range
+  const last = s.events.filter(e => !/^A bot respawned$/.test(e.text)).pop() ?? s.events[s.events.length - 1]
+  const what = last ? `${last.text}${last.count > 1 ? ` (${last.count} at once)` : ''} ${secs(last.secs)} before the crash` : ''
   return [where, what].filter(Boolean).map(t => `${t}.`).join(' ')
 }
 
@@ -131,6 +132,7 @@ export default function CrashLog({ id, time, alert, modPaths }: { id: string; ti
 if (import.meta.env.DEV) {
   const base = { events: [], errors: [], mounted: [], iostore: 0 }
   console.assert(summaryLine({ ...base, map: 'Practice Range', hero: 'Namor', events: [{ secs: 1.853, text: 'Triple kill', count: 1 }] }) === 'Practice Range as Namor. Triple kill 1.9 s before the crash.', 'where, who, and the last event')
+  console.assert(summaryLine({ ...base, map: 'Practice Range', events: [{ secs: 1.9, text: 'Triple kill', count: 1 }, { secs: 1.3, text: 'A bot respawned', count: 1 }] }) === 'Practice Range. Triple kill 1.9 s before the crash.', 'a bot respawning is not the event to name')
   console.assert(summaryLine({ ...base, hero_id: '1099' }) === 'As hero 1099.', 'an unknown hero by id')
   console.assert(summaryLine(base) === '', 'nothing known: no line')
   console.assert(mountedName('Sub/Cool_9999999_P') === nameKey('Sub/Cool_9999999_P.pak'), 'a mounted path names the mod as the Library does')

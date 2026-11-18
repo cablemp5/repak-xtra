@@ -283,9 +283,21 @@ fn summarize(text: &str, on: Option<Vec<String>>, names: &dyn Fn(&str) -> Option
     s
 }
 
+/// The values the log keeps under id-like keys (uid=732639096, "transid":"D62A..."), 6 characters or more with a digit.
+/// The game also prints them bare (Saved/Config/732639096/, a dict key), so redact_log takes them out everywhere.
+fn learned_ids(text: &str) -> Vec<String> {
+    static KEYED: OnceLock<Regex> = OnceLock::new();
+    let re = KEYED.get_or_init(|| Regex::new(r#"(?i)\b(?:\w*(?:uid|udid|token|ticket|machine_?id|device_?id|account_?id|session_?id|transid|transaction_?id|client_?id)|aid|ci)["']?\s*[:=]\s*["']?([^\s"'&,;<>(){}\[\]\\]+)"#).unwrap());
+    let mut ids: Vec<String> = re.captures_iter(text).map(|c| c[1].to_string())
+        .filter(|v| v.len() >= 6 && v.bytes().any(|b| b.is_ascii_digit())).collect();
+    ids.sort_by(|a, b| b.len().cmp(&a.len()).then_with(|| a.cmp(b))); // longest first, so no id is cut by a shorter one
+    ids.dedup();
+    ids
+}
+
 /// Takes out what the engine log holds about the player besides redact()'s rules: login tokens (JWTs, base64 JSON), platform
-/// handles ("name@steam"), and NetEase account fields.
-fn redact_log(text: &str, users: &[String]) -> String {
+/// handles ("name@steam"), NetEase account fields, and every `known` id (learned_ids of the whole log) wherever it stands.
+fn redact_log(text: &str, users: &[String], known: &[String]) -> String {
     static RULES: OnceLock<[(Regex, &'static str); 3]> = OnceLock::new();
     let rules = RULES.get_or_init(|| [
         // base64 of '{"': JWTs and the login JSON the SDK logs encoded
@@ -298,6 +310,12 @@ fn redact_log(text: &str, users: &[String]) -> String {
     for (re, with) in rules {
         out = re.replace_all(&out, *with).into_owned();
     }
+    if !known.is_empty() {
+        let any = known.iter().map(|v| regex_lite::escape(v)).collect::<Vec<_>>().join("|");
+        if let Ok(re) = Regex::new(&any) {
+            out = crate::xtra_crash::replace_words(&out, &re, "<id>");
+        }
+    }
     out
 }
 
@@ -308,9 +326,9 @@ fn summary_of(id: &str) -> Result<Option<LogSummary>, String> {
         .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok()).map(|d| d.as_secs());
     let on = time.and_then(crate::xtra_crash::xtra_mods_on_at);
     let mut s = summarize(&text, on, &crate::character_data::get_character_name_from_id);
-    let users = crate::xtra_crash::user_names();
+    let (users, known) = (crate::xtra_crash::user_names(), learned_ids(&text));
     for e in &mut s.errors {
-        e.text = redact_log(&e.text, &users);
+        e.text = redact_log(&e.text, &users, &known);
     }
     Ok(Some(s))
 }
@@ -326,7 +344,7 @@ pub async fn xtra_crash_log_summary(id: String) -> Result<Option<LogSummary>, St
 pub async fn xtra_crash_log_text(id: String) -> Result<String, String> {
     tauri::async_runtime::spawn_blocking(move || {
         let text = read_log(&crash_dir(&id)?).ok_or("This crash has no engine log")?;
-        Ok(redact_log(&text, &crate::xtra_crash::user_names()))
+        Ok(redact_log(&text, &crate::xtra_crash::user_names(), &learned_ids(&text)))
     }).await.map_err(|e| e.to_string())?
 }
 
@@ -442,12 +460,13 @@ LogPakFile: Warning: Invalid Pak file ../../../Marvel/Content/Paks/~mods/Cool_99
     #[test]
     fn the_shared_log_has_no_login_secrets() {
         let line = r#"{"uid":"76561199866094042","aid":46466993,"sdkuid":"1294405327","account_app_channel":"x20naxx2gb@steam","access_token":"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxIn0.abc","nickname":"Bob","login_json":"eyJhaWQiOiI0NjQ2Njk5MyJ9","x":"AAAA-eyJhdHAiOiA3fQ==-3b"} C:\Users\Alice\AppData uid=732639096 mail a.b@example.com"#;
-        let out = redact_log(line, &["Alice".to_string()]);
-        for secret in ["76561199866094042", "46466993", "1294405327", "x20naxx2gb", "eyJ", "Bob", "Alice", "732639096", "a.b@example"] {
+        let line = format!("{line} 'member_info': {{732639096: {{}}}} path='/Saved/Config/732639096/x' fetch_id='11001_732639096_17' \"transid\":\"D62AD1B59865\",\"ci\":\"D62AD1B59865\" UID:30");
+        let out = redact_log(&line, &["Alice".to_string()], &learned_ids(&line));
+        for secret in ["76561199866094042", "46466993", "1294405327", "x20naxx2gb", "eyJ", "Bob", "Alice", "732639096", "a.b@example", "D62AD1B59865"] {
             assert!(!out.contains(secret), "{secret} left in {out}");
         }
         assert!(out.contains(r"C:\Users\<user>\AppData"), "{out}");
-        assert_eq!(redact_log("PracticeRange_S1 TripleKill", &[]), "PracticeRange_S1 TripleKill");
+        assert_eq!(redact_log("PracticeRange_S1 TripleKill 7326390961", &[], &["732639096".into()]), "PracticeRange_S1 TripleKill 7326390961", "only whole ids");
     }
 
     #[test]
@@ -467,8 +486,11 @@ LogPakFile: Warning: Invalid Pak file ../../../Marvel/Content/Paks/~mods/Cool_99
             let id = e.file_name().to_string_lossy().into_owned();
             let Ok(Some(s)) = summary_of(&id) else { println!("{id}: no log"); continue };
             println!("{id}: {}", serde_json::to_string_pretty(&s).unwrap());
-            let text = redact_log(&read_log(&e.path()).unwrap(), &users);
-            for bad in users.iter().map(String::as_str).chain(["eyJ", "@steam", "7656119"]) {
+            let raw = read_log(&e.path()).unwrap();
+            let known = learned_ids(&raw);
+            let text = redact_log(&raw, &users, &known);
+            println!("{} ids learned", known.len());
+            for bad in users.iter().map(String::as_str).chain(["eyJ", "7656119"]).chain(known.iter().map(String::as_str)) {
                 assert!(!text.to_lowercase().contains(&bad.to_lowercase()), "{bad} in the shared log of {id}");
             }
             println!("{} lines shared", text.lines().count());
