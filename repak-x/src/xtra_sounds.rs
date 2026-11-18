@@ -2,7 +2,8 @@
 //! killstreaks, healing, the kill feed, alerts, the match, the announcer) names the Wwise Sound objects it replaces in
 //! the game's banks (bnk_ui_battle, and bnk_vo_system in every voice language). The page decodes a dropped file to
 //! 48 kHz 16-bit WAV and saves it here per slot (app dir sounds\<slot>.wav). Make mod encodes each to Wwise Vorbis
-//! (xtra_wem.rs), puts it in a copy of the game's bank and packs one mod, repakxtra-sounds_9999999_P.pak in ~mods.
+//! (xtra_wem.rs), puts it in a copy of the game's bank and packs a new mod in the app's own folder, which the page
+//! hands to the install card (named, put in a loadout, and copied to ~mods there, like the KO Editor's).
 //! A sound file the game shares between two slots (First KO and Double kill play one file), or with an event no slot
 //! covers, is left as it is and the slot's Sound objects point at a new file instead (their source id, a 4-byte field
 //! of the Sound object): only what the slot names changes. A streamed sound (the announcer: a short copy in the bank,
@@ -18,7 +19,7 @@ use crate::install_mod::AES_KEY_HEX;
 use crate::xtra_soundmerge::{alignment, decode_wem, extract, game_files, media, paks_of, sections, write_entry};
 
 static SLOTS: &str = include_str!("data/sound_slots.json");
-const MOD_STEM: &str = "repakxtra-sounds_9999999_P";
+const MOD_STEM: &str = "Sound_mod_9999999_P"; // the install card renames it
 
 #[derive(serde::Deserialize)]
 struct Slot { id: String, banks: Vec<String>, sounds: Vec<u32> }
@@ -113,21 +114,8 @@ fn put_sounds(game: &[u8], slots: &[(&[u32], &[u8])], taken: &mut BTreeSet<u32>)
 pub struct SoundsState {
     /// slot id -> the name of the file it was made from
     names: BTreeMap<String, String>,
-    /// the made mod, on (.pak) or off (.bak_repak), when it is in the mods folder
-    made: Option<String>,
     /// Play original needs the preview kit's decoder
     can_play_original: bool,
-}
-
-/// Every copy of the mod in the mods folder: the name repakxtra-sounds is this tab's, so any file under it is the mod
-/// it made, at any priority the Library renamed it to (repakxtra-sounds_<n>_P, !repakxtra-sounds for the top one), on or
-/// off (.pak, .bak_repak, .pak.bak_repak, .pak_disabled), and in any Library folder: the files the Library lists, so
-/// a copy in a staging folder it hides never counts. Normally one.
-fn made_copies(paks: &std::path::Path) -> Vec<PathBuf> {
-    walkdir::WalkDir::new(paks.join("~mods")).into_iter().filter_entry(crate::xtra_bundle::library_walk).flatten().filter(|e| e.file_type().is_file()).map(|e| e.into_path())
-        .filter(|p| p.file_name().and_then(|n| n.to_str()).is_some_and(|n| n.trim_start_matches('!').to_lowercase().starts_with("repakxtra-sounds")
-            && [".pak", ".bak_repak", ".pak_disabled"].iter().any(|x| n.ends_with(x)))) // the Library's own extensions, as it spells them
-        .collect()
 }
 
 /// The folder a streamed file sits in under Media: its id's first two digits.
@@ -141,16 +129,11 @@ fn media_dir(bank_key: &str) -> String {
 
 fn vgmstream() -> PathBuf { crate::xtra_kit::kit_dir().join("vgmstream").join("vgmstream-cli.exe") }
 
-/// Off the main thread: it walks the mods folder.
 #[tauri::command]
-pub async fn sounds_state(state: State<'_, Arc<Mutex<crate::AppState>>>) -> Result<SoundsState, String> {
-    let paks = paks_of(&state);
-    tauri::async_runtime::spawn_blocking(move || {
-        let mut n = names();
-        n.retain(|slot, _| dir().join(format!("{slot}.wav")).is_file());
-        let made = paks.and_then(|p| made_copies(&p).into_iter().next()).map(|p| p.to_string_lossy().to_string());
-        SoundsState { names: n, made, can_play_original: vgmstream().is_file() }
-    }).await.map_err(|e| e.to_string())
+pub fn sounds_state() -> SoundsState {
+    let mut n = names();
+    n.retain(|slot, _| dir().join(format!("{slot}.wav")).is_file());
+    SoundsState { names: n, can_play_original: vgmstream().is_file() }
 }
 
 /// Saves a slot's sound: the raw body is a 48 kHz 16-bit WAV the page rendered, `slot` and `name` (the dropped file's
@@ -248,20 +231,11 @@ fn read_wav(b: &[u8]) -> Result<(Vec<i16>, u32, u16), String> {
     Ok((pcm, rate, ch))
 }
 
-/// Makes the mod from every slot with a sound: repakxtra-sounds_9999999_P.pak in ~mods, over the last one (switched
-/// off: it stays off). Returns its path.
+/// Makes a mod from every slot with a sound, for the install card. Returns its path.
 #[tauri::command]
 pub async fn sounds_make(state: State<'_, Arc<Mutex<crate::AppState>>>) -> Result<String, String> {
     let paks = paks_of(&state).ok_or("The game folder is not set.")?;
-    let bypass = state.lock().map(|s| s.bypass_game_running_lock).unwrap_or(false);
     tauri::async_runtime::spawn_blocking(move || {
-        // the guards every ~mods writer takes: no snapshot restore or cleanup mid-write, not while Repak X is open, and
-        // not while the game runs (it holds the banks), unless Settings turned that lock off
-        let _mutation = crate::xtra_mutation::edit()?;
-        crate::xtra_identity::upstream_guard()?;
-        if !bypass && crate::is_game_process_running() {
-            return Err("Marvel Rivals is running. Close it, then make the mod again.".into());
-        }
         // one build at a time (a page reload mid-build could start a second over the same files)
         static BUSY: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
         if BUSY.swap(true, std::sync::atomic::Ordering::SeqCst) { return Err("The sounds mod is already being made.".to_string()) }
@@ -310,25 +284,13 @@ pub async fn sounds_make(state: State<'_, Arc<Mutex<crate::AppState>>>) -> Resul
             }
         }
         if entries.is_empty() { return Err("The game's sound banks were not found.".into()) }
-        // packed beside the mods first, then swapped in: a failed build never leaves half a pak where the game loads it
-        let mods = paks.join("~mods");
-        std::fs::create_dir_all(&mods).map_err(|e| e.to_string())?;
-        let part = mods.join(format!("{MOD_STEM}.part"));
-        let placed = uasset_toolkit::create_pak(&part.to_string_lossy(), entries, Some("../../../"), Some(0), Some(AES_KEY_HEX))
-            .map_err(|e| format!("Could not pack the sounds: {e}"))
-            .and_then(|_| {
-                // where it goes is looked up only now, so a switch on or off in the Library during the build is followed
-                let dest = match made_copies(&paks).as_slice() {
-                    [] => mods.join(format!("{MOD_STEM}.pak")),
-                    [one] => one.clone(),
-                    many => return Err(format!("There are {} copies of repakxtra-sounds in your mods folder. Delete all but one in the Library, then make it again.", many.len())),
-                };
-                std::fs::rename(&part, &dest).map(|_| dest).map_err(|e| format!("Could not put the sounds mod in place: {e}"))
-            });
-        let dest = match placed {
-            Ok(d) => d,
-            Err(e) => { let _ = std::fs::remove_file(&part); return Err(e) }
-        };
+        // a fresh folder each time: the install card copies the pak into ~mods, this one is only handed over
+        let out = dir().join("out");
+        let _ = std::fs::remove_dir_all(&out);
+        std::fs::create_dir_all(&out).map_err(|e| e.to_string())?;
+        let dest = out.join(format!("{MOD_STEM}.pak"));
+        uasset_toolkit::create_pak(&dest.to_string_lossy(), entries, Some("../../../"), Some(0), Some(AES_KEY_HEX))
+            .map_err(|e| format!("Could not pack the sounds: {e}"))?;
         Ok(dest.to_string_lossy().to_string())
     }).await.map_err(|e| e.to_string())?
 }
@@ -416,20 +378,6 @@ mod tests {
             std::fs::write(&dest, bank).unwrap();
             for (id, wem) in streamed { std::fs::write(dest.parent().unwrap().join(format!("stream_{id}.wem")), wem).unwrap() }
         }
-    }
-
-    #[test]
-    fn finds_every_copy_of_the_mod() {
-        let t = tempfile::tempdir().unwrap();
-        let mods = t.path().join("~mods");
-        std::fs::create_dir_all(mods.join("Sounds")).unwrap();
-        std::fs::create_dir_all(mods.join(".repakxtra-staging")).unwrap(); // hidden from the Library, so never counted
-        for f in [".repakxtra-staging/repakxtra-sounds_9999999_P.pak", "!repakxtra-sounds_9999999_P.pak", "Sounds/repakxtra-sounds_99999999_P.pak.bak_repak", "repakxtra-sounds_9999999_P.PAK", "repakxtra-sounds_9999999_P.part", "other_9999999_P.pak", "repakxtra-sounds.txt"] {
-            std::fs::write(mods.join(f), b"x").unwrap();
-        }
-        let mut names: Vec<String> = made_copies(t.path()).iter().map(|p| p.file_name().unwrap().to_string_lossy().into_owned()).collect();
-        names.sort();
-        assert_eq!(names, ["!repakxtra-sounds_9999999_P.pak", "repakxtra-sounds_99999999_P.pak.bak_repak"]);
     }
 
     #[test]

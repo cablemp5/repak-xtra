@@ -2,13 +2,14 @@
 // Match, Announcer) with how many of their slots have a sound, the picked group's slots on the right. Drop an audio
 // file on a slot (or click it to browse), drop several files or a folder anywhere and files named like a slot fill
 // it. The page decodes each file (WebView2 reads .wav, .mp3, .ogg, .flac, and .m4a) to 48 kHz 16-bit WAV and the app
-// keeps it per slot. Make mod builds one mod, repakxtra-sounds, into the Library. Play compares yours with the
+// keeps it per slot. Make mod builds a mod from every filled slot and opens the install card. Play compares yours with the
 // game's own (that one needs the preview kit's decoder).
+// Make mod is a maker, not one mod's switch: each build is a new pak handed to the install card (as the KO Editor's)
 import { useEffect, useRef, useState } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
 import { open as pick } from '@tauri-apps/plugin-dialog'
-import { Check, FolderOpen, Play, Square, Volume2, X } from 'lucide-react'
+import { Download, FolderOpen, Lock, Play, Square, Volume2, X } from 'lucide-react'
 import data from '../data/sound_slots.json'
 import type { LoadoutProps } from './Loadouts'
 import { useView } from './loadoutStore'
@@ -17,7 +18,7 @@ import { cue } from './sounds'
 import { Num } from './motion'
 
 type Slot = { id: string; group: string; name: string }
-type State = { names: Record<string, string>; made: string | null; can_play_original: boolean }
+type State = { names: Record<string, string>; can_play_original: boolean }
 const GROUPS = data.groups as { id: string; name: string }[]
 const SLOTS = data.slots as Slot[]
 const MAX_SECONDS = 30
@@ -58,24 +59,22 @@ async function toWav(bytes: ArrayBuffer): Promise<{ wav: Uint8Array; cut: boolea
   return { wav: new Uint8Array(wav.buffer), cut }
 }
 
-export type SoundsProps = Pick<LoadoutProps, 'alert' | 'blocked' | 'reload'>
+export type SoundsProps = Pick<LoadoutProps, 'alert' | 'blocked'> & { onInstall: (path: string) => Promise<void> }
 
-export default function SoundsScreen({ alert, blocked, reload }: SoundsProps) {
+export default function SoundsScreen({ alert, blocked, onInstall }: SoundsProps) {
   const shown = useView() === 'sounds'
   const [group, setGroup] = useState(GROUPS[0].id)
-  const [st, setSt] = useState<State>({ names: {}, made: null, can_play_original: false })
+  const [st, setSt] = useState<State>({ names: {}, can_play_original: false })
   const [reading, setReading] = useState<Record<string, { name: string; n: number }>>({}) // slot -> the newest file being read, and how many are
   const [over, setOver] = useState<string | null>(null) // the slot (or 'folder') a drag is over
   const [playing, setPlaying] = useState<string | null>(null) // `${slot}:yours` or `${slot}:game`
   const playingNow = useRef<string | null>(null) // the same, for the drop listener (bound once per view, so its state is stale)
   playingNow.current = playing
   const [making, setMaking] = useState<string | null>(null)
-  const [made, setMade] = useState(false)
   const audio = useRef<{ el: HTMLAudioElement; url: string } | null>(null)
   const newest = useRef<Record<string, number>>({}) // per slot, the latest drop or pick that reached it: an earlier one never lands over it
   const dropSeq = useRef(0) // numbers each drop or pick when it happens (a folder's files share their drop's number)
   const [batches, setBatches] = useState(0) // folders or file sets being read: Make waits for all of them
-  const edits = useRef(0) // counts slot changes, so a build that ran while one changed is not shown as current
   const playToken = useRef(0) // a play still loading when another starts (or Stop) never starts after it
 
   const asked = useRef(0) // only the newest state read lands: a slower, older one never overwrites it
@@ -105,9 +104,7 @@ export default function SoundsScreen({ alert, blocked, reload }: SoundsProps) {
       const { wav, cut } = await toWav(bytes).catch(() => { throw new Error(`${fileName(path)} could not be read as audio. Use a .wav, .mp3, or .ogg.`) })
       if (newest.current[slot.id] !== seq) return false // a newer file was put on this slot while this one was read
       await invoke('sounds_set', wav, { headers: { slot: slot.id, name: encodeURIComponent(fileName(path)) } })
-      edits.current++
       if (cut) alert.info(slot.name, `Only its first ${MAX_SECONDS} seconds are used.`)
-      setMade(false)
       return true
     } catch (e) {
       cue('warning'); alert.warning(slot.name, e instanceof Error ? e.message : String(e))
@@ -189,8 +186,7 @@ export default function SoundsScreen({ alert, blocked, reload }: SoundsProps) {
   const clear = async (slot: Slot) => {
     newest.current[slot.id] = ++dropSeq.current // a folder import still running never fills it again
     if (playing?.startsWith(`${slot.id}:`)) stop()
-    await invoke('sounds_clear', { slot: slot.id }).then(() => { edits.current++ }, e => alert.warning(slot.name, String(e)))
-    setMade(false)
+    await invoke('sounds_clear', { slot: slot.id }).catch(e => alert.warning(slot.name, String(e)))
     await refresh()
   }
   const play = async (slot: Slot, kind: 'yours' | 'game') => {
@@ -217,25 +213,16 @@ export default function SoundsScreen({ alert, blocked, reload }: SoundsProps) {
   const count = Object.keys(st.names).length
   const make = async () => {
     setMaking('Encoding sounds')
-    const at = edits.current
     try {
-      const path = await invoke<string>('sounds_make')
-      setMade(edits.current === at) // a slot changed mid-build: the button offers Update mod again
-      cue('success')
-      alert.success(st.made ? 'Sounds mod updated' : 'Sounds mod made', path.endsWith('.pak')
-        ? 'repakxtra-sounds is in your Library and on. Your sounds play in the next match.'
-        : 'repakxtra-sounds is in your Library and switched off. Switch it on to hear your sounds.')
-      await refresh()
-      void reload()
+      await onInstall(await invoke<string>('sounds_make')) // the install card names it and puts it in the Library
     } catch (e) {
-      cue('warning'); alert.warning('Could not make the sounds mod', e instanceof Error ? e.message : String(e))
+      cue('warning'); alert.warning('Could not make the sound mod', e instanceof Error ? e.message : String(e))
     } finally {
       setMaking(null)
     }
   }
   const why = blocked ? 'Close Marvel Rivals first' : batches || Object.keys(reading).length ? 'Wait for the sounds being read'
-    : !count ? (st.made ? "Every slot is back to the game. Delete repakxtra-sounds in the Library to hear the game's sounds again" : 'Add a sound to a slot first') : null
-  const shownMade = made && Boolean(st.made) && !why // the mod is still there, and nothing has changed since
+    : !count ? 'Add a sound to a slot first' : null
   const inGroup = SLOTS.filter(s => s.group === group)
   const groupDone = inGroup.filter(s => st.names[s.id]).length
 
@@ -267,12 +254,11 @@ export default function SoundsScreen({ alert, blocked, reload }: SoundsProps) {
             <span className="snd-meta">{inGroup.length} slots · {groupDone ? `${groupDone} replaced` : 'none replaced'}</span>
           </h2>
           <span className="snd-total">{count ? `${count} of ${SLOTS.length} sounds replaced` : 'Nothing replaced yet'}</span>
-          <button type="button" className={`lo-text-btn snd-make${making ? ' is-working' : shownMade ? ' is-installed' : why ? ' is-locked' : ' is-primary'}`}
+          <button type="button" className={`lo-text-btn snd-make${making ? ' is-working' : why ? ' is-locked' : ' is-primary'}`}
             onClick={() => { if (!making && !why) void make() }} disabled={Boolean(making) || Boolean(why)} aria-busy={Boolean(making)}
-            title={why ?? 'Build one mod with every sound you added, into the Library'}>
+            aria-disabled={!making && Boolean(why)} title={why ?? 'Build a mod with every sound you added, then choose how to install it'}>
             {making ? <span className="t-text-in"><span className="t-shimmer">{making}</span></span>
-              : shownMade ? <span className="t-text-in snd-btn-in"><Check size={16} aria-hidden />In your Library</span>
-              : st.made ? 'Update mod' : 'Make mod'}
+              : <span className="snd-btn-in">{why ? <Lock size={16} aria-hidden /> : <Download size={16} aria-hidden />}Make mod</span>}
           </button>
         </div>
 

@@ -1204,7 +1204,8 @@ html:not([data-view="library"]) .container > .vfx-notice { margin: 24px 0 4px; }
 .snd-title { display: flex; align-items: baseline; gap: 10px; min-width: 0; margin: 0 auto 0 0; font-size: 14px; font-weight: 600; color: var(--text-primary); white-space: nowrap; }
 .snd-meta, .snd-total { font-size: 12px; font-weight: 400; color: var(--text-secondary); white-space: nowrap; }
 .snd-make { flex: none; }
-.snd-btn-in { display: inline-flex; align-items: center; gap: 6px; }
+.snd-btn-in { display: inline-flex; align-items: center; gap: 8px; line-height: 1; }   /* the KO Editor's Install: icon and words on one center line */
+.snd-btn-in svg { flex: none; display: block; }
 .snd-slots { list-style: none; margin: 0; padding: 0 0 24px; display: flex; flex-direction: column; gap: 8px; overflow-y: auto; min-height: 0;
   scrollbar-width: thin; scrollbar-color: rgba(255, 255, 255, 0.12) transparent; }
 .snd-slot { display: flex; align-items: center; gap: 12px; min-height: 56px; padding: 8px 12px 8px 12px; box-sizing: border-box; flex: none;

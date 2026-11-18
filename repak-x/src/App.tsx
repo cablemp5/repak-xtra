@@ -3912,7 +3912,12 @@ function App() {
           setModsToInstall(parsed)
           setPanel('install', true)
         }} />{/* repakxtra: KO Editor view */}
-        <SoundsScreen alert={alert} blocked={gameRunning && !bypassGameRunningLock} reload={loadMods} />{/* repakxtra: Sounds tab */}
+        <SoundsScreen alert={alert} blocked={gameRunning && !bypassGameRunningLock} onInstall={async path => {
+          const parsed = await invoke<DroppedModParse[]>('parse_dropped_files', { paths: [path] })
+          if (!parsed.length) throw new Error('The sound mod could not be opened for installation.')
+          setModsToInstall(parsed)
+          setPanel('install', true)
+        }} />{/* repakxtra: Sounds tab, its made mod goes through the install card as the KO Editor's does */}
         {/* repakxtra: Ctrl+1..9 switches pinned loadouts on every view (custom/Loadouts.tsx) */}
         <LoadoutHotkeys mods={mods} scopeMods={folderMods} scopeLabel="all mods" blocked={gameRunning && !bypassGameRunningLock}
           isBlocked={undoBlocked} reload={loadMods} alert={alert} modDetails={modDetails} />

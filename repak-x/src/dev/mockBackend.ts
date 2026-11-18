@@ -435,12 +435,12 @@ if (import.meta.env.DEV && !('__TAURI_INTERNALS__' in window)) {
       // 'mock.soundsLong' gives every slot a very long file name
       case 'sounds_state': {
         const long = localStorage.getItem('mock.soundsLong') ? Object.fromEntries(soundSlots.slots.map(sl => [sl.id, 'an extremely long file name for a sound someone downloaded from a site that names everything verbosely.wav'])) : {}
-        return { names: { ...long, ...(mock.__soundNames ?? {}) }, made: mock.__soundMade ?? null, can_play_original: true }
+        return { names: { ...long, ...(mock.__soundNames ?? {}) }, can_play_original: true }
       }
       case 'sounds_set': return null
       case 'sounds_clear': if (mock.__soundNames) delete mock.__soundNames[args.slot]; return null
       case 'sounds_folder': return []
-      case 'sounds_make': return new Promise(r => setTimeout(() => { mock.__soundMade = 'C:\mods\repakxtra-sounds_9999999_P.pak'; r(mock.__soundMade) }, 1500))
+      case 'sounds_make': return new Promise(r => setTimeout(() => r('C:\\Users\\you\\AppData\\Roaming\\Repak-X\\sounds\\out\\Sound_mod_9999999_P.pak'), 1500))
       default: {
         const vfx = mockVfx(cmd, args) // the Mod Updater window's commands
         if (vfx !== undefined) return vfx
