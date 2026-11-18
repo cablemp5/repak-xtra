@@ -77,12 +77,24 @@ export const PRESETS: Preset[] = [
     noise(c, { dur: 0.006, filter: 'highpass', f: 3000, gain: 0.4 }); tone(c, { type: 'square', f: 1319, dur: 0.05, gain: 0.12, attack: 0.001 }); tone(c, { f: 2637, at: 0.01, dur: 0.4, gain: 0.4, attack: 0.001 }) } },
 ]
 
-/** A preset as audio at 48 kHz: a recording as it was made, a recipe in mono with its peak set to -1 dBFS. */
+/** The silence before a recording's first sound cut away (2 ms kept), so it plays the moment the game asks. */
+function trimStart(b: AudioBuffer): AudioBuffer {
+  const chans = Array.from({ length: b.numberOfChannels }, (_, c) => b.getChannelData(c))
+  let at = 0
+  while (at < b.length && chans.every(d => Math.abs(d[at]) < 0.003)) at++ // -50 dBFS
+  at = Math.max(0, at - Math.round(b.sampleRate * 0.002))
+  if (at === 0 || at >= b.length) return b
+  const out = new AudioBuffer({ numberOfChannels: b.numberOfChannels, length: b.length - at, sampleRate: b.sampleRate })
+  chans.forEach((d, c) => out.copyToChannel(d.subarray(at), c))
+  return out
+}
+
+/** A preset as audio at 48 kHz: a recording from its first sound on, a recipe in mono with its peak set to -1 dBFS. */
 export async function renderPreset(p: Preset): Promise<AudioBuffer> {
   if ('file' in p) {
     const bytes = await (await fetch(p.file)).arrayBuffer()
     const ctx = new AudioContext({ sampleRate: 48000 })
-    return ctx.decodeAudioData(bytes).finally(() => void ctx.close())
+    return trimStart(await ctx.decodeAudioData(bytes).finally(() => void ctx.close()))
   }
   const c = new OfflineAudioContext(1, Math.ceil(p.seconds * 48000), 48000)
   p.make(c)
