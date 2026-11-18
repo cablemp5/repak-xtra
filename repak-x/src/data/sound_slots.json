@@ -62,8 +62,10 @@
     "wwiseaudio/bnk_ui_battle.bnk"
    ],
    "sounds": [
-    480701051,
     731184180
+   ],
+   "silence": [
+    480701051
    ]
   },
   {
@@ -174,7 +176,9 @@
    ],
    "sounds": [
     762965379,
-    9873153,
+    9873153
+   ],
+   "silence": [
     120956329
    ]
   },
@@ -197,7 +201,9 @@
     "wwiseaudio/bnk_ui_battle.bnk"
    ],
    "sounds": [
-    991576568,
+    991576568
+   ],
+   "silence": [
     930787928
    ]
   },
@@ -258,7 +264,9 @@
     "wwiseaudio/bnk_ui_battle.bnk"
    ],
    "sounds": [
-    984035719,
+    984035719
+   ],
+   "silence": [
     517619248
    ]
   },
@@ -270,7 +278,9 @@
     "wwiseaudio/bnk_ui_battle.bnk"
    ],
    "sounds": [
-    640732430,
+    640732430
+   ],
+   "silence": [
     704441449
    ]
   },

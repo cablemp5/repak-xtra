@@ -1,7 +1,7 @@
 //! repakxtra: the Sounds tab (custom/SoundsScreen.tsx). Each slot (data/sound_slots.json: hit and kill sounds,
 //! killstreaks, healing, the kill feed, alerts, the match, the announcer) names the Wwise Sound objects it replaces in
 //! the game's banks (bnk_ui_battle, and bnk_vo_system in every voice language). The page decodes a dropped file to
-//! 48 kHz 16-bit WAV and saves it here per slot (app dir sounds\<slot>.wav). Make mod encodes each to Wwise Vorbis
+//! 48 kHz 16-bit WAV and saves it here per slot (app dir sounds\<slot>.wav). Make mod writes each as a Wwise PCM .wem
 //! (xtra_wem.rs), puts it in a copy of the game's bank and packs a new mod in the app's own folder, which the page
 //! hands to the install card (named, put in a loadout, and copied to ~mods there, like the KO Editor's).
 //! A sound file the game shares between two slots (First KO and Double kill play one file), or with an event no slot
@@ -9,6 +9,8 @@
 //! of the Sound object): only what the slot names changes. A streamed sound (the announcer: a short copy in the bank,
 //! the whole file in Media\<language>) gets the new file in both places, as the KB's voice replacements do. Sound
 //! object ids are Wwise's own and survive game patches. The file ids are read from the game's bank at every build.
+//! Where an event plays several sounds at once (layers, or two Play actions: Bodyshot kill, Shield broken), the slot's
+//! sound goes in one and the others (`silence` in the table) get 10 ms of silence, so it plays once instead of stacked.
 
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::path::PathBuf;
@@ -22,7 +24,7 @@ static SLOTS: &str = include_str!("data/sound_slots.json");
 const MOD_STEM: &str = "Sound_mod_9999999_P"; // the install card renames it
 
 #[derive(serde::Deserialize)]
-struct Slot { id: String, banks: Vec<String>, sounds: Vec<u32> }
+struct Slot { id: String, banks: Vec<String>, sounds: Vec<u32>, #[serde(default)] silence: Vec<u32> }
 
 fn slots() -> Vec<Slot> {
     #[derive(serde::Deserialize)]
@@ -255,9 +257,14 @@ pub async fn sounds_make(state: State<'_, Arc<Mutex<crate::AppState>>>) -> Resul
         }).collect();
         let wems = wems.into_iter().collect::<Result<Vec<_>, _>>()?;
         let files = game_files(&paks);
+        let quiet = crate::xtra_wem::silence();
         let mut by_bank: BTreeMap<&str, Vec<(&[u32], &[u8])>> = BTreeMap::new();
         for ((s, _), wem) in chosen.iter().zip(&wems) {
-            for b in &s.banks { by_bank.entry(b.as_str()).or_default().push((&s.sounds, wem)) }
+            for b in &s.banks {
+                let e = by_bank.entry(b.as_str()).or_default();
+                e.push((&s.sounds, wem));
+                if !s.silence.is_empty() { e.push((&s.silence, &quiet)) }
+            }
         }
         let tmp = tempfile::tempdir().map_err(|e| e.to_string())?;
         let mut entries = vec![];
@@ -370,7 +377,9 @@ mod tests {
                 .flat_map(|e| if e.path().is_dir() { std::fs::read_dir(e.path()).unwrap().flatten().map(|f| f.path()).collect() } else { vec![e.path()] })
                 .find(|p| p.to_string_lossy().replace('\\', "/").to_lowercase().ends_with(rel)).unwrap();
             let game = std::fs::read(&path).unwrap();
-            let picks: Vec<(&[u32], &[u8])> = all.iter().zip(&wems).filter(|(s, _)| s.banks.iter().any(|b| b == key)).map(|(s, w)| (&s.sounds[..], &w[..])).collect();
+            let quiet = crate::xtra_wem::silence();
+            let picks: Vec<(&[u32], &[u8])> = all.iter().zip(&wems).filter(|(s, _)| s.banks.iter().any(|b| b == key))
+                .flat_map(|(s, w)| [(&s.sounds[..], &w[..]), (&s.silence[..], &quiet[..])]).filter(|(ids, _)| !ids.is_empty()).collect();
             let mut taken: BTreeSet<u32> = media(&game).unwrap().iter().map(|(id, _)| *id).collect();
             let (bank, streamed) = put_sounds(&game, &picks, &mut taken).unwrap();
             let dest = PathBuf::from(&out).join(rel);
