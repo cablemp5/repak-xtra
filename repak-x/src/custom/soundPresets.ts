@@ -53,7 +53,7 @@ export const PRESETS: Preset[] = [
   { id: 'xp-orb', name: 'Minecraft XP Orb', hint: 'Glassy plink', file: xpOrb },
   { id: 'pick-up', name: 'Minecraft Pick up', hint: 'Quick item pop', file: pickUp },
   { id: 'success', name: 'Success chime', hint: 'Bright point chime', file: successChime },
-  { id: 'osu-hit', name: 'osu hit', hint: 'Crisp rhythm-game hit', file: osuHit },
+  { id: 'osu-hit', name: 'Osu Hit', hint: 'Crisp rhythm-game hit', file: osuHit },
   { id: 'bubble', name: 'Bubble pop', hint: 'Short clean pop', seconds: 0.15, make: c => {
     tone(c, { f: 320, to: 1500, sweep: 0.035, dur: 0.07, gain: 0.7, attack: 0.001 }); noise(c, { dur: 0.004, filter: 'highpass', f: 3000, gain: 0.25 }) } },
   { id: 'tap', name: 'Rhythm tap', hint: 'Crisp drum-pad hit', seconds: 0.15, make: c => {
