@@ -215,7 +215,7 @@ const MAX_ASSET_LEN: usize = 300;
 const MAX_CANDIDATES: usize = 200;
 
 /// The file's bytes, or nothing when it is over `max` (checked before reading, and while reading in case it grows).
-fn read_capped(path: &std::path::Path, max: usize) -> Vec<u8> {
+pub(crate) fn read_capped(path: &std::path::Path, max: usize) -> Vec<u8> {
     use std::io::Read;
     let mut buf = Vec::new();
     if let Ok(f) = std::fs::File::open(path) {

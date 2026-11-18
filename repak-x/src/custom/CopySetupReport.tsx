@@ -10,7 +10,7 @@ import { useShownBusy } from './shownBusy'
 
 type Alert = ReturnType<typeof useAlert>
 
-const copy = (text: string) => navigator.clipboard.writeText(text).catch(() => invoke('copy_to_clipboard', { text }))
+export const copyText = (text: string) => navigator.clipboard.writeText(text).catch(() => invoke('copy_to_clipboard', { text }))
 
 async function saveTxt(text: string, alert: Alert) {
   try {
@@ -35,7 +35,7 @@ export default function CopySetupReport({ alert, className = 'action-btn' }: { a
     setBusy(true)
     try {
       const text = await gatherReport(setStage)
-      await copy(text)
+      await copyText(text)
       setCopied(true); setTimeout(() => setCopied(false), 3000)
       if (text.length <= DISCORD_LIMIT) {
         alert.success('Setup report copied', 'Paste it in your Discord help message.')

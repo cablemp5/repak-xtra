@@ -50,7 +50,7 @@ export default function CrashReports() {
             : (
               <ul className="rd-list">
                 {crashes.map(c => (
-                  <li key={c.time} className="rd-row crs-row">
+                  <li key={c.id ?? c.time} className="rd-row crs-row">
                     <div className="rd-text">
                       <span className="rd-meta crs-time">{when(c.time)}</span>
                       <span className="rd-name">{c.asset ? <>Crashed loading <b>{c.asset}</b></> : `Crashed (${c.type})`}</span>

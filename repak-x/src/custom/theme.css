@@ -2464,6 +2464,7 @@ html[data-motion="off"] .lp-saved { animation: none !important; opacity: 1 !impo
 .crl-warn { margin: 0; grid-template-columns: 14px 1fr; }
 .crl-warn > svg { margin-top: 3px; }
 .crl-actions { display: flex; gap: 8px; }
+.crl-more { margin: 2px 0 0; font-size: 12px; color: var(--text-secondary); }
 .crl-body :is(li, p, span) { font-weight: 400; }   /* settings rows bold their text, these are plain lines */
 .su-trust-btn:is(.crl-toggle, .crl-names-btn) svg.lucide:first-child { color: currentColor; }   /* a caret, not Setup's green shield */
 .settings-content .setting-section > .setting-subtext.crs-note { margin-top: 4px !important; }   /* beats the -8px every section note gets */

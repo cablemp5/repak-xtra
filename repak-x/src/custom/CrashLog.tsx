@@ -6,14 +6,19 @@ import { invoke } from '@tauri-apps/api/core'
 import { Check, ChevronRight, ClipboardCopy, Download, TriangleAlert } from 'lucide-react'
 import type { useAlert } from '../components/AlertHandler'
 import { onKey } from './setupReport'
+import { copyText } from './CopySetupReport'
+import { useShownBusy } from './shownBusy'
 import { nameKey } from './loadoutStore'
 import { ModName } from './modName'
 
 type Alert = ReturnType<typeof useAlert>
+type Event = { secs: number; text: string; count: number }
 type Summary = {
   map?: string | null; hero?: string | null; hero_id?: string | null
-  events: { secs: number; text: string; count: number }[]
-  errors: { text: string; count: number }[]
+  events: Event[]; events_more?: number
+  /** the newest event that is not a bot respawning (xtra_crash_log.rs) */
+  headline?: Event | null
+  errors: { text: string; count: number }[]; errors_more?: number
   mounted: string[]; iostore: number
   not_mounted?: string[] | null
 }
@@ -23,8 +28,7 @@ const secs = (s: number) => `${s < 10 ? s.toFixed(1) : Math.round(s)} s`
 export function summaryLine(s: Summary): string {
   const hero = s.hero || (s.hero_id ? `hero ${s.hero_id}` : '')
   const where = s.map && hero ? `${s.map} as ${hero}` : s.map || (hero ? `As ${hero}` : '')
-  // the last event that says something: bots respawn every few seconds in the Practice Range
-  const last = s.events.filter(e => !/^A bot respawned$/.test(e.text)).pop() ?? s.events[s.events.length - 1]
+  const last = s.headline
   const what = last ? `${last.text}${last.count > 1 ? ` (${last.count} at once)` : ''} ${secs(last.secs)} before the crash` : ''
   return [where, what].filter(Boolean).map(t => `${t}.`).join(' ')
 }
@@ -32,13 +36,14 @@ export function summaryLine(s: Summary): string {
 /** A mounted path under ~mods ("Sub/Cool_9999999_P") as the name the Library shows. */
 const mountedName = (rel: string) => nameKey(`${rel}.pak`)
 
-const copyText = (text: string) => navigator.clipboard.writeText(text).catch(() => invoke('copy_to_clipboard', { text }))
-
 export default function CrashLog({ id, time, alert, modPaths }: { id: string; time: number; alert: Alert; modPaths: string[] }) {
   const [s, setS] = useState<Summary | null>(null)
   const [open, setOpen] = useState(false)
   const [names, setNames] = useState(false)
   const [copied, setCopied] = useState(false)
+  // reading and redacting a long log takes a second or more: the button says it is working (Doherty)
+  const [busy, setBusy] = useState<'copy' | 'save' | null>(null)
+  const spin = useShownBusy(busy !== null)
   useEffect(() => {
     let live = true
     invoke<Summary | null>('xtra_crash_log_summary', { id }).then(r => { if (live) setS(r) }).catch(() => {})
@@ -48,22 +53,26 @@ export default function CrashLog({ id, time, alert, modPaths }: { id: string; ti
 
   const logText = () => invoke<string>('xtra_crash_log_text', { id })
   const copy = async () => {
+    if (busy) return
+    setBusy('copy')
     try {
       await copyText(await logText())
       setCopied(true); setTimeout(() => setCopied(false), 3000)
       alert.success('Game log copied', 'Your user name, account ids, and login tokens were taken out.')
-    } catch (e) { alert.warning('Not copied', String(e)) }
+    } catch (e) { alert.warning('Not copied', String(e)) } finally { setBusy(null) }
   }
   const save = async () => {
+    if (busy) return
     try {
       const stamp = new Date(time * 1000).toISOString().slice(0, 16).replace(/[-:T]/g, '')
       const { save } = await import('@tauri-apps/plugin-dialog')
       const target = await save({ defaultPath: `marvel-rivals-crash-${stamp}.txt`, filters: [{ name: 'Text', extensions: ['txt'] }] })
       if (!target) return
+      setBusy('save')
       const { writeFile } = await import('@tauri-apps/plugin-fs')
       await writeFile(target, new TextEncoder().encode(await logText()))
       alert.success('Game log saved', 'Your user name, account ids, and login tokens were taken out.')
-    } catch (e) { alert.warning('Not saved', String(e)) }
+    } catch (e) { alert.warning('Not saved', String(e)) } finally { setBusy(null) }
   }
   const byKey = new Map(modPaths.map(p => [onKey(p), p]))
   const missing = s.not_mounted ?? []
@@ -86,14 +95,16 @@ export default function CrashLog({ id, time, alert, modPaths }: { id: string; ti
                     <li key={i}><span className="crl-secs">{secs(e.secs)}</span><span>{e.text}{e.count > 1 && <span className="lo-group-count crl-count" title={`${e.count} at once`}>{e.count}</span>}</span></li>
                   ))}
                 </ul>
+                {!!s.events_more && <p className="crl-more">{s.events_more} earlier {s.events_more === 1 ? 'event' : 'events'} in the log</p>}
               </section>
             )}
             {s.errors.length > 0 && (
               <section className="crl-part" aria-label="Errors near the end">
                 <h4 className="crl-label">Errors in the last 30 seconds</h4>
                 <ul className="crl-errors">
-                  {s.errors.map(e => <li key={e.text}><span className="lo-group-count crl-count" title={`${e.count} times`}>{e.count}</span><code>{e.text}</code></li>)}
+                  {s.errors.map((e, i) => <li key={i}><span className="lo-group-count crl-count" title={`${e.count} times`}>{e.count}</span><code>{e.text}</code></li>)}
                 </ul>
+                {!!s.errors_more && <p className="crl-more">{s.errors_more} more {s.errors_more === 1 ? 'kind' : 'kinds'} in the log</p>}
               </section>
             )}
             <section className="crl-part" aria-label="Mods the game loaded">
@@ -116,11 +127,17 @@ export default function CrashLog({ id, time, alert, modPaths }: { id: string; ti
               {names && <ul className="crl-names">{s.mounted.map(m => <li key={m}><ModName name={mountedName(m)} /></li>)}</ul>}
             </section>
             <div className="crl-actions">
-              <button type="button" className="lo-text-btn" onClick={copy} title={`Copies the game's log without your user name, account ids, or login tokens`}>
-                {copied ? <Check size={14} aria-hidden="true" /> : <ClipboardCopy size={14} aria-hidden="true" />}
-                <span key={copied ? 'copied' : 'idle'} className={copied ? 't-text-in' : undefined}>{copied ? 'Copied' : 'Copy log'}</span>
+              <button type="button" className={`lo-text-btn${spin && busy === 'copy' ? ' is-working' : ''}`} disabled={busy !== null} onClick={copy} title={`Copies the game's log without your user name, account ids, or login tokens`}>
+                {spin && busy === 'copy'
+                  ? <span className="t-shimmer-all" role="status"><ClipboardCopy size={14} aria-hidden="true" /> Copying</span>
+                  : <>{copied ? <Check size={14} aria-hidden="true" /> : <ClipboardCopy size={14} aria-hidden="true" />}
+                    <span key={copied ? 'copied' : 'idle'} className={copied ? 't-text-in' : undefined}>{copied ? 'Copied' : 'Copy log'}</span></>}
               </button>
-              <button type="button" className="lo-text-btn" onClick={save} title="Saves the game's log as a .txt to send to a modder or support"><Download size={14} aria-hidden="true" /> Save log</button>
+              <button type="button" className={`lo-text-btn${spin && busy === 'save' ? ' is-working' : ''}`} disabled={busy !== null} onClick={save} title="Saves the game's log as a .txt to send to a modder or support">
+                {spin && busy === 'save'
+                  ? <span className="t-shimmer-all" role="status"><Download size={14} aria-hidden="true" /> Saving</span>
+                  : <><Download size={14} aria-hidden="true" /> Save log</>}
+              </button>
             </div>
           </div>
         </div>
@@ -131,8 +148,8 @@ export default function CrashLog({ id, time, alert, modPaths }: { id: string; ti
 
 if (import.meta.env.DEV) {
   const base = { events: [], errors: [], mounted: [], iostore: 0 }
-  console.assert(summaryLine({ ...base, map: 'Practice Range', hero: 'Namor', events: [{ secs: 1.853, text: 'Triple kill', count: 1 }] }) === 'Practice Range as Namor. Triple kill 1.9 s before the crash.', 'where, who, and the last event')
-  console.assert(summaryLine({ ...base, map: 'Practice Range', events: [{ secs: 1.9, text: 'Triple kill', count: 1 }, { secs: 1.3, text: 'A bot respawned', count: 1 }] }) === 'Practice Range. Triple kill 1.9 s before the crash.', 'a bot respawning is not the event to name')
+  console.assert(summaryLine({ ...base, map: 'Practice Range', hero: 'Namor', headline: { secs: 1.853, text: 'Triple kill', count: 1 } }) === 'Practice Range as Namor. Triple kill 1.9 s before the crash.', 'where, who, and the event to name')
+  console.assert(summaryLine({ ...base, map: 'Practice Range', headline: { secs: 3, text: 'A bot died', count: 3 } }) === 'Practice Range. A bot died (3 at once) 3.0 s before the crash.', 'how many at once')
   console.assert(summaryLine({ ...base, hero_id: '1099' }) === 'As hero 1099.', 'an unknown hero by id')
   console.assert(summaryLine(base) === '', 'nothing known: no line')
   console.assert(mountedName('Sub/Cool_9999999_P') === nameKey('Sub/Cool_9999999_P.pak'), 'a mounted path names the mod as the Library does')
