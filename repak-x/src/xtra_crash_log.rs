@@ -340,7 +340,7 @@ fn redact_log(text: &str, users: &[String], known: &[String]) -> Result<String, 
     static NAMES: OnceLock<Regex> = OnceLock::new();
     static RULES: OnceLock<[(Regex, &'static str); 2]> = OnceLock::new();
     // names first and whole, quoted ones with their spaces ("nickname":"Jane Doe"), before redact() cuts them at a space
-    let names = NAMES.get_or_init(|| Regex::new(r#"(?i)(["']?\b(?:aid|nick_?name|role_?name|user_?name|player_?name|open_?id|login_?name|phone)["']?\s*[:=]\s*)(?:"[^"\n]*"|'[^'\n]*'|[^\s"'&,;<>)]+)"#).unwrap());
+    let names = NAMES.get_or_init(|| Regex::new(r#"(?i)(["']?\b(?:aid|nick_?name|role_?name|user_?name|player_?name|open_?id|login_?name|phone)["']?\s*[:=]\s*)(?:"[^"\n]*"|'[^'\n]*'|[^\s"'&,;<>)}\]]+)"#).unwrap());
     let rules = RULES.get_or_init(|| [
         // base64 of '{"', '{ "', '{\n': JWTs and the login JSON the SDK logs encoded
         (Regex::new(r"(?:eyJ|eyAi|eyAg|ewo)[\w+/=.-]{6,}").unwrap(), "<token>"),
@@ -561,6 +561,7 @@ LogPakFile: Warning: Invalid Pak file ../../../Marvel/Content/Paks/~mods/Cool_99
             assert!(!out.contains(secret), "{secret} left in {out}");
         }
         assert!(out.contains(r"C:\Users\<user>\AppData"), "{out}");
+        assert_eq!(redact_log(r#"{"aid":46466993}"#, &[], &[]).unwrap(), r#"{"aid":<redacted>}"#, "the closing brace stays");
         assert_eq!(redact_log("PracticeRange_S1 TripleKill 7326390961", &[], &["732639096".into()]).unwrap(), "PracticeRange_S1 TripleKill 7326390961", "only whole ids");
         let many: Vec<String> = (0..500).map(|i| format!("id{i:07}x")).collect();
         assert_eq!(redact_log("id0000499x", &[], &many).unwrap(), "<id>", "many ids still all go");

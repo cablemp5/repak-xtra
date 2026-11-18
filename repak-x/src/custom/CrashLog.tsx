@@ -111,7 +111,8 @@ export default function CrashLog({ id, time, alert, modPaths }: { id: string; ti
               <h4 className="crl-label">Mods the game loaded</h4>
               <p className="crl-text">
                 {s.mounted.length === 0 ? 'None.'
-                  : `${s.mounted.length} ${s.mounted.length === 1 ? 'mod' : 'mods'}${s.iostore ? `, ${s.iostore} of them IoStore` : ''}.`}
+                  : s.mounted.length === 1 ? `1 mod${s.iostore ? ', an IoStore one' : ''}.`
+                  : `${s.mounted.length} mods${s.iostore ? `, ${s.iostore} of them IoStore` : ''}.`}
                 {s.not_mounted && !missing.length && s.mounted.length > 0 && ` Every mod that was on when the game started loaded.`}
                 {s.mounted.length > 0 && (
                   <button type="button" className="su-trust-btn crl-names-btn" aria-expanded={names} onClick={() => setNames(!names)}>
