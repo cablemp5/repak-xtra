@@ -2440,7 +2440,7 @@ html[data-motion="off"] .lp-saved { animation: none !important; opacity: 1 !impo
   background: var(--quiet-hover); border: 1px solid var(--panel-border); }
 .rd-confirm span { margin-right: auto; }
 /* Settings > Crash reports (custom/CrashReports.tsx): its folder button on the title's row, rows as Recently deleted */
-.crs-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+.crs-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }   /* the section's 12px gap is the space to the list */
 .crs-row { align-items: flex-start; padding-block: 12px; }
 .crs-row .rd-name { white-space: normal; overflow-wrap: anywhere; }
 .crs-row .rd-name b { font-weight: 600; }
