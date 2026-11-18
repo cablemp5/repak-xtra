@@ -11,7 +11,7 @@ import { createPortal } from 'react-dom'
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
 import { open as pick } from '@tauri-apps/plugin-dialog'
-import { ChevronDown, Download, FolderOpen, Lock, Play, Search, Square, Volume2, X } from 'lucide-react'
+import { Box, ChevronDown, FolderOpen, Lock, Play, Search, Square, Volume2, X } from 'lucide-react'
 import data from '../data/sound_slots.json'
 import type { LoadoutProps } from './Loadouts'
 import { useView } from './loadoutStore'
@@ -302,7 +302,7 @@ export default function SoundsScreen({ alert, blocked, onInstall }: SoundsProps)
             onClick={() => { if (!making && !why) void make() }} disabled={Boolean(making) || Boolean(why)} aria-busy={Boolean(making)}
             aria-disabled={!making && Boolean(why)} title={why ?? 'Build a mod with every sound you added, then choose how to install it'}>
             {making ? <span className="t-text-in"><span className="t-shimmer">{making}</span></span>
-              : <span className="snd-btn-in">{why ? <Lock size={16} aria-hidden /> : <Download size={16} aria-hidden />}Make mod</span>}
+              : <span className="snd-btn-in">{why ? <Lock size={16} aria-hidden /> : <Box size={16} aria-hidden />}Make mod</span>}
           </button>
         </div>
       </header>

@@ -41,7 +41,6 @@ export default function CrashReports() {
           <button type="button" className="lo-text-btn" onClick={openFolder}><FolderOpen size={14} aria-hidden="true" /> Open crash reports</button>
         </span>
       </div>
-      <p className="setting-subtext">Marvel Rivals' crash folder holds each crash as its own UECC folder. Zip the newest one when sharing a crash with support.</p>
       <div className="setting-group">
         {crashes === null
           ? <p className="rd-empty">Loading…</p>

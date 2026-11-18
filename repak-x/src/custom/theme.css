@@ -1206,6 +1206,7 @@ html:not([data-view="library"]) .container > .vfx-notice { margin: 24px 0 4px; }
 .snd-title { display: flex; align-items: baseline; gap: 10px; min-width: 0; margin: 0 auto 0 0; font-size: 14px; font-weight: 600; color: var(--text-primary); white-space: nowrap; }
 .snd-meta, .snd-total { font-size: 12px; font-weight: 400; color: var(--text-secondary); white-space: nowrap; }
 .snd-make { flex: none; }
+.snd-screen .lo-head-tools .snd-total { margin-right: 8px; }   /* 16px from Make mod: the count is a note, not part of the button */
 .snd-btn-in { display: inline-flex; align-items: center; gap: 8px; line-height: 1; }   /* the KO Editor's Install: icon and words on one center line */
 .snd-btn-in svg { flex: none; display: block; }
 .snd-slots { list-style: none; margin: 0; padding: 0 0 24px; display: flex; flex-direction: column; gap: 8px; overflow-y: auto; min-height: 0;

@@ -133,13 +133,13 @@ export default function CrashLog({ id, time, alert, modPaths }: { id: string; ti
             <div className="crl-actions">
               <button type="button" className={`lo-text-btn${spin && busy === 'copy' ? ' is-working' : ''}`} disabled={busy !== null} onClick={copy} title={`Copies the game's log without your user name, account ids, or login tokens`}>
                 {spin && busy === 'copy'
-                  ? <span className="t-shimmer-all" role="status"><ClipboardCopy size={14} aria-hidden="true" /> Copying</span>
+                  ? <span className="scan-status-in t-shimmer-all" role="status"><ClipboardCopy size={14} aria-hidden="true" />Copying</span>
                   : <>{copied ? <Check size={14} aria-hidden="true" /> : <ClipboardCopy size={14} aria-hidden="true" />}
                     <span key={copied ? 'copied' : 'idle'} className={copied ? 't-text-in' : undefined}>{copied ? 'Copied' : 'Copy log'}</span></>}
               </button>
               <button type="button" className={`lo-text-btn${spin && busy === 'save' ? ' is-working' : ''}`} disabled={busy !== null} onClick={save} title="Saves the game's log as a .txt to send to a modder or support">
                 {spin && busy === 'save'
-                  ? <span className="t-shimmer-all" role="status"><Download size={14} aria-hidden="true" /> Saving</span>
+                  ? <span className="scan-status-in t-shimmer-all" role="status"><Download size={14} aria-hidden="true" />Saving</span>
                   : <><Download size={14} aria-hidden="true" /> Save log</>}
               </button>
             </div>
