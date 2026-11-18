@@ -1,7 +1,10 @@
-// repakxtra: the Sounds tab's built-in sounds. Each is made here from oscillators and noise (WebAudio, offline at
-// 48 kHz), so nothing is copied from a game or app and nothing ships as a file: they are original sounds in the style
-// of well-known satisfying ones (a glassy experience plink, a pickup pop, a reward ding). A slot's Built-in menu plays
-// one or puts it in the slot, rendered to WAV like a dropped file.
+// repakxtra: the Sounds tab's built-in sounds. The first four are short recordings in assets/builtin-sounds (original
+// recreations made for repakxtra), the rest are made here from oscillators and noise (WebAudio, offline at 48 kHz).
+// A slot's Built-in menu plays one or puts it in the slot, rendered to WAV like a dropped file.
+import xpOrb from '../assets/builtin-sounds/minecraft-xp-orb.mp3'
+import pickUp from '../assets/builtin-sounds/minecraft-pick-up.mp3'
+import successChime from '../assets/builtin-sounds/success-chime.mp3'
+import osuHit from '../assets/builtin-sounds/osu-hit.mp3'
 
 type Ctx = OfflineAudioContext
 type Osc = { type?: OscillatorType; f: number; to?: number; at?: number; dur: number; gain?: number; attack?: number; sweep?: number }
@@ -43,22 +46,18 @@ function bell(c: Ctx, f: number, dur: number, at = 0, gain = 0.45) {
   for (const o of [car, mod]) { o.start(at); o.stop(at + dur + 0.02) }
 }
 
-export type Preset = { id: string; name: string; hint: string; seconds: number; make: (c: Ctx) => void }
+/** A built-in sound: a recording (`file`, a bundled URL) or a recipe (`make`, rendered for `seconds`). */
+export type Preset = { id: string; name: string; hint: string } & ({ file: string } | { seconds: number; make: (c: Ctx) => void })
 
 export const PRESETS: Preset[] = [
-  { id: 'orb', name: 'Experience orb', hint: 'Bright glassy plink', seconds: 0.5, make: c => {
-    tone(c, { f: 1568, dur: 0.38, gain: 0.5 }); tone(c, { f: 3136, dur: 0.2, gain: 0.16 }) } },
-  { id: 'pickup', name: 'Item pickup', hint: 'Quick rising pop', seconds: 0.2, make: c => {
-    tone(c, { f: 260, to: 900, sweep: 0.06, dur: 0.12, gain: 0.6 }) } },
+  { id: 'xp-orb', name: 'Minecraft XP Orb', hint: 'Glassy plink', file: xpOrb },
+  { id: 'pick-up', name: 'Minecraft Pick up', hint: 'Quick item pop', file: pickUp },
+  { id: 'success', name: 'Success chime', hint: 'Bright point chime', file: successChime },
+  { id: 'osu-hit', name: 'osu hit', hint: 'Crisp rhythm-game hit', file: osuHit },
   { id: 'bubble', name: 'Bubble pop', hint: 'Short clean pop', seconds: 0.15, make: c => {
     tone(c, { f: 320, to: 1500, sweep: 0.035, dur: 0.07, gain: 0.7, attack: 0.001 }); noise(c, { dur: 0.004, filter: 'highpass', f: 3000, gain: 0.25 }) } },
-  { id: 'bell', name: 'Clean bell', hint: 'One clear ring', seconds: 1.8, make: c => bell(c, 1046.5, 1.7) },
   { id: 'tap', name: 'Rhythm tap', hint: 'Crisp drum-pad hit', seconds: 0.15, make: c => {
     noise(c, { dur: 0.018, filter: 'bandpass', f: 2600, q: 1.2, gain: 0.9 }); tone(c, { f: 190, to: 90, sweep: 0.05, dur: 0.07, gain: 0.55, attack: 0.001 }) } },
-  { id: 'reward', name: 'Reward ding', hint: 'Two-note point chime', seconds: 0.8, make: c => {
-    tone(c, { type: 'triangle', f: 1046.5, dur: 0.35, gain: 0.45 }); tone(c, { type: 'triangle', f: 1568, at: 0.11, dur: 0.6, gain: 0.45 }) } },
-  { id: 'coin', name: 'Coin blip', hint: 'Classic two-step arcade coin', seconds: 0.45, make: c => {
-    tone(c, { type: 'square', f: 988, dur: 0.08, gain: 0.18, attack: 0.001 }); tone(c, { type: 'square', f: 1319, at: 0.075, dur: 0.35, gain: 0.18, attack: 0.001 }) } },
   { id: 'chime', name: 'Glass chime', hint: 'Three quick high notes', seconds: 1, make: c => {
     [1568, 1976, 2349].forEach((f, i) => tone(c, { f, at: i * 0.06, dur: 0.8, gain: 0.3 })) } },
   { id: 'levelup', name: 'Level up', hint: 'Rising four-note arpeggio', seconds: 0.9, make: c => {
@@ -78,8 +77,13 @@ export const PRESETS: Preset[] = [
     noise(c, { dur: 0.006, filter: 'highpass', f: 3000, gain: 0.4 }); tone(c, { type: 'square', f: 1319, dur: 0.05, gain: 0.12, attack: 0.001 }); tone(c, { f: 2637, at: 0.01, dur: 0.4, gain: 0.4, attack: 0.001 }) } },
 ]
 
-/** A preset as audio at 48 kHz mono, its peak set to -1 dBFS. */
+/** A preset as audio at 48 kHz: a recording as it was made, a recipe in mono with its peak set to -1 dBFS. */
 export async function renderPreset(p: Preset): Promise<AudioBuffer> {
+  if ('file' in p) {
+    const bytes = await (await fetch(p.file)).arrayBuffer()
+    const ctx = new AudioContext({ sampleRate: 48000 })
+    return ctx.decodeAudioData(bytes).finally(() => void ctx.close())
+  }
   const c = new OfflineAudioContext(1, Math.ceil(p.seconds * 48000), 48000)
   p.make(c)
   const out = await c.startRendering()
