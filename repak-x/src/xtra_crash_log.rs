@@ -346,11 +346,11 @@ fn redact_log(text: &str, users: &[String], known: &[String]) -> Result<String, 
     static NAMES: OnceLock<Regex> = OnceLock::new();
     static RULES: OnceLock<[(Regex, &'static str); 2]> = OnceLock::new();
     // names first and whole, quoted ones with their spaces ("nickname":"Jane Doe"), before redact() cuts them at a space
-    let names = NAMES.get_or_init(|| Regex::new(r#"(?i)(\\?["']?\b(?:aid|nick_?name|role_?name|user_?name|player_?name|open_?id|login_?name|phone)\\?["']?\s*[:=]\s*)(?:\\"[^"\n\\]*(?:\\")?|"(?:[^"\\\n]|\\.)*"?|'[^'\n]*'?|[^\s"'&,;<>)}\]\\]+)"#).unwrap());
+    let names = NAMES.get_or_init(|| Regex::new(r#"(?i)(\\?["']?\b(?:aid|nick_?name|role_?name|user_?name|player_?name|open_?id|login_?name|phone)\\?["']?\s*[:=]\s*)(?:\\"(?:\\\\\\"|[^"\n])*(?:\\")?|"(?:[^"\\\n]|\\.)*"?|'[^'\n]*'?|[^\s"'&,;<>)}\]\\]+)"#).unwrap());
     let rules = RULES.get_or_init(|| [
         // base64 of '{"', '{ "', '{\n': JWTs and the login JSON the SDK logs encoded
         // only at a word start: "GameFramework.cpp" holds "ewo" and stays
-        (Regex::new(r"\b(?:eyJ|eyAi|eyAg|ewo[gi])[\w+/=.-]{6,}").unwrap(), "<token>"),
+        (Regex::new(r"\b(?:eyJ|eyAi|eyAg|ewo[\w+/])[\w+/=.-]{6,}").unwrap(), "<token>"),
         (Regex::new(r"[\w.+-]+@[A-Za-z][\w-]*").unwrap(), "<handle>"),
     ]);
     let out = names.replace_all(text, "${1}<redacted>");
@@ -605,6 +605,11 @@ LogPakFile: Warning: Invalid Pak file ../../../Marvel/Content/Paks/~mods/Cool_99
         let both = vec!["tag.ABC123456".to_string(), "ABC123456".to_string()];
         assert_eq!(redact_log("Saved/Config/Xtag.ABC123456/ and ABC123456/ABC123456", &[], &both).unwrap(),
             "Saved/Config/Xtag.<id>/ and <id>/<id>", "a longer id failing its edge leaves the shorter one to match, side by side too");
+        let inner = r#"msg={\"nickname\":\"Jane \\\"Ace\\\" Doe\",\"x\":1} ewoJImFpZCI6IjEifQ=="#;
+        let out = redact_log(inner, &[], &[]).unwrap();
+        for part in ["Jane", "Ace", "Doe", "ewoJ"] {
+            assert!(!out.contains(part), "{part} left in {out}");
+        }
         let paths = "Runtime/Engine/Private/GameFramework/Character.cpp KeyAimAssist";
         assert_eq!(redact_log(paths, &[], &[]).unwrap(), paths, "no token inside a word");
         assert_eq!(redact_log("PracticeRange_S1 TripleKill 7326390961", &[], &["732639096".into()]).unwrap(), "PracticeRange_S1 TripleKill 7326390961", "only whole ids");
