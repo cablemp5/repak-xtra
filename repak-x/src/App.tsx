@@ -63,6 +63,7 @@ import FilterPanel, { filterScope } from './custom/FilterPanel'
 import LoadoutHotkeys, { AddToLoadoutField, LoadoutMenuItems } from './custom/Loadouts'
 import LoadoutsScreen, { ViewTabs } from './custom/LoadoutsScreen'
 import KoEditor from './custom/ko/KoView' // repakxtra: the KO Editor view, its code loaded when it first opens
+import SoundsScreen from './custom/SoundsScreen' // repakxtra: the Sounds tab, a sound mod maker
 import ViewModeMenu from './custom/ViewModeMenu' // repakxtra: view buttons folded into one when narrow
 import { loadoutable, modKey, nameKey, renameModKey, setView, syncLoadoutKeys } from './custom/loadoutStore' // repakxtra
 import { setModsRoot } from './custom/loadoutIdentity' // repakxtra
@@ -1590,6 +1591,7 @@ function App() {
 
     // Listen for Tauri drag-drop event
     const unlistenDragDrop = listen('tauri://drag-drop', (event: any) => {
+      if (document.documentElement.dataset.view === 'sounds' && !modalOpen()) return // repakxtra: the Sounds tab takes its own drops, a dialog over it gets them
       const files = event.payload.paths || event.payload
       setIsDragging(false)
       handleFileDrop(files).finally(() => window.dispatchEvent(new Event('repakxtra-drop-done'))) // repakxtra: the first-launch flow comes back when no install panel opened
@@ -1662,7 +1664,7 @@ function App() {
     // Listen for Tauri drag-enter event (when files first enter the window)
     const unlistenDragEnter = listen('tauri://drag-enter', () => {
       console.log('Tauri drag-enter detected')
-      if (!panelsRef.current.install) {
+      if (!panelsRef.current.install && (document.documentElement.dataset.view !== 'sounds' || modalOpen())) { // repakxtra: no install overlay over the Sounds tab
         setIsDragging(true)
       }
     })
@@ -3910,6 +3912,12 @@ function App() {
           setModsToInstall(parsed)
           setPanel('install', true)
         }} />{/* repakxtra: KO Editor view */}
+        <SoundsScreen alert={alert} blocked={gameRunning && !bypassGameRunningLock} onInstall={async path => {
+          const parsed = await invoke<DroppedModParse[]>('parse_dropped_files', { paths: [path] })
+          if (!parsed.length) throw new Error('The sound mod could not be opened for installation.')
+          setModsToInstall(parsed)
+          setPanel('install', true)
+        }} />{/* repakxtra: Sounds tab, its made mod goes through the install card as the KO Editor's does */}
         {/* repakxtra: Ctrl+1..9 switches pinned loadouts on every view (custom/Loadouts.tsx) */}
         <LoadoutHotkeys mods={mods} scopeMods={folderMods} scopeLabel="all mods" blocked={gameRunning && !bypassGameRunningLock}
           isBlocked={undoBlocked} reload={loadMods} alert={alert} modDetails={modDetails} />

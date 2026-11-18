@@ -1176,6 +1176,68 @@ html:not([data-view="library"]) .container > .vfx-notice { margin: 24px 0 4px; }
 .view-tabs button:hover { color: var(--text-primary) !important; }
 .view-tabs button[aria-selected="true"] { background: var(--bg-lighter) !important; color: var(--text-primary) !important; }
 
+/* Sounds tab (SoundsScreen.tsx): the KO Editor's frame. Groups in a sidebar like Settings' nav with count pills, the
+   picked group's slots as drop rows. An empty slot has a dashed edge (a place to drop), a filled one a solid hairline
+   and an accent icon. A drag over a row lights its edge in the accent (Fitts: the whole row is the target) */
+.snd-screen { display: flex; flex-direction: column; min-height: 0; animation: t-page-from-right var(--page-slide-dur) var(--page-slide-ease) backwards !important; }
+.snd-screen[hidden] { display: none !important; }
+.snd-screen .lo-screen-head .snd-make { height: 36px !important; }   /* the Loadouts head's New: one height for the head's action */
+.snd { flex: 1; min-height: 0; display: grid; grid-template-columns: 250px minmax(0, 1fr); }
+@media (max-width: 1000px) { .snd { grid-template-columns: 200px minmax(0, 1fr); } }
+.snd-side { display: flex; flex-direction: column; gap: 16px; padding: 0 16px 16px 0; border-right: 1px solid var(--panel-border); min-height: 0; }
+.snd-groups { display: flex; flex-direction: column; gap: 2px; }
+.snd-group { display: flex; align-items: center; justify-content: space-between; gap: 8px; height: 36px !important; min-height: 0 !important; padding: 0 8px 0 12px !important;
+  border: none !important; border-radius: var(--quiet-radius) !important; background: transparent !important; color: var(--text-secondary) !important;
+  font: inherit; font-size: 13px !important; font-weight: 500 !important; text-align: left; cursor: pointer; transition: background-color 150ms ease, color 150ms ease; }
+.snd-group:hover:not(.is-active) { background: var(--quiet-hover) !important; color: var(--text-primary) !important; }
+.snd-group.is-active { background: var(--quiet-active) !important; color: var(--text-primary) !important; }
+.snd-group-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.snd-group .lo-group-count { flex: none; font-variant-numeric: tabular-nums; }
+.snd-group .lo-group-count.is-some { color: var(--text-primary); }
+.snd-folder { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; padding: 14px 16px !important; min-height: 0 !important; height: auto !important;
+  border: 1px dashed var(--panel-border) !important; border-radius: 12px !important; background: transparent !important; color: var(--text-primary) !important;
+  font: inherit; text-align: left; cursor: pointer; transition: border-color 150ms ease, background-color 150ms ease; }
+.snd-folder:hover { border-color: rgba(255, 255, 255, 0.14) !important; }
+.snd-folder-title { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; }
+.snd-folder-title svg { color: var(--text-secondary); }
+.snd-folder-note { font-size: 12px; line-height: 1.5; color: var(--text-secondary); }
+.snd-main { display: flex; flex-direction: column; min-height: 0; min-width: 0; padding-left: 24px; }
+.snd-head { display: flex; align-items: center; gap: 16px; min-height: 32px; margin-bottom: 12px; }
+.snd-title { display: flex; align-items: baseline; gap: 10px; min-width: 0; margin: 0 auto 0 0; font-size: 14px; font-weight: 600; color: var(--text-primary); white-space: nowrap; }
+.snd-meta, .snd-total { font-size: 12px; font-weight: 400; color: var(--text-secondary); white-space: nowrap; }
+.snd-make { flex: none; }
+.snd-btn-in { display: inline-flex; align-items: center; gap: 8px; line-height: 1; }   /* the KO Editor's Install: icon and words on one center line */
+.snd-btn-in svg { flex: none; display: block; }
+.snd-slots { list-style: none; margin: 0; padding: 0 0 24px; display: flex; flex-direction: column; gap: 8px; overflow-y: auto; min-height: 0;
+  scrollbar-width: thin; scrollbar-color: rgba(255, 255, 255, 0.12) transparent; }
+.snd-slot { display: flex; align-items: center; gap: 12px; min-height: 56px; padding: 8px 12px 8px 12px; box-sizing: border-box; flex: none;
+  border: 1px dashed var(--panel-border); border-radius: 10px; cursor: pointer; transition: border-color 150ms ease, background-color 150ms ease; }
+.snd-slot:hover { border-color: rgba(255, 255, 255, 0.14); background: var(--quiet-hover); }
+.snd-slot.is-set { border-style: solid; }
+.snd-slot.is-over, .snd-folder.is-over { border-color: var(--accent-primary) !important; background: var(--quiet-active) !important; }
+.snd-icon { display: grid; place-items: center; flex: none; width: 32px; height: 32px; border-radius: 8px; background: var(--bg-light); color: var(--text-secondary); }
+.snd-slot.is-set .snd-icon { color: var(--accent-primary); }
+.snd-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
+.snd-name { font-size: 13px; font-weight: 600; color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.snd-in { font-weight: 400; color: var(--text-secondary); }
+.snd-none { padding: 24px 4px; font-size: 13px; color: var(--text-secondary); list-style: none; }
+.snd-hint { font-size: 12px; color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.snd-tools { display: flex; align-items: center; gap: 4px; flex: none; }
+.snd-tools .lo-icon { width: 28px; height: 28px !important; display: grid; place-items: center; }
+.snd-tools .lo-icon:disabled { opacity: 0.35; cursor: not-allowed; background: transparent !important; }
+.snd-play { display: inline-flex !important; align-items: center; gap: 6px; height: 28px !important; min-height: 0 !important; padding: 0 8px !important;
+  border: none !important; border-radius: 6px !important; background: transparent !important; color: var(--text-secondary) !important;
+  font: inherit; font-size: 12px !important; font-weight: 500 !important; cursor: pointer; transition: background-color 150ms ease, color 150ms ease; }
+.snd-play:hover:not(:disabled) { background: var(--quiet-active) !important; color: var(--text-primary) !important; }
+.snd-play:disabled { opacity: 0.45; cursor: not-allowed; }
+.snd-browse { margin-left: 4px; }
+.snd-preset-menu { width: 320px; max-height: min(420px, 70vh); overflow-y: auto; scrollbar-width: thin; scrollbar-color: rgba(255, 255, 255, 0.12) transparent; animation: t-dropdown-open var(--dropdown-open-dur) var(--dropdown-ease) backwards; }
+.snd-preset-row { display: flex; align-items: center; gap: 2px; }
+.snd-preset-row .lo-icon { width: 28px; height: 28px !important; display: grid; place-items: center; flex: none; }
+.snd-preset-row .xtra-item { flex: 1; min-width: 0; gap: 8px; padding: 0 8px !important; }
+.snd-preset-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.snd-preset-row small { flex: none; margin-left: auto; color: var(--text-secondary); font-size: 12px; }
+
 /* Mod rows (New strip, loadout page): switch, type code, name, actions */
 .mod-rows { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; border: 1px solid var(--panel-border); border-radius: 10px; overflow: visible; }   /* visible: a row's Add to loadout menu opens past the list's edge */
 .mod-row { display: flex; align-items: center; gap: 12px; min-height: 40px; padding: 4px 12px 4px 12px; font-size: 13px; color: var(--text-secondary); }
@@ -1437,15 +1499,12 @@ html[data-view="library"] .container > .main-panels { animation: t-page-from-rig
 /* Toggle: the thumb snaps across with a strong ease-out, no overshoot (it is hit hundreds of times a day, Space included) */
 .repakx-switch-thumb { transition: transform var(--switch-dur) var(--switch-ease), box-shadow var(--switch-dur) var(--switch-ease) !important; }
 /* transitions.dev: Tabs sliding (one pill moves between Home and Library) */
-.view-tabs { position: relative; display: inline-grid !important; grid-template-columns: 1fr 1fr 1fr; }
-.view-tabs::before { content: ''; position: absolute; top: 2px; bottom: 2px; left: 2px; width: calc((100% - 8px) / 3); border-radius: 6px;
-  background: var(--bg-lighter); transition: transform var(--tabs-dur) var(--tabs-ease); }
-html[data-view="library"] .view-tabs::before { transform: translateX(calc(100% + 2px)); }
-html[data-view="ko"] .view-tabs::before { transform: translateX(calc(200% + 4px)); }
-.view-tabs.is-two { grid-template-columns: 1fr 1fr; }
-.view-tabs.is-two::before { width: calc((100% - 6px) / 2); }
-.view-tabs button { position: relative; z-index: 1; transition: color var(--tabs-dur) var(--tabs-ease) !important; }
+.view-tabs button { position: relative; transition: color var(--tabs-dur) var(--tabs-ease) !important; }
 .view-tabs button[aria-selected="true"] { background: transparent !important; }
+/* each tab as wide as its label (custom/segSlide.ts measures the pill under the picked one), a little tighter in a
+   narrow window so four tabs and the header buttons fit at the 1200x800 minimum */
+@media (max-width: 1100px) { .view-tabs button { padding: 0 12px !important; } }
+.view-tabs:has(> button:nth-child(5)) button { padding: 0 12px !important; }   /* five tabs: the same tighter fit at every width */
 /* The same pill on every segmented bar (custom/segSlide.ts measures the picked button into --seg-x/y/w/h) */
 .has-seg-pill { position: relative; isolation: isolate; }
 .has-seg-pill::before { content: ''; position: absolute; top: 0; left: 0; z-index: -1; width: var(--seg-w); height: var(--seg-h);

@@ -121,13 +121,15 @@ function GroupHead({ p, name, count, at, total, editing, setEditing, folded, onF
 export function ViewTabs() {
   const view = useView()
   const ko = useUiPref('ko-tab')
-  useEffect(() => { if (view === 'nexus' || (!ko && view === 'ko')) setView('library') }, [ko, view]) // a view another edition saved
+  const sounds = useUiPref('sounds-tab') // repakxtra: Sounds tab (SoundsScreen.tsx)
+  useEffect(() => { if (view === 'nexus' || (!ko && view === 'ko') || (!sounds && view === 'sounds')) setView('library') }, [ko, sounds, view]) // a view another edition saved
   return (
-    <div className={`view-tabs${ko ? '' : ' is-two'}`} role="tablist" aria-label="View" data-tour="view-tabs">
+    <div className="view-tabs" role="tablist" aria-label="View" data-tour="view-tabs">
       <button type="button" role="tab" aria-selected={view === 'home'} onClick={() => { openLoadout(null); setView('home') }} title="Loadouts and new mods" data-hotkey="L">Loadouts</button>
       <button type="button" role="tab" aria-selected={view === 'library'} onClick={() => setView('library')}
         title="Every mod, with filters and folders" data-hotkey="L">Library</button>
       {ko && <button type="button" role="tab" aria-selected={view === 'ko'} onClick={() => setView('ko')} title="Recolor a hero's KO prompt">KO Editor</button>}
+      {sounds && <button type="button" role="tab" aria-selected={view === 'sounds'} onClick={() => setView('sounds')} title="Replace hit, kill, announcer, and other game sounds">Sounds</button>}
     </div>
   )
 }

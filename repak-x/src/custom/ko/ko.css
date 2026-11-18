@@ -2,7 +2,6 @@
    split by hairlines. The stage is the only colored region: the prompt's own colors on a dark field. */
 .ko { flex: 1; min-height: 0; display: flex; margin-top: 24px; animation: t-page-from-right var(--page-slide-dur) var(--page-slide-ease) backwards; }
 .ko[hidden] { display: none; }
-html[data-view="ko"] .view-tabs::before { transform: translateX(calc(200% + 4px)); }
 
 .ko-grid { flex: 1; min-height: 0; display: grid; grid-template-columns: 250px minmax(0, 1fr) 320px; }
 /* a narrow window (the 1200px minimum at a 110% or 125% UI scale): slimmer side columns, so the stage keeps its room */

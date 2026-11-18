@@ -32,7 +32,7 @@ fn pak_order(name: &str) -> u64 {
 const SUFFIX: &str = "_19999999_P";
 
 /// Sections of a bank: (tag, body range). Err when a section runs past the end or bytes trail the last one.
-fn sections(b: &[u8]) -> Result<Vec<([u8; 4], std::ops::Range<usize>)>, String> {
+pub(crate) fn sections(b: &[u8]) -> Result<Vec<([u8; 4], std::ops::Range<usize>)>, String> {
     let (mut out, mut o) = (Vec::new(), 0usize);
     while o + 8 <= b.len() {
         let tag: [u8; 4] = b[o..o + 4].try_into().unwrap();
@@ -50,7 +50,7 @@ fn sections(b: &[u8]) -> Result<Vec<([u8; 4], std::ops::Range<usize>)>, String> 
 }
 
 /// A bank's media by id (its DIDX entries into DATA), in DIDX order.
-fn media(b: &[u8]) -> Result<Vec<(u32, &[u8])>, String> {
+pub(crate) fn media(b: &[u8]) -> Result<Vec<(u32, &[u8])>, String> {
     let secs = sections(b)?;
     let get = |t: &[u8; 4]| secs.iter().find(|(tag, _)| tag == t).map(|(_, r)| r.clone());
     let (Some(didx), Some(data)) = (get(b"DIDX"), get(b"DATA")) else { return Ok(Vec::new()) };
@@ -71,7 +71,7 @@ fn section<'a>(b: &'a [u8], tag: &[u8; 4]) -> Option<&'a [u8]> {
 }
 
 /// The strictest power of two that reproduces every DIDX offset of the game's bank (bnk.py _infer_alignment).
-fn alignment(entries: &[(u32, &[u8])], b: &[u8]) -> usize {
+pub(crate) fn alignment(entries: &[(u32, &[u8])], b: &[u8]) -> usize {
     let Some(didx) = section(b, b"DIDX") else { return 16 };
     let offs: Vec<(usize, usize)> = didx.chunks_exact(12).map(|e| (u32::from_le_bytes(e[4..8].try_into().unwrap()) as usize, u32::from_le_bytes(e[8..12].try_into().unwrap()) as usize)).collect();
     if entries.len() < 2 {
@@ -136,8 +136,10 @@ fn build_bank(game: &[u8], mods: &[BTreeMap<u32, &[u8]>], hircs: &[Option<&[u8]>
 
 /// One file out of a pak (the bundled UAssetTool's extract_pak_file), as bytes; None when the pak has no such file.
 /// Kept for the window's life (a bank is read once for the list, every play, and the build).
-fn extract(pak: &Path, inner: &str) -> Option<Arc<Vec<u8>>> {
-    let id = (pak.to_string_lossy().to_lowercase(), inner.to_string());
+pub(crate) fn extract(pak: &Path, inner: &str) -> Option<Arc<Vec<u8>>> {
+    // the pak's time and size in the key: a game update rewriting a pak in place is read again
+    let stamp = std::fs::metadata(pak).map(|m| format!("{:?}:{}", m.modified().ok(), m.len())).unwrap_or_default();
+    let id = (format!("{}|{stamp}", pak.to_string_lossy().to_lowercase()), inner.to_string());
     if let Some(b) = cache().lock().unwrap().get(&id) {
         return Some(b.clone());
     }
@@ -150,7 +152,10 @@ fn extract(pak: &Path, inner: &str) -> Option<Arc<Vec<u8>>> {
     let bytes = if ok { std::fs::read(&out).ok().map(Arc::new) } else { None };
     let _ = std::fs::remove_file(&out);
     if let Some(b) = &bytes {
-        cache().lock().unwrap().insert(id, b.clone());
+        let mut c = cache().lock().unwrap();
+        let pak_key = id.0.split('|').next().unwrap_or("").to_string();
+        c.retain(|(k, inner_k), _| !(k.split('|').next() == Some(pak_key.as_str()) && *inner_k == id.1)); // an older read of this file
+        c.insert(id, b.clone());
     }
     bytes
 }
@@ -179,7 +184,7 @@ fn sound_key(path: &str) -> Option<String> {
 /// The game's own sound files by key: (pak, its exact entry name), patch paks first (newest build first: the game's
 /// bnk_ui_battle sits in a Patch_-Windows pak, not pakchunkWwise), then pakchunkWwise-Windows.pak. Each pak's index is
 /// read once (the conflict check's cache keeps it while the file is unchanged).
-fn game_files(paks: &Path) -> BTreeMap<String, (PathBuf, String)> {
+pub(crate) fn game_files(paks: &Path) -> BTreeMap<String, (PathBuf, String)> {
     let mut list: Vec<PathBuf> = std::fs::read_dir(paks).into_iter().flatten().flatten().map(|e| e.path())
         .filter(|p| p.file_name().and_then(|n| n.to_str()).is_some_and(|n| n.to_lowercase().starts_with("patch_") && n.to_lowercase().ends_with(".pak")))
         .collect();
@@ -259,7 +264,7 @@ pub struct PlanSound {
     pub stream: Option<String>,
 }
 
-fn paks_of(state: &State<'_, Arc<Mutex<crate::AppState>>>) -> Option<PathBuf> {
+pub(crate) fn paks_of(state: &State<'_, Arc<Mutex<crate::AppState>>>) -> Option<PathBuf> {
     let mods = state.lock().unwrap().game_path.clone();
     crate::xtra_broken::paks_dir(&mods)
 }
@@ -279,7 +284,7 @@ fn file_label(path: &str) -> String {
 }
 
 /// One file of the merged pack, written into the build folder under its key.
-fn write_entry(tmp: &Path, key: &str, file: &str, bytes: Vec<u8>, entries: &mut Vec<(String, String)>) -> Result<(), String> {
+pub(crate) fn write_entry(tmp: &Path, key: &str, file: &str, bytes: Vec<u8>, entries: &mut Vec<(String, String)>) -> Result<(), String> {
     let out = tmp.join("tree").join(key.replace('/', "\\"));
     std::fs::create_dir_all(out.parent().unwrap()).map_err(|e| e.to_string())?;
     std::fs::write(&out, bytes).map_err(|e| e.to_string())?;
@@ -404,19 +409,24 @@ pub async fn sound_merge_play(path: String, key: String, id: u32) -> Result<taur
         let wem = if key.ends_with(".wem") { file.to_vec() } else {
             media(&file)?.into_iter().find(|(m, _)| *m == id).map(|(_, d)| d.to_vec()).ok_or("This mod has no version of that sound.")?
         };
-        let dir = tempfile::tempdir().map_err(|e| e.to_string())?;
-        let (inp, out) = (dir.path().join("in.wem"), dir.path().join("out.wav"));
-        std::fs::write(&inp, wem).map_err(|e| e.to_string())?;
-        let mut cmd = std::process::Command::new(&exe);
-        cmd.arg("-o").arg(&out).arg(&inp).stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null());
-        #[cfg(windows)]
-        {
-            use std::os::windows::process::CommandExt;
-            cmd.creation_flags(0x0800_0000); // no console window
-        }
-        let ok = cmd.status().map(|s| s.success()).unwrap_or(false);
-        std::fs::read(&out).ok().filter(|_| ok).map(tauri::ipc::Response::new).ok_or_else(|| "The sound could not be decoded.".to_string())
+        decode_wem(&exe, wem).map(tauri::ipc::Response::new)
     }).await.map_err(|e| e.to_string())?
+}
+
+/// A .wem as WAV bytes, through the preview kit's vgmstream (`exe`). Also the Sounds tab's Play original.
+pub(crate) fn decode_wem(exe: &Path, wem: Vec<u8>) -> Result<Vec<u8>, String> {
+    let dir = tempfile::tempdir().map_err(|e| e.to_string())?;
+    let (inp, out) = (dir.path().join("in.wem"), dir.path().join("out.wav"));
+    std::fs::write(&inp, wem).map_err(|e| e.to_string())?;
+    let mut cmd = std::process::Command::new(exe);
+    cmd.arg("-o").arg(&out).arg(&inp).stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null());
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        cmd.creation_flags(0x0800_0000); // no console window
+    }
+    let ok = cmd.status().map(|s| s.success()).unwrap_or(false);
+    std::fs::read(&out).ok().filter(|_| ok).ok_or_else(|| "The sound could not be decoded.".to_string())
 }
 
 /// What a merged pack was made from, by its file stem (lowercase): its name, its sources (paths without extension, so

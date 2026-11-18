@@ -21,6 +21,8 @@ mod xtra_kit; // repakxtra: preview kit (previews on other PCs)
 mod xtra_previews; // repakxtra: generated mod previews
 mod xtra_viewer; // repakxtra: Rotate in 3D and the texture check (preview kit 19)
 mod xtra_soundmerge; // repakxtra: Merge sounds, sound mods that share a bank in one pak with your picks
+mod xtra_wem; // repakxtra: Wwise Vorbis encoder for the Sounds tab
+mod xtra_sounds; // repakxtra: Sounds tab, replace hit, kill, announcer, and other game sounds
 mod xtra_trash; // repakxtra: undoable delete
 mod xtra_capture; // repakxtra: capture preview in game
 mod xtra_update; // repakxtra: updates from repakxtra's own releases
@@ -8742,6 +8744,7 @@ fn main() {
             xtra_previews::list_preview_files, // repakxtra: pictures load as files (asset protocol)
             xtra_viewer::get_viewer_file, xtra_viewer::viewer_state, xtra_viewer::generate_mod_viewer, xtra_viewer::prepare_mod_viewer, xtra_viewer::generate_default_viewer, xtra_viewer::run_texcheck, // repakxtra: Rotate in 3D, texture check
             xtra_soundmerge::sound_merge_plan, xtra_soundmerge::sound_merge_play, xtra_soundmerge::sound_merge_make, xtra_soundmerge::sound_merge_info, xtra_soundmerge::sound_merge_cleanup, xtra_soundmerge::sound_merge_done, // repakxtra: Merge sounds
+            xtra_sounds::sounds_state, xtra_sounds::sounds_set, xtra_sounds::sounds_clear, xtra_sounds::sounds_get, xtra_sounds::sounds_read, xtra_sounds::sounds_folder, xtra_sounds::sounds_original, xtra_sounds::sounds_make, // repakxtra: Sounds tab
             xtra_previews::get_preview_covers,
             xtra_previews::generate_mod_previews,
             xtra_previews::previews_available, // repakxtra: hide Generate where there is no generator

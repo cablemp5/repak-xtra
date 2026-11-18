@@ -1,6 +1,7 @@
 // Browser preview only: `npm run dev` opened in a normal browser has no Rust backend,
 // so this answers invoke() calls from a snapshot of the real library.
 // Refresh the snapshot with `node scripts/capture-dev-fixture.mjs`. Never active inside the app.
+import soundSlots from '../data/sound_slots.json'
 import { mockIPC, mockWindows } from '@tauri-apps/api/mocks'
 import { emit } from '@tauri-apps/api/event'
 import { normalizeModBaseName } from '../utils/format'
@@ -430,6 +431,16 @@ if (import.meta.env.DEV && !('__TAURI_INTERNALS__' in window)) {
         if (mod) mod.enabled = !mod.enabled
         return mod?.enabled ?? null
       }
+      // the Sounds tab (xtra_sounds.rs): window.__soundNames = { 'head-hit': 'file.wav' } fills slots, localStorage
+      // 'mock.soundsLong' gives every slot a very long file name
+      case 'sounds_state': {
+        const long = localStorage.getItem('mock.soundsLong') ? Object.fromEntries(soundSlots.slots.map(sl => [sl.id, 'an extremely long file name for a sound someone downloaded from a site that names everything verbosely.wav'])) : {}
+        return { names: { ...long, ...(mock.__soundNames ?? {}) }, can_play_original: true }
+      }
+      case 'sounds_set': return null
+      case 'sounds_clear': if (mock.__soundNames) delete mock.__soundNames[args.slot]; return null
+      case 'sounds_folder': return []
+      case 'sounds_make': return new Promise(r => setTimeout(() => r('C:\\Users\\you\\AppData\\Roaming\\Repak-X\\sounds\\out\\Sound_mod_9999999_P.pak'), 1500))
       default: {
         const vfx = mockVfx(cmd, args) // the Mod Updater window's commands
         if (vfx !== undefined) return vfx

@@ -126,6 +126,7 @@ Copy-Item target\uassettool\* $out -Recurse -Force
 Remove-Item "$out\*.pdb", "$out\UAssetTool.exe", "$out\REPAK-X.exe" -ErrorAction SilentlyContinue
 Copy-Item target\uassettool-cli\UAssetTool.exe "$out\uassettool-cli.exe" -Force
 Copy-Item repak-x\src\data\character_data.json "$out\data" -Force
+Copy-Item repak-x\src\xtra_wem.NOTICE.md "$out\data\THIRD-PARTY-NOTICES.md" -Force # the Sounds tab's notice for the PCM .wem header it uses ships in the zip (data\ is packed)
 if ($Test) {
     # Remove only the known junction, never its target or an ordinary folder.
     if (Test-Path $link) {

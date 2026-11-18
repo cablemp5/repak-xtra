@@ -1,0 +1,504 @@
+{
+ "groups": [
+  {
+   "id": "combat",
+   "name": "Combat"
+  },
+  {
+   "id": "streaks",
+   "name": "Killstreaks"
+  },
+  {
+   "id": "healing",
+   "name": "Healing"
+  },
+  {
+   "id": "feed",
+   "name": "Kill feed"
+  },
+  {
+   "id": "alerts",
+   "name": "Alerts"
+  },
+  {
+   "id": "match",
+   "name": "Match"
+  },
+  {
+   "id": "announcer",
+   "name": "Announcer"
+  }
+ ],
+ "slots": [
+  {
+   "id": "body-hit",
+   "group": "combat",
+   "name": "Bodyshot hit",
+   "banks": [
+    "wwiseaudio/bnk_ui_battle.bnk"
+   ],
+   "sounds": [
+    181235746,
+    314161642,
+    738224008
+   ]
+  },
+  {
+   "id": "head-hit",
+   "group": "combat",
+   "name": "Headshot hit",
+   "banks": [
+    "wwiseaudio/bnk_ui_battle.bnk"
+   ],
+   "sounds": [
+    708656394
+   ]
+  },
+  {
+   "id": "body-kill",
+   "group": "combat",
+   "name": "Bodyshot kill",
+   "banks": [
+    "wwiseaudio/bnk_ui_battle.bnk"
+   ],
+   "sounds": [
+    731184180
+   ],
+   "silence": [
+    480701051
+   ]
+  },
+  {
+   "id": "head-kill",
+   "group": "combat",
+   "name": "Headshot kill",
+   "banks": [
+    "wwiseaudio/bnk_ui_battle.bnk"
+   ],
+   "sounds": [
+    192899273
+   ]
+  },
+  {
+   "id": "streak-1",
+   "group": "streaks",
+   "name": "First KO",
+   "banks": [
+    "wwiseaudio/bnk_ui_battle.bnk"
+   ],
+   "sounds": [
+    893101392
+   ]
+  },
+  {
+   "id": "streak-2",
+   "group": "streaks",
+   "name": "Double kill",
+   "banks": [
+    "wwiseaudio/bnk_ui_battle.bnk"
+   ],
+   "sounds": [
+    334283044
+   ]
+  },
+  {
+   "id": "streak-3",
+   "group": "streaks",
+   "name": "Triple kill",
+   "banks": [
+    "wwiseaudio/bnk_ui_battle.bnk"
+   ],
+   "sounds": [
+    525712677
+   ]
+  },
+  {
+   "id": "streak-4",
+   "group": "streaks",
+   "name": "Quad kill",
+   "banks": [
+    "wwiseaudio/bnk_ui_battle.bnk"
+   ],
+   "sounds": [
+    637540727
+   ]
+  },
+  {
+   "id": "streak-5",
+   "group": "streaks",
+   "name": "Penta kill",
+   "banks": [
+    "wwiseaudio/bnk_ui_battle.bnk"
+   ],
+   "sounds": [
+    45999626
+   ]
+  },
+  {
+   "id": "streak-6",
+   "group": "streaks",
+   "name": "Hexa kill",
+   "banks": [
+    "wwiseaudio/bnk_ui_battle.bnk"
+   ],
+   "sounds": [
+    832398519
+   ]
+  },
+  {
+   "id": "streak-7",
+   "group": "streaks",
+   "name": "Septa kill",
+   "banks": [
+    "wwiseaudio/bnk_ui_battle.bnk"
+   ],
+   "sounds": [
+    555359969
+   ]
+  },
+  {
+   "id": "heal-received",
+   "group": "healing",
+   "name": "Healed by a teammate",
+   "banks": [
+    "wwiseaudio/bnk_ui_battle.bnk"
+   ],
+   "sounds": [
+    252214716
+   ]
+  },
+  {
+   "id": "heal-over-time",
+   "group": "healing",
+   "name": "Healing over time",
+   "banks": [
+    "wwiseaudio/bnk_ui_battle.bnk"
+   ],
+   "sounds": [
+    762965379,
+    9873153
+   ],
+   "silence": [
+    120956329
+   ]
+  },
+  {
+   "id": "assist",
+   "group": "feed",
+   "name": "Kill assist",
+   "banks": [
+    "wwiseaudio/bnk_ui_battle.bnk"
+   ],
+   "sounds": [
+    839726276
+   ]
+  },
+  {
+   "id": "healed-kill",
+   "group": "feed",
+   "name": "Healed teammate got a kill",
+   "banks": [
+    "wwiseaudio/bnk_ui_battle.bnk"
+   ],
+   "sounds": [
+    991576568
+   ],
+   "silence": [
+    930787928
+   ]
+  },
+  {
+   "id": "team-kill",
+   "group": "feed",
+   "name": "Teammate got a kill",
+   "banks": [
+    "wwiseaudio/bnk_ui_battle.bnk"
+   ],
+   "sounds": [
+    22182087,
+    146062159,
+    257264108,
+    729262927,
+    832200547,
+    851634860
+   ]
+  },
+  {
+   "id": "team-died",
+   "group": "feed",
+   "name": "Teammate died",
+   "banks": [
+    "wwiseaudio/bnk_ui_battle.bnk"
+   ],
+   "sounds": [
+    497199162
+   ]
+  },
+  {
+   "id": "ult-ready",
+   "group": "alerts",
+   "name": "Ultimate ready",
+   "banks": [
+    "wwiseaudio/bnk_ui_battle.bnk"
+   ],
+   "sounds": [
+    798355800
+   ]
+  },
+  {
+   "id": "ability-ready",
+   "group": "alerts",
+   "name": "Ability ready",
+   "banks": [
+    "wwiseaudio/bnk_ui_battle.bnk"
+   ],
+   "sounds": [
+    842837576
+   ]
+  },
+  {
+   "id": "low-health",
+   "group": "alerts",
+   "name": "Low health",
+   "banks": [
+    "wwiseaudio/bnk_ui_battle.bnk"
+   ],
+   "sounds": [
+    984035719
+   ],
+   "silence": [
+    517619248
+   ]
+  },
+  {
+   "id": "shield-broken",
+   "group": "alerts",
+   "name": "Shield broken",
+   "banks": [
+    "wwiseaudio/bnk_ui_battle.bnk"
+   ],
+   "sounds": [
+    640732430
+   ],
+   "silence": [
+    704441449
+   ]
+  },
+  {
+   "id": "immune-hit",
+   "group": "alerts",
+   "name": "Hit an immune target",
+   "banks": [
+    "wwiseaudio/bnk_ui_battle.bnk"
+   ],
+   "sounds": [
+    72788078,
+    319930682,
+    400701399,
+    616070437,
+    657860318,
+    811420402
+   ]
+  },
+  {
+   "id": "match-start",
+   "group": "match",
+   "name": "Match countdown",
+   "banks": [
+    "wwiseaudio/bnk_ui_battle.bnk"
+   ],
+   "sounds": [
+    476156208
+   ]
+  },
+  {
+   "id": "overtime",
+   "group": "match",
+   "name": "Overtime",
+   "banks": [
+    "wwiseaudio/bnk_ui_battle.bnk"
+   ],
+   "sounds": [
+    50908358
+   ]
+  },
+  {
+   "id": "victory",
+   "group": "match",
+   "name": "Victory",
+   "banks": [
+    "wwiseaudio/bnk_ui_battle.bnk"
+   ],
+   "sounds": [
+    590060280
+   ]
+  },
+  {
+   "id": "defeat",
+   "group": "match",
+   "name": "Defeat",
+   "banks": [
+    "wwiseaudio/bnk_ui_battle.bnk"
+   ],
+   "sounds": [
+    364689113
+   ]
+  },
+  {
+   "id": "vo-double",
+   "group": "announcer",
+   "name": "Double KO",
+   "banks": [
+    "wwiseaudio/english(us)/bnk_vo_system.bnk",
+    "wwiseaudio/japanese(jp)/bnk_vo_system.bnk",
+    "wwiseaudio/chinese(cn)/bnk_vo_system.bnk"
+   ],
+   "sounds": [
+    277881354
+   ]
+  },
+  {
+   "id": "vo-triple",
+   "group": "announcer",
+   "name": "Triple KO",
+   "banks": [
+    "wwiseaudio/english(us)/bnk_vo_system.bnk",
+    "wwiseaudio/japanese(jp)/bnk_vo_system.bnk",
+    "wwiseaudio/chinese(cn)/bnk_vo_system.bnk"
+   ],
+   "sounds": [
+    840935384
+   ]
+  },
+  {
+   "id": "vo-quad",
+   "group": "announcer",
+   "name": "Quad KO",
+   "banks": [
+    "wwiseaudio/english(us)/bnk_vo_system.bnk",
+    "wwiseaudio/japanese(jp)/bnk_vo_system.bnk",
+    "wwiseaudio/chinese(cn)/bnk_vo_system.bnk"
+   ],
+   "sounds": [
+    385854334
+   ]
+  },
+  {
+   "id": "vo-penta",
+   "group": "announcer",
+   "name": "Penta KO",
+   "banks": [
+    "wwiseaudio/english(us)/bnk_vo_system.bnk",
+    "wwiseaudio/japanese(jp)/bnk_vo_system.bnk",
+    "wwiseaudio/chinese(cn)/bnk_vo_system.bnk"
+   ],
+   "sounds": [
+    1000903991
+   ]
+  },
+  {
+   "id": "vo-ace",
+   "group": "announcer",
+   "name": "Team wipe",
+   "banks": [
+    "wwiseaudio/english(us)/bnk_vo_system.bnk",
+    "wwiseaudio/japanese(jp)/bnk_vo_system.bnk",
+    "wwiseaudio/chinese(cn)/bnk_vo_system.bnk"
+   ],
+   "sounds": [
+    792824198
+   ]
+  },
+  {
+   "id": "vo-choose",
+   "group": "announcer",
+   "name": "Choose your hero",
+   "banks": [
+    "wwiseaudio/english(us)/bnk_vo_system.bnk",
+    "wwiseaudio/japanese(jp)/bnk_vo_system.bnk",
+    "wwiseaudio/chinese(cn)/bnk_vo_system.bnk"
+   ],
+   "sounds": [
+    606578426
+   ]
+  },
+  {
+   "id": "vo-unlocked",
+   "group": "announcer",
+   "name": "Area unlocked",
+   "banks": [
+    "wwiseaudio/english(us)/bnk_vo_system.bnk",
+    "wwiseaudio/japanese(jp)/bnk_vo_system.bnk",
+    "wwiseaudio/chinese(cn)/bnk_vo_system.bnk"
+   ],
+   "sounds": [
+    544532743
+   ]
+  },
+  {
+   "id": "vo-overtime",
+   "group": "announcer",
+   "name": "Overtime",
+   "banks": [
+    "wwiseaudio/english(us)/bnk_vo_system.bnk",
+    "wwiseaudio/japanese(jp)/bnk_vo_system.bnk",
+    "wwiseaudio/chinese(cn)/bnk_vo_system.bnk"
+   ],
+   "sounds": [
+    802000846
+   ]
+  },
+  {
+   "id": "vo-round-win",
+   "group": "announcer",
+   "name": "Round won",
+   "banks": [
+    "wwiseaudio/english(us)/bnk_vo_system.bnk",
+    "wwiseaudio/japanese(jp)/bnk_vo_system.bnk",
+    "wwiseaudio/chinese(cn)/bnk_vo_system.bnk"
+   ],
+   "sounds": [
+    507671064
+   ]
+  },
+  {
+   "id": "vo-round-lose",
+   "group": "announcer",
+   "name": "Round lost",
+   "banks": [
+    "wwiseaudio/english(us)/bnk_vo_system.bnk",
+    "wwiseaudio/japanese(jp)/bnk_vo_system.bnk",
+    "wwiseaudio/chinese(cn)/bnk_vo_system.bnk"
+   ],
+   "sounds": [
+    6338442
+   ]
+  },
+  {
+   "id": "vo-win",
+   "group": "announcer",
+   "name": "Victory",
+   "banks": [
+    "wwiseaudio/english(us)/bnk_vo_system.bnk",
+    "wwiseaudio/japanese(jp)/bnk_vo_system.bnk",
+    "wwiseaudio/chinese(cn)/bnk_vo_system.bnk"
+   ],
+   "sounds": [
+    135080550
+   ]
+  },
+  {
+   "id": "vo-lose",
+   "group": "announcer",
+   "name": "Defeat",
+   "banks": [
+    "wwiseaudio/english(us)/bnk_vo_system.bnk",
+    "wwiseaudio/japanese(jp)/bnk_vo_system.bnk",
+    "wwiseaudio/chinese(cn)/bnk_vo_system.bnk"
+   ],
+   "sounds": [
+    46166121
+   ]
+  }
+ ]
+}
