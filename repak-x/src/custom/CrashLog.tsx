@@ -3,7 +3,7 @@
 // the end, the mods the game loaded, and Copy log / Save log (the decrypted log with the player's ids taken out).
 import { useEffect, useState } from 'react'
 import { invoke } from '@tauri-apps/api/core'
-import { Check, ChevronRight, ClipboardCopy, Download, TriangleAlert } from 'lucide-react'
+import { Check, ChevronRight, CircleAlert, ClipboardCopy, Download, Package, Timer, TriangleAlert } from 'lucide-react'
 import type { useAlert } from '../components/AlertHandler'
 import { onKey } from './setupReport'
 import { copyText } from './CopySetupReport'
@@ -12,7 +12,7 @@ import { nameKey } from './loadoutStore'
 import { ModName } from './modName'
 
 type Alert = ReturnType<typeof useAlert>
-type Event = { secs: number; text: string; count: number }
+type Event = { secs: number; text: string; count: number; kind?: string }
 type Summary = {
   map?: string | null; hero?: string | null; hero_id?: string | null
   events: Event[]; events_more?: number
@@ -90,18 +90,20 @@ export default function CrashLog({ id, time, alert, modPaths }: { id: string; ti
           <div className="crl-body">
             {s.events.length > 0 && (
               <section className="crl-part" aria-label="Last 10 seconds">
-                <h4 className="crl-label">Last 10 seconds</h4>
+                <h4 className="crl-label"><Timer size={14} aria-hidden="true" />Last 10 seconds</h4>
+                {/* a timeline down to the crash: each kind of event has its dot color, the words say what it was */}
                 <ul className="crl-events">
                   {s.events.map((e, i) => (
-                    <li key={i}><span className="crl-secs">{secs(e.secs)}</span><span>{e.text}{e.count > 1 && <span className="lo-group-count crl-count" title={`${e.count} at once`}>{e.count}</span>}</span></li>
+                    <li key={i}><span className="crl-secs">{secs(e.secs)}</span><span className="crl-dot" data-kind={e.kind} aria-hidden="true" /><span>{e.text}{e.count > 1 && <span className="lo-group-count crl-count" title={`${e.count} at once`}>{e.count}</span>}</span></li>
                   ))}
+                  <li className="crl-crash"><span className="crl-secs">0.0 s</span><span className="crl-dot" aria-hidden="true" /><span>The game crashed</span></li>
                 </ul>
                 {!!s.events_more && <p className="crl-more">{s.events_more} earlier {s.events_more === 1 ? 'event' : 'events'} in the log</p>}
               </section>
             )}
             {s.errors.length > 0 && (
               <section className="crl-part" aria-label="Errors near the end">
-                <h4 className="crl-label">Errors in the last 30 seconds</h4>
+                <h4 className="crl-label"><CircleAlert size={14} aria-hidden="true" />Errors in the last 30 seconds</h4>
                 <ul className="crl-errors">
                   {s.errors.map((e, i) => <li key={i}><span className="lo-group-count crl-count" title={`${e.count} times`}>{e.count}</span><code>{e.text}</code></li>)}
                 </ul>
@@ -109,7 +111,7 @@ export default function CrashLog({ id, time, alert, modPaths }: { id: string; ti
               </section>
             )}
             <section className="crl-part" aria-label="Mods the game loaded">
-              <h4 className="crl-label">Mods the game loaded</h4>
+              <h4 className="crl-label"><Package size={14} aria-hidden="true" />Mods the game loaded</h4>
               <p className="crl-text">
                 {s.mounted.length === 0 ? 'None.'
                   : s.mounted.length === 1 ? `1 mod${s.iostore ? ', an IoStore one' : ''}.`

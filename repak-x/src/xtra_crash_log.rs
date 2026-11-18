@@ -132,6 +132,8 @@ pub struct Event {
     text: String,
     /// the same event in a row (three bots respawning at once)
     count: u32,
+    /// "death", "respawn", "streak", "ability", or "load": the color of its dot on the timeline
+    kind: &'static str,
 }
 
 #[derive(Serialize, Debug, PartialEq)]
@@ -283,20 +285,20 @@ fn summarize(text: &str, on: Option<Vec<String>>, names: &dyn Fn(&str) -> Option
             }
         }
         let Some(ago) = ago.filter(|a| *a <= EVENT_MS) else { continue };
-        let text = if let Some(c) = life.captures(line) {
+        let (text, kind) = if let Some(c) = life.captures(line) {
             let mine = me.as_deref() == Some(&c[2]);
             match (&c[1], mine) {
-                ("OnDeath", true) => "You died".to_string(),
-                ("OnDeath", false) => cap(&format!("{} died", who(&c[3], names))),
-                (_, true) => "You respawned".to_string(),
-                _ => cap(&format!("{} respawned", who(&c[3], names))),
+                ("OnDeath", true) => ("You died".to_string(), "death"),
+                ("OnDeath", false) => (cap(&format!("{} died", who(&c[3], names))), "death"),
+                (_, true) => ("You respawned".to_string(), "respawn"),
+                _ => (cap(&format!("{} respawned", who(&c[3], names))), "respawn"),
             }
         } else if let Some(c) = notify.captures(line) {
-            cap(&words(&c[1]).to_lowercase())
+            (cap(&words(&c[1]).to_lowercase()), "streak")
         } else if let Some(c) = cue.captures(line) {
-            cap(&format!("{} ability effect loaded for the first time", who(&c[1], names)))
+            (cap(&format!("{} ability effect loaded for the first time", who(&c[1], names))), "ability")
         } else if let Some(m) = map {
-            format!("Loaded {m}")
+            (format!("Loaded {m}"), "load")
         } else {
             continue;
         };
@@ -305,7 +307,7 @@ fn summarize(text: &str, on: Option<Vec<String>>, names: &dyn Fn(&str) -> Option
             // one level load logs Browse and then world_loaded: one event
             Some(e) if e.text == text && text.starts_with("Loaded ") => {}
             Some(e) if e.text == text && (e.secs - secs).abs() < 0.5 => e.count += 1,
-            _ => s.events.push(Event { secs, text, count: 1 }),
+            _ => s.events.push(Event { secs, text, count: 1, kind }),
         }
     }
     s.hero = s.hero_id.as_deref().and_then(names);
@@ -531,6 +533,7 @@ LogPakFile: Warning: Invalid Pak file ../../../Marvel/Content/Paks/~mods/Cool_99
         let s = summarize(&log, on, &names, &same);
         assert_eq!(s.map.as_deref(), Some("Practice Range"));
         assert_eq!((s.hero_id.as_deref(), s.hero.as_deref()), (Some("1045"), Some("Namor")));
+        assert_eq!(s.events.iter().map(|e| e.kind).collect::<Vec<_>>(), ["ability", "death", "streak", "respawn", "death"]);
         let ev: Vec<(String, u32)> = s.events.iter().map(|e| (format!("{:.1} {}", e.secs, e.text), e.count)).collect();
         assert_eq!(ev, [
             ("10.0 Namor ability effect loaded for the first time".into(), 1),
