@@ -230,17 +230,17 @@ export async function gatherReport(onStage?: (stage: ReportStage) => void): Prom
 
 /** `onAt`: the mods that were on when it crashed (saved as the game started, xtra_crash.rs), or 'now' when that session was
  *  not saved and `held` lists the mods on now instead */
-export type RecentCrash = { time: number; type: string; asset?: string; held?: string[]; onAt?: 'crash' | 'now' }
+export type RecentCrash = { id?: string; time: number; type: string; asset?: string; held?: string[]; onAt?: 'crash' | 'now' }
 /** A mod's key on or off (xtra_crash.rs on_key). Pure. */
 export const onKey = (path: string) => path.replace(/\\/g, '/').toLowerCase().replace(/\.(pak|bak_repak|utoc|ucas)$/, '')
 /** The newest five crashes (xtra_recent_crashes): when, what kind, the asset each crashed loading (its name), and the
  *  installed mods (`modPaths`, on or off) that replace that asset and were on when it crashed (`onNow` when that is not
  *  known), undefined when the check failed. For the setup report and Settings > Crash reports. `listed` skips the backend
  *  call when the caller already has the crashes. */
-export async function recentCrashes(modPaths: string[], onNow: string[], listed?: { time: number; crash_type?: Opt; asset_path?: Opt }[]): Promise<RecentCrash[]> {
-  const list = listed ?? await settled(invoke<{ time: number; crash_type?: Opt; asset_path?: Opt }[]>('xtra_recent_crashes')) ?? []
+export async function recentCrashes(modPaths: string[], onNow: string[], listed?: { id?: string; time: number; crash_type?: Opt; asset_path?: Opt }[]): Promise<RecentCrash[]> {
+  const list = listed ?? await settled(invoke<{ id?: string; time: number; crash_type?: Opt; asset_path?: Opt }[]>('xtra_recent_crashes')) ?? []
   return Promise.all(list.map(async c => {
-    const base = { time: c.time, type: c.crash_type || 'Crash', asset: c.asset_path?.split('/').pop() || undefined }
+    const base = { id: c.id, time: c.time, type: c.crash_type || 'Crash', asset: c.asset_path?.split('/').pop() || undefined }
     if (!c.asset_path) return base
     const t = await settled(invoke<Tiered[]>('xtra_crash_tiers', { assetPath: c.asset_path, heroId: null, modPaths }))
     const atCrash = await settled(invoke<string[] | null>('xtra_mods_on_at', { time: c.time }))

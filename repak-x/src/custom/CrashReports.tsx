@@ -1,7 +1,8 @@
 // repakxtra: Settings > Crash reports. The game's five newest crashes (xtra_crash.rs xtra_recent_crashes): when, the
 // file it crashed loading, and which installed mods replace that file and were on when it crashed (saved as the game
 // started), or are on now for a crash from before that was saved. Open
-// crash reports opens the folder the game writes them to, one UECC folder per crash.
+// crash reports opens the folder the game writes them to, one UECC folder per crash. Each row also shows what the game's
+// own log says about it (CrashLog.tsx).
 import { useEffect, useState } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { FileWarning, FolderOpen, ListChecks } from 'lucide-react'
@@ -11,15 +12,18 @@ import { ModName } from './modName'
 import { type RecentCrash, recentCrashes, reportSource } from './setupReport'
 import { OPEN_BISECT } from './crashBisect'
 import { APP_NAME } from './edition'
+import CrashLog from './CrashLog'
 
 const when = (secs: number) => new Date(secs * 1000).toLocaleString(undefined, { year: 'numeric', month: 'numeric', day: 'numeric', hour: 'numeric', minute: '2-digit', second: '2-digit' })
 
 export default function CrashReports() {
   const alert = useAlert()
   const [crashes, setCrashes] = useState<RecentCrash[] | null>(null)
+  const [modPaths, setModPaths] = useState<string[]>([])
   useEffect(() => {
     let live = true
     const mods = reportSource.get?.().mods ?? []
+    setModPaths(mods.map(m => m.path))
     recentCrashes(mods.map(m => m.path), mods.filter(m => m.enabled).map(m => m.path)).then(c => { if (live) setCrashes(c) })
     return () => { live = false }
   }, [])
@@ -37,7 +41,6 @@ export default function CrashReports() {
           <button type="button" className="lo-text-btn" onClick={openFolder}><FolderOpen size={14} aria-hidden="true" /> Open crash reports</button>
         </span>
       </div>
-      <p className="setting-subtext">Marvel Rivals' crash folder holds each crash as its own UECC folder. Zip the newest one when sharing a crash with support.</p>
       <div className="setting-group">
         {crashes === null
           ? <p className="rd-empty">Loading…</p>
@@ -46,7 +49,7 @@ export default function CrashReports() {
             : (
               <ul className="rd-list">
                 {crashes.map(c => (
-                  <li key={c.time} className="rd-row crs-row">
+                  <li key={c.id ?? c.time} className="rd-row crs-row">
                     <div className="rd-text">
                       <span className="rd-meta crs-time">{when(c.time)}</span>
                       <span className="rd-name">{c.asset ? <>Crashed loading <b>{c.asset}</b></> : `Crashed (${c.type})`}</span>
@@ -58,6 +61,7 @@ export default function CrashReports() {
                             : <>{c.onAt === 'crash' ? 'Replaced by, on at the time:' : 'Replaced by, on now:'} {c.held.map((p, i) => <span key={p}>{i ? ', ' : ''}<ModName name={nameKey(p)} /></span>)}</>}
                         </span>
                       )}
+                      {c.id && <CrashLog id={c.id} time={c.time} alert={alert} modPaths={modPaths} />}
                     </div>
                   </li>
                 ))}

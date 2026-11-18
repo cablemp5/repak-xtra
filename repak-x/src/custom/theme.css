@@ -1206,6 +1206,7 @@ html:not([data-view="library"]) .container > .vfx-notice { margin: 24px 0 4px; }
 .snd-title { display: flex; align-items: baseline; gap: 10px; min-width: 0; margin: 0 auto 0 0; font-size: 14px; font-weight: 600; color: var(--text-primary); white-space: nowrap; }
 .snd-meta, .snd-total { font-size: 12px; font-weight: 400; color: var(--text-secondary); white-space: nowrap; }
 .snd-make { flex: none; }
+.snd-screen .lo-head-tools .snd-total { margin-right: 8px; }   /* 16px from Make mod: the count is a note, not part of the button */
 .snd-btn-in { display: inline-flex; align-items: center; gap: 8px; line-height: 1; }   /* the KO Editor's Install: icon and words on one center line */
 .snd-btn-in svg { flex: none; display: block; }
 .snd-slots { list-style: none; margin: 0; padding: 0 0 24px; display: flex; flex-direction: column; gap: 8px; overflow-y: auto; min-height: 0;
@@ -2439,11 +2440,46 @@ html[data-motion="off"] .lp-saved { animation: none !important; opacity: 1 !impo
   background: var(--quiet-hover); border: 1px solid var(--panel-border); }
 .rd-confirm span { margin-right: auto; }
 /* Settings > Crash reports (custom/CrashReports.tsx): its folder button on the title's row, rows as Recently deleted */
-.crs-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+.crs-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }   /* the section's 12px gap is the space to the list */
 .crs-row { align-items: flex-start; padding-block: 12px; }
 .crs-row .rd-name { white-space: normal; overflow-wrap: anywhere; }
 .crs-row .rd-name b { font-weight: 600; }
 .crs-time { font-size: 12px; font-variant-numeric: tabular-nums; }
+/* A crash's Details from the game's log (CrashLog.tsx): the fold toggle under the row's lines, then small labeled parts */
+.crs-row .crl-toggle { align-self: flex-start; margin-top: 4px; }
+.crl-body { display: flex; flex-direction: column; gap: 12px; padding: 8px 0 4px 22px; }   /* under the words, past the caret */
+.crl-part { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.crl-label { margin: 0; display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 500; color: var(--text-secondary); }
+.crl-text { margin: 0; display: flex; flex-wrap: wrap; align-items: center; column-gap: 12px; row-gap: 2px; font-size: 13px; color: var(--text-primary); }
+.crl-events, .crl-errors, .crl-names { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 2px; font-size: 13px; color: var(--text-primary); }
+.crl-events { position: relative; }
+.crl-events li { display: grid; grid-template-columns: 6ch 12px 1fr; gap: 8px; align-items: center; line-height: 20px; }
+/* the timeline's rail, through the middle of the dot column */
+.crl-events::before { content: ''; position: absolute; top: 10px; bottom: 10px; left: calc(6ch + 8px + 6px - 0.5px); width: 1px; background: var(--panel-border); }
+.crl-dot { position: relative; justify-self: center; width: 8px; height: 8px; border-radius: 50%; background: oklch(0.70 0.02 260); box-shadow: 0 0 0 3px var(--bg-darker); }
+/* the mod-type dot hues (DESIGN.md tokens), color only in the dot */
+.crl-dot[data-kind="streak"] { background: oklch(0.72 0.18 340); }   /* not the VFX orange: it reads as the ban-risk orange */
+.crl-dot[data-kind="respawn"] { background: oklch(0.80 0.12 210); }
+.crl-dot[data-kind="load"] { background: oklch(0.82 0.17 140); }
+.crl-dot[data-kind="ability"] { background: oklch(0.68 0.15 290); }
+.crl-crash { font-weight: 600 !important; }
+.crl-crash .crl-secs { color: var(--text-primary); }
+.crl-crash .crl-dot { width: 10px; height: 10px; border-radius: 2px; background: var(--text-primary); }
+.crl-secs { color: var(--text-secondary); font-variant-numeric: tabular-nums; text-align: right; }
+.crl-events li > span:last-child { min-width: 0; }
+.crl-events .crl-count { display: inline-flex; height: 18px; margin-left: 8px; vertical-align: 1px; }   /* right after the words, also when they wrap */
+.crl-errors li { display: flex; align-items: flex-start; gap: 8px; min-width: 0; }
+.crl-errors code { font-family: var(--font-mono); font-size: 12px; line-height: 20px; color: var(--text-secondary); overflow-wrap: anywhere; min-width: 0; }
+.crl-count { flex: none; min-width: 20px; justify-content: center; }
+.crl-errors .crl-count { min-width: 36px; }   /* one column for the error text, counts up to three digits */
+.crl-names { color: var(--text-secondary); max-height: 240px; overflow-y: auto; }
+.crl-names .mn, .crl-warn .mn { min-width: 0; }
+.crl-warn { margin: 0; grid-template-columns: 14px 1fr; }
+.crl-warn > svg { margin-top: 3px; }
+.crl-actions { display: flex; gap: 8px; }
+.crl-more { margin: 2px 0 0; font-size: 12px; color: var(--text-secondary); }
+.crl-body :is(li, p, span):not(.crl-crash, .crl-crash *) { font-weight: 400; }   /* settings rows bold their text, these are plain lines */
+.su-trust-btn:is(.crl-toggle, .crl-names-btn) svg.lucide:first-child { color: currentColor; }   /* a caret, not Setup's green shield */
 .settings-content .setting-section > .setting-subtext.crs-note { margin-top: 4px !important; }   /* beats the -8px every section note gets */
 .cf-modal:focus { outline: none; }   /* the dialog itself takes focus when it opens; its controls show the ring */
 

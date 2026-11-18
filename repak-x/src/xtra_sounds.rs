@@ -4,9 +4,9 @@
 //! 48 kHz 16-bit WAV and saves it here per slot (app dir sounds\<slot>.wav). Make mod writes each as a Wwise PCM .wem
 //! (xtra_wem.rs), puts it in a copy of the game's bank and packs a new mod in the app's own folder, which the page
 //! hands to the install card (named, put in a loadout, and copied to ~mods there, like the KO Editor's).
-//! A sound file the game shares between two slots (First KO and Double kill play one file), or with an event no slot
-//! covers, is left as it is and the slot's Sound objects point at a new file instead (their source id, a 4-byte field
-//! of the Sound object): only what the slot names changes. A streamed sound (the announcer: a short copy in the bank,
+//! Every file is replaced in place (put_sounds says why), so a file the game shares between two slots (First KO and
+//! Double kill play one file) plays the first slot's sound in both, and one shared with an event no slot covers plays
+//! the new sound there too. A streamed sound (the announcer: a short copy in the bank,
 //! the whole file in Media\<language>) gets the new file in both places, as the KB's voice replacements do. Sound
 //! object ids are Wwise's own and survive game patches. The file ids are read from the game's bank at every build.
 //! Where an event plays several sounds at once (layers, or two Play actions: Bodyshot kill, Shield broken), the slot's
@@ -65,35 +65,23 @@ fn sound_objects(b: &[u8]) -> Result<HashMap<u32, SoundObj>, String> {
 }
 
 /// The game's bank with `slots` (each: its Sound objects and the new file) put in. Returns the bank and the streamed
-/// files to write beside it (media id, bytes). `taken` holds every media id already in use, new ones are added to it.
-fn put_sounds(game: &[u8], slots: &[(&[u32], &[u8])], taken: &mut BTreeSet<u32>) -> Result<(Vec<u8>, Vec<(u32, Vec<u8>)>), String> {
+/// files to write beside it (media id, bytes). Every file is replaced in place, also one the game shares with Sound
+/// objects no slot names (they play the new sound too): pointing a Sound object at a new file id crashed the game on
+/// that sound's first play (headshots, 2026-11-17), and in-place is what Rivals-Toolkit's sound mods do and the game
+/// plays. A file two entries replace keeps the first, so callers list real sounds before silences.
+fn put_sounds(game: &[u8], slots: &[(&[u32], &[u8])]) -> Result<(Vec<u8>, Vec<(u32, Vec<u8>)>), String> {
     let objs = sound_objects(game)?;
-    let mut users: HashMap<u32, Vec<u32>> = HashMap::new(); // media id -> the Sound objects that play it
-    for (id, o) in &objs { users.entry(o.source).or_default().push(*id) }
     let mut pick: BTreeMap<u32, Vec<u8>> = media(game)?.into_iter().map(|(id, d)| (id, d.to_vec())).collect();
     let align = alignment(&media(game)?, game);
-    let mut hirc_edits: Vec<(usize, u32)> = vec![]; // offset of a source id in the bank, its new value
-    let mut streamed = vec![];
+    let (mut replaced, mut streamed) = (BTreeSet::new(), vec![]);
     for (sounds, wem) in slots {
-        let mine: BTreeSet<u32> = sounds.iter().copied().collect();
-        let mut done: BTreeMap<u32, u32> = BTreeMap::new(); // old media -> what this slot plays instead
         for sid in *sounds {
             let o = objs.get(sid).ok_or("The game changed these sounds. repakxtra needs an update for them.")?;
             if !pick.contains_key(&o.source) { return Err("The game changed these sounds. repakxtra needs an update for them.".into()) }
-            let to = *done.entry(o.source).or_insert_with(|| {
-                if users[&o.source].iter().all(|u| mine.contains(u)) { return o.source } // only this slot plays it: in place
-                let mut n = o.source; // shared: a new id, the Sound object points at it
-                while taken.contains(&n) || n < 100_000_000 { n = n.wrapping_mul(16777619).wrapping_add(0x9e37) & 0x7fff_ffff | 1 } // as long as the game's ids
-                taken.insert(n);
-                n
-            });
-            if to != o.source { hirc_edits.push((o.body + 5, to)) }
-            pick.insert(to, wem.to_vec());
-            if o.stream != 0 && !streamed.iter().any(|(m, _): &(u32, Vec<u8>)| *m == to) { streamed.push((to, wem.to_vec())) }
+            if replaced.insert(o.source) { pick.insert(o.source, wem.to_vec()); }
+            if o.stream != 0 && !streamed.iter().any(|(m, _): &(u32, Vec<u8>)| *m == o.source) { streamed.push((o.source, pick[&o.source].clone())) }
         }
     }
-    let mut bank = game.to_vec();
-    for (at, v) in hirc_edits { bank[at..at + 4].copy_from_slice(&v.to_le_bytes()) }
     let (mut didx, mut data) = (vec![], vec![]);
     for (id, bytes) in &pick { // DIDX sorted by id: Wwise binary-searches it
         data.resize(data.len().div_ceil(align) * align, 0);
@@ -102,9 +90,9 @@ fn put_sounds(game: &[u8], slots: &[(&[u32], &[u8])], taken: &mut BTreeSet<u32>)
         didx.extend_from_slice(&(bytes.len() as u32).to_le_bytes());
         data.extend_from_slice(bytes);
     }
-    let mut out = Vec::with_capacity(bank.len() + data.len());
-    for (tag, r) in sections(&bank)? {
-        let body: &[u8] = match &tag { b"DIDX" => &didx, b"DATA" => &data, _ => &bank[r] };
+    let mut out = Vec::with_capacity(game.len() + data.len());
+    for (tag, r) in sections(game)? {
+        let body: &[u8] = match &tag { b"DIDX" => &didx, b"DATA" => &data, _ => &game[r] };
         out.extend_from_slice(&tag);
         out.extend_from_slice(&(body.len() as u32).to_le_bytes());
         out.extend_from_slice(body);
@@ -237,7 +225,12 @@ fn read_wav(b: &[u8]) -> Result<(Vec<i16>, u32, u16), String> {
 #[tauri::command]
 pub async fn sounds_make(state: State<'_, Arc<Mutex<crate::AppState>>>) -> Result<String, String> {
     let paks = paks_of(&state).ok_or("The game folder is not set.")?;
-    tauri::async_runtime::spawn_blocking(move || {
+    tauri::async_runtime::spawn_blocking(move || make(paks)).await.map_err(|e| e.to_string())?
+}
+
+/// The build behind Make mod, from the game's Paks folder.
+fn make(paks: PathBuf) -> Result<String, String> {
+    {
         // one build at a time (a page reload mid-build could start a second over the same files)
         static BUSY: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
         if BUSY.swap(true, std::sync::atomic::Ordering::SeqCst) { return Err("The sounds mod is already being made.".to_string()) }
@@ -258,13 +251,13 @@ pub async fn sounds_make(state: State<'_, Arc<Mutex<crate::AppState>>>) -> Resul
         let wems = wems.into_iter().collect::<Result<Vec<_>, _>>()?;
         let files = game_files(&paks);
         let quiet = crate::xtra_wem::silence();
+        // every real sound before any silence: a file both name keeps the real sound (put_sounds keeps the first)
         let mut by_bank: BTreeMap<&str, Vec<(&[u32], &[u8])>> = BTreeMap::new();
         for ((s, _), wem) in chosen.iter().zip(&wems) {
-            for b in &s.banks {
-                let e = by_bank.entry(b.as_str()).or_default();
-                e.push((&s.sounds, wem));
-                if !s.silence.is_empty() { e.push((&s.silence, &quiet)) }
-            }
+            for b in &s.banks { by_bank.entry(b.as_str()).or_default().push((&s.sounds, wem)) }
+        }
+        for (s, _) in chosen.iter().filter(|(s, _)| !s.silence.is_empty()) {
+            for b in &s.banks { by_bank.entry(b.as_str()).or_default().push((&s.silence, &quiet)) }
         }
         let tmp = tempfile::tempdir().map_err(|e| e.to_string())?;
         let mut entries = vec![];
@@ -274,12 +267,9 @@ pub async fn sounds_make(state: State<'_, Arc<Mutex<crate::AppState>>>) -> Resul
                 return Err("The game's sound bank was not found. Check the game folder in Setup.".into());
             };
             let game = extract(pak, entry).ok_or_else(|| format!("{key} could not be read"))?;
-            // ids in use: this bank's files and the streamed files in its language folder
             let media_dir = media_dir(key);
             let lang = media_dir != "wwiseaudio/media/";
-            let mut taken: BTreeSet<u32> = media(&game)?.iter().map(|(id, _)| *id).collect();
-            taken.extend(files.keys().filter_map(|k| k.strip_prefix(&media_dir)?.rsplit('/').next()?.strip_suffix(".wem")?.parse::<u32>().ok()));
-            let (bank, streamed) = put_sounds(&game, &slots, &mut taken).map_err(|e| format!("{key}: {e}"))?;
+            let (bank, streamed) = put_sounds(&game, &slots).map_err(|e| format!("{key}: {e}"))?;
             // the entry's own case for the folders: Marvel/Content/WwiseAudio/English(US)/bnk_vo_system.bnk
             let real_lang = entry.replace('\\', "/").rsplit('/').nth(1).filter(|_| lang).map(str::to_string);
             let bank_file = match &real_lang { Some(l) => format!("Marvel/Content/WwiseAudio/{l}/{}", key.rsplit('/').next().unwrap()), None => format!("Marvel/Content/WwiseAudio/{}", key.rsplit('/').next().unwrap()) };
@@ -299,7 +289,7 @@ pub async fn sounds_make(state: State<'_, Arc<Mutex<crate::AppState>>>) -> Resul
         uasset_toolkit::create_pak(&dest.to_string_lossy(), entries, Some("../../../"), Some(0), Some(AES_KEY_HEX))
             .map_err(|e| format!("Could not pack the sounds: {e}"))?;
         Ok(dest.to_string_lossy().to_string())
-    }).await.map_err(|e| e.to_string())?
+    }
 }
 
 #[cfg(test)]
@@ -337,23 +327,20 @@ mod tests {
     }
 
     #[test]
-    fn shared_file_splits_and_own_file_replaces_in_place() {
-        // Sounds 10 and 11 share file 100 (First KO and Double kill), Sound 12 alone plays 200
+    fn every_file_is_replaced_in_place_and_the_first_replacement_wins() {
+        // Sounds 10 and 11 share file 100 (First KO and Double kill), Sound 12 alone plays 200 (streamed)
         let game = bank(&[(10, 0, 100), (11, 0, 100), (12, 1, 200)], &[(100, b"aaaa"), (200, b"bbbb")]);
-        let mut taken = BTreeSet::from([100, 200]);
-        let (out, streamed) = put_sounds(&game, &[(&[10], b"NEW1"), (&[12], b"NEW2")], &mut taken).unwrap();
+        let silence: &[u8] = b"QUIET";
+        let (out, streamed) = put_sounds(&game, &[(&[10], b"NEW1"), (&[12], b"NEW2"), (&[11], silence)]).unwrap();
         let objs = sound_objects(&out).unwrap();
         let m: BTreeMap<u32, Vec<u8>> = media(&out).unwrap().into_iter().map(|(i, d)| (i, d.to_vec())).collect();
-        assert_eq!(objs[&11].source, 100, "the other slot keeps the game's file");
-        assert_eq!(m[&100], b"aaaa");
-        let new = objs[&10].source;
-        assert!(new != 100 && new != 200);
-        assert_eq!(m[&new], b"NEW1", "the slot's Sound points at its own new file");
-        assert_eq!(objs[&12].source, 200, "a file only this slot plays is replaced in place");
+        assert_eq!((objs[&10].source, objs[&11].source, objs[&12].source), (100, 100, 200), "no Sound object is pointed at a new file");
+        assert_eq!(m[&100], b"NEW1", "the shared file holds the first entry's sound, a later silence does not replace it");
         assert_eq!(m[&200], b"NEW2");
+        assert_eq!(m.len(), 2, "no file added");
         assert_eq!(streamed, vec![(200, b"NEW2".to_vec())], "a streamed sound also goes to Media");
-        let ids: Vec<u32> = m.keys().copied().collect();
-        assert!(ids.windows(2).all(|w| w[0] < w[1]), "DIDX stays sorted");
+        let hirc = |b: &[u8]| { let (_, r) = sections(b).unwrap().into_iter().find(|(t, _)| t == b"HIRC").unwrap(); b[r].to_vec() };
+        assert_eq!(hirc(&out), hirc(&game), "the HIRC is the game's, byte for byte");
     }
 
     /// The whole build on the game's real banks, without the app: SOUNDS_BANKS = a folder holding Marvel/Content/WwiseAudio
@@ -380,13 +367,21 @@ mod tests {
             let quiet = crate::xtra_wem::silence();
             let picks: Vec<(&[u32], &[u8])> = all.iter().zip(&wems).filter(|(s, _)| s.banks.iter().any(|b| b == key))
                 .flat_map(|(s, w)| [(&s.sounds[..], &w[..]), (&s.silence[..], &quiet[..])]).filter(|(ids, _)| !ids.is_empty()).collect();
-            let mut taken: BTreeSet<u32> = media(&game).unwrap().iter().map(|(id, _)| *id).collect();
-            let (bank, streamed) = put_sounds(&game, &picks, &mut taken).unwrap();
+            let (bank, streamed) = put_sounds(&game, &picks).unwrap();
             let dest = PathBuf::from(&out).join(rel);
             std::fs::create_dir_all(dest.parent().unwrap()).unwrap();
             std::fs::write(&dest, bank).unwrap();
             for (id, wem) in streamed { std::fs::write(dest.parent().unwrap().join(format!("stream_{id}.wem")), wem).unwrap() }
         }
+    }
+
+    /// Make mod without the app, from the slots saved on this PC (app dir sounds\):
+    /// `REPAKXTRA_PAKS=<...\Content\Paks> cargo test --bin REPAK-X make_from_saved_sounds -- --ignored --nocapture`
+    #[test]
+    #[ignore]
+    fn make_from_saved_sounds() {
+        let paks = PathBuf::from(std::env::var("REPAKXTRA_PAKS").expect("REPAKXTRA_PAKS"));
+        println!("{}", make(paks).unwrap());
     }
 
     #[test]

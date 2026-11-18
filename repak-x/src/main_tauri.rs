@@ -33,6 +33,7 @@ mod xtra_shortcut; // repakxtra: desktop shortcut
 mod xtra_trust; // repakxtra: Settings > Is it safe? (this exe's SHA-256)
 mod xtra_identity; // repakxtra: its own app identifier, beside Repak X
 mod xtra_crash; // repakxtra: crash facts for the setup report, crash suspects
+mod xtra_crash_log; // repakxtra: the game's engine log in a crash folder, decrypted for Settings > Crash reports
 mod xtra_broken; // repakxtra: mods that will not work in the installed game version
 mod xtra_layout; // repakxtra: May crash from the game classes an update changed
 mod xtra_nexus; // repakxtra: Nexus source from archive names
@@ -8772,6 +8773,8 @@ fn main() {
             xtra_vfx::xtra_scan_release, // repakxtra: the command line's memory back when the checks end
             xtra_crash::xtra_crash_suspects, // repakxtra: crash suspects
             xtra_crash::xtra_crash_tiers, // repakxtra: crash suspects by asset, skin and hero
+            xtra_crash_log::xtra_crash_log_summary, // repakxtra: Settings > Crash reports, what the game's log says
+            xtra_crash_log::xtra_crash_log_text, // repakxtra: Settings > Crash reports, Copy log and Save log
             xtra_game::xtra_game_update_check, xtra_game::xtra_game_update_seen, // repakxtra: game update notice
             xtra_role::xtra_role_claim_start, xtra_role::xtra_role_ready, // repakxtra: Claim role
             xtra_broken::xtra_broken_mods, // repakxtra: broken mods

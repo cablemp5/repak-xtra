@@ -284,6 +284,32 @@ if (import.meta.env.DEV && !('__TAURI_INTERNALS__' in window)) {
         if (failed.length) throw `Restored ${restored} file(s); failed: ${failed.join('; ')}`
         return restored
       }
+      // localStorage 'mock.crash' = '1': two crashes in Settings > Crash reports, 'worst': long names, many errors, and mods
+      // the game did not load (xtra_crash_log.rs reads the game's own log)
+      case 'xtra_recent_crashes': return localStorage.getItem('mock.crash') ? [
+        { id: 'UECC-Windows-MOCK2_0000', time: Math.floor(Date.now() / 1000) - 600, crash_type: 'Access Violation', asset_path: null },
+        { id: 'UECC-Windows-MOCK1_0000', time: Math.floor(Date.now() / 1000) - 3600, crash_type: 'Assertion failed', asset_path: '/Game/Marvel/Characters/1026/1026001/Meshes/SK_1026_1026001' },
+        { id: 'UECC-Windows-NOLOG_0000', time: Math.floor(Date.now() / 1000) - 7200, crash_type: 'Access Violation', asset_path: null },
+      ] : []
+      case 'xtra_crash_log_summary': {
+        if (args?.id === 'UECC-Windows-NOLOG_0000') return null
+        const worst = localStorage.getItem('mock.crash') === 'worst'
+        const mods = (data.mods as { path: string }[]).map(m => m.path)
+        return {
+          map: worst ? 'Klyntar Symbiotic Surface Convoy Escort Final Round Overtime' : 'Practice Range', hero_id: '1045', hero: worst ? 'Invisible Woman (Malice of the Long Name Skin)' : 'Namor',
+          events: worst
+            ? Array.from({ length: 12 }, (_, i) => ({ secs: 9.9 - i * 0.8, text: i % 3 ? 'A bot respawned' : 'Invisible Woman (Malice of the Long Name Skin) ability effect loaded for the first time', count: i % 4 ? 1 : 14 }))
+            : [{ secs: 8.8, text: 'Loaded Practice Range', count: 1 }, { secs: 6.3, text: 'Double kill', count: 1 }, { secs: 5.2, text: 'A bot respawned', count: 3 }, { secs: 1.9, text: 'Triple kill', count: 1 }],
+          errors: worst
+            ? Array.from({ length: 6 }, (_, i) => ({ text: `[get_layer] layer_tag(<FGameplayTag "UI.Panel.Root.Popup.Chat${i}">) not found, available tags=['UI.Panel.Root.Main', 'UI.Panel.Root.Popup.Low', 'UI.Panel.Root.Popup.Side', 'UI.Panel.Root.Popup.Float'`, count: 120 - i * 19 }))
+            : [{ text: 'FTeamVisual::GetEnemyParam called without CachedSubsystem, returning 0.', count: 38 }, { text: 'OverlapPlayerExit Map value error', count: 1 }],
+          mounted: worst ? Array.from({ length: 60 }, (_, i) => `Sub Folder With A Long Name/an_extremely_long_mod_file_name_that_goes_on_and_on_${i}_9999999_P`) : ['Cool Skin_9999999_P', 'Sub/Io Mod_9999999_P', 'bp-hero-cooldowns_9999999_P'],
+          iostore: worst ? 41 : 1, events_more: worst ? 9 : 0, errors_more: worst ? 3 : 0,
+          headline: worst ? { secs: 1.9, text: 'Invisible Woman (Malice of the Long Name Skin) ability effect loaded for the first time', count: 1 } : { secs: 1.9, text: 'Triple kill', count: 1 },
+          not_mounted: worst ? mods.slice(0, 5).map(p => p.replaceAll('\\', '/').toLowerCase().replace(/[.](pak|bak_repak|utoc|ucas)$/, '')) /* setupReport onKey */ : [],
+        }
+      }
+      case 'xtra_crash_log_text': return 'LogPakFile: Display: Mounted Pak file ...'
       // localStorage 'mock.crash' = '1': the newest crash the setup report names
       case 'xtra_newest_crash': return localStorage.getItem('mock.crash') === '1'
         ? { time: Math.floor(Date.now() / 1000) - 3600, crash_type: 'Access Violation', asset_path: '/Game/Marvel/Characters/1026/1026001/Meshes/SK_1026_1026001', seconds_since_start: 412,

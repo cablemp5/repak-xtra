@@ -1,7 +1,9 @@
-# Sounds tab notices
+# Third-party notices
 
 repak-x/src/xtra_wem.rs writes Wwise PCM .wem files with the header from oZanderr/Rivals-Toolkit
-(src-tauri/src/audio/wem.rs), which is dual-licensed MIT or Apache-2.0. repakxtra uses it under the MIT license:
+(src-tauri/src/audio/wem.rs), which is dual-licensed MIT or Apache-2.0. repak-x/src/xtra_crash_log.rs reads the game's
+encrypted engine log in the format worked out in the same project (crates/rivals-core/src/game_logs/container.rs and
+decode.rs). repakxtra uses both under the MIT license:
 
 ```
 MIT License
