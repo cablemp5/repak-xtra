@@ -11,7 +11,7 @@ import { createPortal } from 'react-dom'
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
 import { open as pick } from '@tauri-apps/plugin-dialog'
-import { ChevronDown, Download, FolderOpen, Lock, Play, Square, Volume2, X } from 'lucide-react'
+import { ChevronDown, Download, FolderOpen, Lock, Play, Search, Square, Volume2, X } from 'lucide-react'
 import data from '../data/sound_slots.json'
 import type { LoadoutProps } from './Loadouts'
 import { useView } from './loadoutStore'
@@ -111,6 +111,7 @@ export type SoundsProps = Pick<LoadoutProps, 'alert' | 'blocked'> & { onInstall:
 export default function SoundsScreen({ alert, blocked, onInstall }: SoundsProps) {
   const shown = useView() === 'sounds'
   const [group, setGroup] = useState(GROUPS[0].id)
+  const [query, setQuery] = useState('') // Search sounds: slots of every group whose name (or group) matches
   const [st, setSt] = useState<State>({ names: {}, can_play_original: false })
   const [reading, setReading] = useState<Record<string, { name: string; n: number }>>({}) // slot -> the newest file being read, and how many are
   const [over, setOver] = useState<string | null>(null) // the slot (or 'folder') a drag is over
@@ -276,18 +277,43 @@ export default function SoundsScreen({ alert, blocked, onInstall }: SoundsProps)
   }
   const why = blocked ? 'Close Marvel Rivals first' : batches || Object.keys(reading).length ? 'Wait for the sounds being read'
     : !count ? 'Add a sound to a slot first' : null
-  const inGroup = SLOTS.filter(s => s.group === group)
+  const words = (t: string) => ` ${t.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()} ` // spaces kept: "overtime" is not "over time"
+  const q = words(query).trim()
+  const groupOf = (s: Slot) => GROUPS.find(g => g.id === s.group)?.name ?? ''
+  const inGroup = q ? SLOTS.filter(s => words(`${groupOf(s)} ${s.name}`).includes(` ${q}`)) : SLOTS.filter(s => s.group === group)
   const groupDone = inGroup.filter(s => st.names[s.id]).length
 
   return (
-    <section className="snd" hidden={!shown} aria-label="Sounds">
+    <section className="lo-screen snd-screen" hidden={!shown} aria-label="Sounds">
+      {/* the Loadouts and Nexus Mods pages' head: the title, then the page's one action */}
+      <header className="lo-screen-head">
+        <div className="lo-head-main"><div className="lo-title-row">
+          <h2>Sounds</h2>
+          <label className="lp-search lo-search">
+            <Search size={14} aria-hidden="true" />
+            <input value={query} placeholder="Search sounds" aria-label="Search sounds in every group" onChange={e => setQuery(e.target.value)}
+              onKeyDown={e => { e.stopPropagation(); if (e.key === 'Escape') setQuery('') }} />
+            {query && <button type="button" className="lo-icon" aria-label="Clear search" title="Clear search" onClick={() => setQuery('')}><X size={13} /></button>}
+          </label>
+        </div></div>
+        <div className="lo-head-tools">
+          <span className="snd-total">{count ? `${count} of ${SLOTS.length} sounds replaced` : 'Nothing replaced yet'}</span>
+          <button type="button" className={`lo-text-btn snd-make${making ? ' is-working' : why ? ' is-locked' : ' is-primary'}`}
+            onClick={() => { if (!making && !why) void make() }} disabled={Boolean(making) || Boolean(why)} aria-busy={Boolean(making)}
+            aria-disabled={!making && Boolean(why)} title={why ?? 'Build a mod with every sound you added, then choose how to install it'}>
+            {making ? <span className="t-text-in"><span className="t-shimmer">{making}</span></span>
+              : <span className="snd-btn-in">{why ? <Lock size={16} aria-hidden /> : <Download size={16} aria-hidden />}Make mod</span>}
+          </button>
+        </div>
+      </header>
+      <div className="lo-body snd">
       <aside className="snd-side" aria-label="Sound groups">
         <div className="snd-groups" role="tablist" aria-orientation="vertical">
           {GROUPS.map(g => {
             const all = SLOTS.filter(s => s.group === g.id)
             const done = all.filter(s => st.names[s.id]).length
             return (
-              <button key={g.id} type="button" role="tab" aria-selected={g.id === group} className={`snd-group${g.id === group ? ' is-active' : ''}`} onClick={() => setGroup(g.id)}>
+              <button key={g.id} type="button" role="tab" aria-selected={g.id === group && !q} className={`snd-group${g.id === group && !q ? ' is-active' : ''}`} onClick={() => { setGroup(g.id); setQuery('') }}>
                 <span className="snd-group-name">{g.name}</span>
                 <span className={`lo-group-count${done ? ' is-some' : ''}`}><Num id={`snd-${g.id}`} value={done} />/{all.length}</span>
               </button>
@@ -303,19 +329,13 @@ export default function SoundsScreen({ alert, blocked, onInstall }: SoundsProps)
 
       <div className="snd-main">
         <div className="snd-head">
-          <h2 className="snd-title">{GROUPS.find(g => g.id === group)?.name}
-            <span className="snd-meta">{inGroup.length} slots · {groupDone ? `${groupDone} replaced` : 'none replaced'}</span>
+          <h2 className="snd-title">{q ? `Matching “${query.trim()}”` : GROUPS.find(g => g.id === group)?.name}
+            <span className="snd-meta">{inGroup.length} {inGroup.length === 1 ? 'slot' : 'slots'} · {groupDone ? `${groupDone} replaced` : 'none replaced'}</span>
           </h2>
-          <span className="snd-total">{count ? `${count} of ${SLOTS.length} sounds replaced` : 'Nothing replaced yet'}</span>
-          <button type="button" className={`lo-text-btn snd-make${making ? ' is-working' : why ? ' is-locked' : ' is-primary'}`}
-            onClick={() => { if (!making && !why) void make() }} disabled={Boolean(making) || Boolean(why)} aria-busy={Boolean(making)}
-            aria-disabled={!making && Boolean(why)} title={why ?? 'Build a mod with every sound you added, then choose how to install it'}>
-            {making ? <span className="t-text-in"><span className="t-shimmer">{making}</span></span>
-              : <span className="snd-btn-in">{why ? <Lock size={16} aria-hidden /> : <Download size={16} aria-hidden />}Make mod</span>}
-          </button>
         </div>
 
-        <ul className="snd-slots" key={group}>
+        <ul className="snd-slots" key={q ? 'search' : group}>
+          {!inGroup.length && <li className="snd-none">No sound matches “{query.trim()}”. Try a group name, like Announcer.</li>}
           {inGroup.map(s => {
             const name = st.names[s.id]
             const busy = reading[s.id]?.name
@@ -324,7 +344,7 @@ export default function SoundsScreen({ alert, blocked, onInstall }: SoundsProps)
                 onClick={e => { if (!(e.target as HTMLElement).closest('button') && !busy) void browse(s) }}>
                 <span className="snd-icon" aria-hidden><Volume2 size={16} /></span>
                 <span className="snd-text">
-                  <span className="snd-name">{s.name}</span>
+                  <span className="snd-name">{s.name}{q && <span className="snd-in"> · {groupOf(s)}</span>}</span>
                   <span className="snd-hint">{busy ? <span className="t-shimmer">Reading {busy}</span>
                     : <span>{name ?? 'Drop a .wav, .mp3, or .ogg here, or click to browse'}</span>}</span>
                 </span>
@@ -351,6 +371,7 @@ export default function SoundsScreen({ alert, blocked, onInstall }: SoundsProps)
           })}
         </ul>
         {menuFor && <PresetMenu anchor={menuFor.anchor} onPick={p => pickPreset(menuFor.slot, p)} onClose={() => setMenuFor(null)} />}
+      </div>
       </div>
     </section>
   )

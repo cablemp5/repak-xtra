@@ -1179,8 +1179,10 @@ html:not([data-view="library"]) .container > .vfx-notice { margin: 24px 0 4px; }
 /* Sounds tab (SoundsScreen.tsx): the KO Editor's frame. Groups in a sidebar like Settings' nav with count pills, the
    picked group's slots as drop rows. An empty slot has a dashed edge (a place to drop), a filled one a solid hairline
    and an accent icon. A drag over a row lights its edge in the accent (Fitts: the whole row is the target) */
-.snd { flex: 1; min-height: 0; display: grid; grid-template-columns: 250px minmax(0, 1fr); margin-top: 24px; animation: t-page-from-right var(--page-slide-dur) var(--page-slide-ease) backwards; }
-.snd[hidden] { display: none; }
+.snd-screen { display: flex; flex-direction: column; min-height: 0; animation: t-page-from-right var(--page-slide-dur) var(--page-slide-ease) backwards !important; }
+.snd-screen[hidden] { display: none !important; }
+.snd-screen .lo-screen-head .snd-make { height: 36px !important; }   /* the Loadouts head's New: one height for the head's action */
+.snd { flex: 1; min-height: 0; display: grid; grid-template-columns: 250px minmax(0, 1fr); }
 @media (max-width: 1000px) { .snd { grid-template-columns: 200px minmax(0, 1fr); } }
 .snd-side { display: flex; flex-direction: column; gap: 16px; padding: 0 16px 16px 0; border-right: 1px solid var(--panel-border); min-height: 0; }
 .snd-groups { display: flex; flex-direction: column; gap: 2px; }
@@ -1217,6 +1219,8 @@ html:not([data-view="library"]) .container > .vfx-notice { margin: 24px 0 4px; }
 .snd-slot.is-set .snd-icon { color: var(--accent-primary); }
 .snd-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
 .snd-name { font-size: 13px; font-weight: 600; color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.snd-in { font-weight: 400; color: var(--text-secondary); }
+.snd-none { padding: 24px 4px; font-size: 13px; color: var(--text-secondary); list-style: none; }
 .snd-hint { font-size: 12px; color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .snd-tools { display: flex; align-items: center; gap: 4px; flex: none; }
 .snd-tools .lo-icon { width: 28px; height: 28px !important; display: grid; place-items: center; }

@@ -89,8 +89,69 @@ function trimStart(b: AudioBuffer): AudioBuffer {
   return out
 }
 
-/** A preset as audio at 48 kHz: a recording from its first sound on, a recipe in mono with its peak set to -1 dBFS. */
-export async function renderPreset(p: Preset): Promise<AudioBuffer> {
+/** How loud it sounds: the RMS of its loudest 50 ms (all channels), so a short hit and a long tone compare fairly. */
+export function loudness(b: AudioBuffer): number {
+  const chans = Array.from({ length: b.numberOfChannels }, (_, c) => b.getChannelData(c))
+  const w = Math.min(b.length, Math.round(b.sampleRate * 0.05))
+  let best = 0
+  for (let s = 0; ; s += Math.max(1, w >> 1)) {
+    const end = Math.min(s + w, b.length)
+    let e = 0
+    for (const d of chans) for (let i = s; i < end; i++) e += d[i] * d[i]
+    best = Math.max(best, Math.sqrt(e / Math.max(1, (end - s) * chans.length)))
+    if (end >= b.length) break
+  }
+  return best
+}
+
+const CEILING = 0.89 // -1 dBFS
+const MAX_SQUASH = 0.25 // the limiter takes peaks down 12 dB at most: past that a click turns into a buzz (18 dB gained under 1 dB)
+
+/** `b` times `gain` through a peak limiter: 3 ms look-ahead, 60 ms release, never above the ceiling. Returns the copy and
+ *  the deepest gain the limiter applied (1 when it did nothing). */
+function boost(b: AudioBuffer, gain: number): { out: AudioBuffer; squash: number } {
+  const n = b.length, sr = b.sampleRate, chans = Array.from({ length: b.numberOfChannels }, (_, c) => b.getChannelData(c))
+  const need = new Float32Array(n)
+  for (let i = 0; i < n; i++) {
+    let pk = 0
+    for (const d of chans) pk = Math.max(pk, Math.abs(d[i] * gain))
+    need[i] = pk > CEILING ? CEILING / pk : 1
+  }
+  const ahead = Math.round(sr * 0.003), rel = Math.exp(-1 / (sr * 0.06))
+  const env = new Float32Array(n)
+  let g = 1, squash = 1
+  for (let i = n - 1; i >= 0; i--) { // the lowest need over the next 3 ms, so the gain is down before the peak arrives
+    let m = need[i]
+    for (let j = i + 1; j <= Math.min(n - 1, i + ahead); j++) m = Math.min(m, need[j])
+    env[i] = m
+  }
+  const out = new AudioBuffer({ numberOfChannels: chans.length, length: n, sampleRate: sr })
+  const outs = chans.map(() => new Float32Array(n))
+  for (let i = 0; i < n; i++) {
+    g = env[i] < g ? env[i] : env[i] + (g - env[i]) * rel // instant down, slow back up
+    squash = Math.min(squash, g)
+    chans.forEach((d, c) => { outs[c][i] = Math.max(-CEILING, Math.min(CEILING, d[i] * gain * g)) })
+  }
+  outs.forEach((d, c) => out.copyToChannel(d, c))
+  return { out, squash }
+}
+
+/** `b` brought up (or down) to `target` loudness, peaks held at -1 dBFS. A sound that would need its peaks taken down
+ *  more than 12 dB stops there, a little quieter than the target. */
+function match(b: AudioBuffer, target: number): AudioBuffer {
+  const now = loudness(b)
+  if (!now) return b
+  let lo = 0, hi = (target / now) * 8, best = boost(b, target / now)
+  if (best.squash >= MAX_SQUASH && Math.abs(loudness(best.out) - target) < target * 0.01) return best.out
+  for (let k = 0; k < 24; k++) { // the gain that lands on the target after limiting, within the squash allowance
+    const mid = (lo + hi) / 2, t = boost(b, mid)
+    if (t.squash < MAX_SQUASH || loudness(t.out) > target) hi = mid; else { lo = mid; best = t }
+  }
+  return best.out
+}
+
+/** A preset as it was made: a recording from its first sound on, a recipe rendered in mono. */
+async function raw(p: Preset): Promise<AudioBuffer> {
   if ('file' in p) {
     const bytes = await (await fetch(p.file)).arrayBuffer()
     const ctx = new AudioContext({ sampleRate: 48000 })
@@ -98,10 +159,15 @@ export async function renderPreset(p: Preset): Promise<AudioBuffer> {
   }
   const c = new OfflineAudioContext(1, Math.ceil(p.seconds * 48000), 48000)
   p.make(c)
-  const out = await c.startRendering()
-  const d = out.getChannelData(0)
-  let peak = 0
-  for (const v of d) peak = Math.max(peak, Math.abs(v))
-  if (peak > 0) { const k = 0.89 / peak; for (let i = 0; i < d.length; i++) d[i] *= k }
-  return out
+  return c.startRendering()
+}
+
+/** The loudest built-in sound's loudness, which every other one is brought to (read once). */
+let loudest: Promise<number> | null = null
+const target = () => loudest ??= Promise.all(PRESETS.map(async p => loudness(await raw(p)))).then(l => Math.min(Math.max(...l), CEILING))
+
+/** A preset as audio at 48 kHz, as loud as the loudest built-in sound. */
+export async function renderPreset(p: Preset): Promise<AudioBuffer> {
+  const [b, t] = await Promise.all([raw(p), target()])
+  return match(b, t)
 }
