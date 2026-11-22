@@ -7145,20 +7145,18 @@ async fn check_for_previous_crash(
         (state_guard.last_known_crash_folder.clone(), state_guard.last_known_crash_created)
     };
 
-    // repakxtra: one listing per call. A newest folder made no later than the newest one known is an older crash whose
-    // newer folder was deleted: never told again
+    // repakxtra: one listing per call, which folder is news in xtra_crash.rs crash_news. An older crash, or a fresh
+    // folder whose report is not written yet, is not read (no warning in the log every 5 s)
     let newest = crash_monitor::get_newest_crash_folder();
     let created = newest.as_ref()
         .and_then(|(_, p)| std::fs::metadata(p).and_then(|m| m.created()).ok())
         .and_then(|c| c.duration_since(std::time::UNIX_EPOCH).ok()).map(|d| d.as_millis() as u64);
-    // a time saved while the clock ran ahead is no cutoff once it is set right
     let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_millis() as u64);
-    let known_at = known_at.filter(|k| *k <= now);
-    let fresh = newest.as_ref().is_some_and(|(name, _)| last_known.as_deref() != Some(name.as_str()));
-    let older = fresh && matches!((created, known_at), (Some(c), Some(k)) if c <= k);
+    let (fresh, older, known_at) = xtra_crash::crash_news(last_known.as_deref(), known_at, newest.as_ref().map(|(n, _)| n.as_str()), created, now);
+    let unwritten = newest.as_ref().is_some_and(|(_, p)| !p.join("CrashContext.runtime-xml").exists());
 
     // Check for crashes since last known
-    let crash_info = if older { None } else { crash_monitor::check_for_previous_session_crash(last_known.as_deref(), newest.clone()) };
+    let crash_info = if older || (fresh && unwritten) { None } else { crash_monitor::check_for_previous_session_crash(last_known.as_deref(), newest.clone()) };
 
     if let Some(ref info) = crash_info {
         ui_log::error("Crash", "Marvel Rivals crashed"); // repakxtra: also a crash found while the app runs
@@ -7175,31 +7173,29 @@ async fn check_for_previous_crash(
         toast_events::emit_crash_from_info(&window, info);
     } // repakxtra: no "no crashes" line, this runs every 5 s
 
-    // repakxtra: a new newest folder becomes the last known one once told, or once it is no news: an older crash as
-    // above, or one this check has watched for 2 minutes without a report (never written, or a crash too old for the
-    // 24 hour check). Until then the next call (5 s later) checks it again, so a report written late is still told.
-    // The state file is written only when the folder changed
+    // repakxtra: what to save (xtra_crash.rs crash_save). How long this check has watched a fresh folder with no report
     static WATCHED: Mutex<Option<(String, std::time::Instant)>> = Mutex::new(None);
-    let settled = fresh && (crash_info.is_some() || older || {
+    let watched = (fresh && !older && crash_info.is_none()).then(|| {
         let mut w = WATCHED.lock().unwrap_or_else(|e| e.into_inner());
         let name = newest.as_ref().map(|(n, _)| n.clone()).unwrap_or_default();
         match &*w {
-            Some((n, since)) if *n == name => since.elapsed().as_secs() >= 120,
-            _ => { *w = Some((name, std::time::Instant::now())); false }
+            Some((n, since)) if *n == name => Some(since.elapsed().as_secs()),
+            _ => { *w = Some((name, std::time::Instant::now())); None }
         }
-    });
-    if let (true, Some((name, _))) = (settled, newest) {
-        let mut state_guard = state.lock().unwrap();
-        state_guard.last_known_crash_folder = Some(name);
-        if !older {
-            state_guard.last_known_crash_created = created;
+    }).flatten();
+    match (xtra_crash::crash_save(fresh, older, crash_info.is_some(), watched, known_at, created), newest) {
+        (xtra_crash::CrashSave::Known(time), Some((name, _))) => {
+            let mut state_guard = state.lock().unwrap();
+            state_guard.last_known_crash_folder = Some(name);
+            state_guard.last_known_crash_created = time;
+            let _ = save_state(&state_guard);
         }
-        let _ = save_state(&state_guard);
-    } else if !fresh && known_at.is_none() && created.is_some() {
-        // a state saved before the time was kept: the known folder's time, once
-        let mut state_guard = state.lock().unwrap();
-        state_guard.last_known_crash_created = created;
-        let _ = save_state(&state_guard);
+        (xtra_crash::CrashSave::Time(time), _) => {
+            let mut state_guard = state.lock().unwrap();
+            state_guard.last_known_crash_created = Some(time);
+            let _ = save_state(&state_guard);
+        }
+        _ => {}
     }
 
     Ok(crash_info)
