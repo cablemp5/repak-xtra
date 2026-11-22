@@ -163,7 +163,7 @@ fn announce(app: &tauri::AppHandle) {
 }
 
 /// Takes the run lock for `token` (one per run), or renews its name. False when another run holds it.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn xtra_vfx_claim(window: Window, token: String, name: Option<String>) -> bool {
     let fresh = {
         let mut run = RUN.lock().unwrap();
@@ -193,6 +193,12 @@ pub fn xtra_vfx_claim(window: Window, token: String, name: Option<String>) -> bo
                 }
             }
         });
+        if !crate::xtra_previews::interrupt_texture_check() {
+            xtra_vfx_release(window, token);
+            return false;
+        }
+        // Closing the owner window can release the token while the texture check finishes.
+        if !RUN.lock().unwrap().as_ref().is_some_and(|l| l.token == token) { return false; }
     }
     announce(window.app_handle());
     true
@@ -369,7 +375,7 @@ pub(crate) fn vanilla_dir(game_paks: &str, usmap: &str) -> PathBuf {
 fn sweep_caches(base: &Path, vanilla: &Path) {
     for e in std::fs::read_dir(base).into_iter().flatten().flatten() {
         let p = e.path();
-        if p != vanilla && p.is_dir() && !e.file_name().to_string_lossy().starts_with("run-") {
+        if p != vanilla && p.is_dir() && e.file_name().to_string_lossy().starts_with("vanilla-") {
             let _ = std::fs::remove_dir_all(&p);
         }
     }
@@ -434,7 +440,13 @@ pub async fn xtra_tool_warm(state: tauri::State<'_, std::sync::Arc<std::sync::Mu
 /// A finished run's folder (its update is placed or dropped by now).
 fn run_done(run_id: &str) {
     if valid_run_id(run_id) {
-        let _ = std::fs::remove_dir_all(base_dir().join(format!("run-{run_id}")));
+        let run = base_dir().join(format!("run-{run_id}"));
+        let retired = run.with_file_name(format!("{RETIRED}run-{run_id}"));
+        if std::fs::rename(&run, &retired).is_ok() {
+            std::thread::spawn(move || { let _ = std::fs::remove_dir_all(retired); });
+        } else {
+            let _ = std::fs::remove_dir_all(run);
+        }
     }
 }
 

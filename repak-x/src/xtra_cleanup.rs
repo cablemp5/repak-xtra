@@ -20,7 +20,7 @@ const SECTIONS: &[(&str, &[&str])] = &[
     ("snapshots", &["snapshots"]),
     ("plugins", &["removed-plugins"]),
     ("caches", &[
-        "repakxtra-game-assets.bin", "repakxtra-game-assets.prev.bin", "repakxtra-details-cache.json", "repakxtra-mod-classes.json",
+        "repakxtra-game-assets.bin", "repakxtra-game-assets.prev.bin", "repakxtra-details-cache.json", "repakxtra-mod-classes.json", "mod-class-listings",
         "builtin-cache", // the logs here are Repak X's too (same names, same folder): never listed
     ]),
 ];

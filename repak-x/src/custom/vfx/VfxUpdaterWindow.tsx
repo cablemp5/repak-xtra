@@ -8,6 +8,7 @@ import { APP_NAME } from '../edition'
 // missing. Cancel waits for the step in flight (UAssetTool cannot be interrupted) and says so. The main window hands mods
 // over (handoff.ts: they are ticked, and updated at once from the Library's notice).
 import { useCallback, useEffect, useId, useRef, useState } from 'react'
+import { flushSync } from 'react-dom'
 import { invoke } from '@tauri-apps/api/core'
 import { emit, emitTo, listen } from '@tauri-apps/api/event'
 import { AlertTriangle, Archive, Check, LockOpen, ChevronDown, ChevronRight, Copy, ExternalLink, Eye, Info, FilePlus, Map as MapIcon, Palette, RefreshCw, RotateCcw, ScrollText, Search, Tag, X } from 'lucide-react'
@@ -425,6 +426,7 @@ export function VfxUpdaterPanel() {
   const handed = useRef<{ paths: string[]; start: boolean } | null>(null) // mods the main window sent, ticked once the list is in
   const autoRun = useRef<string[] | null>(null) // exactly the mods the Library's notice sent, updated as soon as possible
   const groupOf = useRef(new Map<string, string>()) // each shown mod's group, so a run can unfold where it works
+  const progress = useRef<((message: string, final?: boolean) => void) | null>(null)
   const runsRef = useRef(runs)
   const orderRef = useRef<string[]>([]) // the list's order, top to bottom, for the order a batch runs in
   const modStart = useRef(0) // when the mod updating now started
@@ -583,11 +585,10 @@ export function VfxUpdaterPanel() {
 
   // Rust steps report inside the step (types read so far)
   useEffect(() => {
-    const un = listen<{ message: string }>('vfx_progress', e => {
-      const key = Object.keys(runsRef.current).find(k => runsRef.current[k].status === 'running')
+    const un = listen<{ message: string; current?: number; total?: number }>('vfx_progress', e => {
       // a command's closing "done" line (uasset_tool.rs, just before it returns) can land after the next step started,
       // where it would stand in for that step's name: those are skipped
-      if (key && e.payload?.message && !/^(Extracted|Converted) \d|created successfully$/.test(e.payload.message)) patch(key, { sub: e.payload.message })
+      if (e.payload?.message && !/^(Extracted|Converted) \d|created successfully$/.test(e.payload.message)) progress.current?.(e.payload.message, Boolean(e.payload.total) && e.payload.current === e.payload.total)
     })
     return () => { un.then(f => f()) }
   }, [])
@@ -698,9 +699,9 @@ export function VfxUpdaterPanel() {
       if (r.placed) moveTo(fixedFile!)
     }
     for (const key of todo) {
-      if (cancel.current) { patch(key, { status: 'cancelled' }); stopped.push(key); retry.push(key); continue }
       const mod = byKey.get(key)!
-      void claimRun(token, mod.name) // the lock says which mod, for the other window's message
+      if (!cancel.current) await claimRun(token, mod.name) // the lock says which mod, for the other window's message
+      if (cancel.current) { patch(key, { status: 'cancelled' }); stopped.push(key); retry.push(key); continue }
       if (mod.risky && !safeOff) {
         // Safety: Leave it on. Nothing here rebuilds it, so it stays exactly as it was, flag and all
         patch(key, { status: 'nothing', report: { mod: mod.utoc, name: mod.name, status: 'nothing', error: `May crash: ${mod.risky} Left on, as Safety says.`,
@@ -721,6 +722,24 @@ export function VfxUpdaterPanel() {
       patch(key, { status: 'running', step: 1 })
       modStart.current = performance.now()
       addLog(`Updating ${mod.name}`)
+      let lastProgress = -Infinity
+      let pending: string | undefined
+      let timer: ReturnType<typeof setTimeout> | undefined
+      const flushProgress = () => {
+        clearTimeout(timer)
+        timer = undefined
+        if (pending === undefined) return
+        patch(key, { sub: pending })
+        pending = undefined
+        lastProgress = performance.now()
+      }
+      progress.current = (message, final) => {
+        pending = message
+        const wait = 100 - (performance.now() - lastProgress)
+        if (final) flushSync(flushProgress)
+        else if (wait <= 0) flushProgress()
+        else timer ??= setTimeout(flushProgress, wait)
+      }
       const r = await fixVfxMod({
         // Retry in Best effort: that mod alone, this once
         policy: policy ?? repairPolicy,
@@ -729,9 +748,11 @@ export function VfxUpdaterPanel() {
         safeOff: safeOff && needs.has(norm(mod.path)), // a flagged mod a run proves crashes the game: a failed run leaves every mod as it was
         keepEncrypted, decryptOnly: needs.get(norm(mod.path))?.startsWith(ENCRYPTED),
         log: addLog, cancelled: () => cancel.current,
-        onStep: s => patch(key, { step: s.step, sub: undefined }),
-        onProgress: (_, __, message) => patch(key, { sub: message }),
+        onStep: s => { flushProgress(); patch(key, { step: s.step, sub: undefined }) },
+        onProgress: (current, total, message) => progress.current?.(message, current === total),
       })
+      flushProgress()
+      progress.current = null
       await finish(key, r)
     }
     if (fixed || turnedOff) await emit('mods_dir_changed').catch(() => {})
