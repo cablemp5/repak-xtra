@@ -93,8 +93,9 @@ export default function ModStateFilter({ value, onChange, mods, encrypted, searc
     ['all', 'All', mods.length],
     ['enabled', 'On', enabled],
     ['disabled', 'Off', mods.length - enabled],
-    ...(broken ? [['broken', 'Problems', broken] as [ModState, string, number]] : []),
-    ...(locked ? [['encrypted', 'Encrypted', locked] as [ModState, string, number]] : []),
+    // the chosen one stays while a search is typed, at 0 if none match: the list is still narrowed to it
+    ...(broken || (searching && value === 'broken') ? [['broken', 'Problems', broken] as [ModState, string, number]] : []),
+    ...(locked || (searching && value === 'encrypted') ? [['encrypted', 'Encrypted', locked] as [ModState, string, number]] : []),
   ]
   const tabs = useRef<HTMLDivElement>(null)
   const folded = useFolded(tabs)

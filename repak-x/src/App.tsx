@@ -2998,7 +2998,7 @@ function App() {
   // from every filter but the search, read only when nothing matches. Never the built-in rows: they keep their own
   // switch, out of reach of the arrow keys and Delete
   const closeMods = useMemo(() => (!searchQuery.trim() || exactSearch || libraryMods.length ? []
-    : closeMatches(mods.filter(m => keepMod(m, false) && inFolder(m) && matchesState(modState, isEncrypted)(m)), m => [libraryName(m)], searchQuery)),
+    : ((inState: (m: ModRecord) => boolean) => closeMatches(mods.filter(m => keepMod(m, false) && inFolder(m) && inState(m)), m => [libraryName(m)], searchQuery))(matchesState(modState, isEncrypted))),
   [searchQuery, exactSearch, libraryMods.length, mods, keepMod, inFolder, modState, isEncrypted, brokenVersion])
   const shownMods = closeMods.length ? closeMods : libraryMods
   const navMods = closeMods.length ? closeMods : filteredMods // the arrow keys walk the rows shown (close matches too)

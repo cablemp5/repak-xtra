@@ -14,7 +14,7 @@ const exactText = (s: string) => s.toLowerCase().replace(/[\s_]+/g, ' ').trim() 
  *  only case and extra spaces. A blank query matches everything, one of punctuation alone is matched as typed. Pure. */
 export function directMatch(name: string, query: string, exact = false): boolean {
   if (!query.trim()) return true
-  if (exact) return exactText(name).includes(exactText(query))
+  if (exact) { const e = exactText(query); return e ? exactText(name).includes(e) : name.toLowerCase().includes(query.trim().toLowerCase()) } // only _ typed: matched as typed
   const q = normText(query)
   if (!q) return name.toLowerCase().includes(query.trim().toLowerCase())
   const h = normText(name)
@@ -83,6 +83,7 @@ if (import.meta.env.DEV) {
   console.assert(!directMatch('Spider Man', 'spider-man', true) && directMatch('Spider-Man', 'SPIDER-man', true), 'exact: only case and spaces are ignored')
   console.assert(directMatch('Black_Panther_Purple_VFX_9999999_P', 'purple vfx', true), "exact: each _ in a file name is a space")
   console.assert(directMatch('A - B', '-') && !directMatch('AB', '-'), 'a query of punctuation alone matches as typed')
+  console.assert(!directMatch('Hulk Hat', '_', true) && directMatch('A_B', '_', true), 'exact: an _ alone matches as typed')
   console.assert(directMatch(bp, '   ') && closeMatch(bp, ' ') === null, 'a blank query matches everything and guesses nothing')
   console.assert(closeMatches([spidey, bp, 'Purple Pnather Mod'], n => [n], 'purpel panther').join() === bp, 'only close matches, ranked')
 }
