@@ -508,7 +508,7 @@ async function rebuild(o: FixOptions): Promise<VfxReport> {
         }
         report.output = report.placed.fixed
         // what it was made for, so a copy or repack later never looks older than this game (xtra_stamp.rs)
-        await invoke('xtra_vfx_stamp', { modPath: report.placed.fixed, gamePaks: o.gamePaksPath, usmapPath: o.usmapPath }).catch(e => log(`Could not stamp the update: ${e}`, 'warning'))
+        await invoke('xtra_vfx_stamp', { modPath: report.placed.fixed, gamePaks: o.gamePaksPath, usmapPath: o.usmapPath, gameUpdated: buildAt || null }).catch(e => log(`Could not stamp the update: ${e}`, 'warning'))
         if (report.placed.warning) warn(report.placed.warning)
       }
       report.status = 'fixed'
@@ -734,12 +734,12 @@ async function rebuild(o: FixOptions): Promise<VfxReport> {
     // to update it again
     const sameBuild = !buildAt || await invoke<{ updated: number }>('xtra_game_build').then(b => b.updated === buildAt, () => false)
     if (!sameBuild && (report.status === 'failed' || report.status === 'mappings' || report.status === 'nothing')) {
-      report.status = 'failed'; report.error = 'Not updated: the game updated while this ran, so what it found was for the old game files. Update it again.'
+      report.status = 'failed'; report.strictOnly = false; report.error = 'Not updated: the game updated while this ran, so what it found was for the old game files. Update it again.'
     }
     // here, where the early returns pass too: Needs VFX update stops flagging it until the mod or the game changes (xtra_broken.rs)
     // not when its materials were rewritten: the original stays installed in the old layout and still needs turning off
     if (sameBuild && report.status === 'nothing' && !report.counts.relaid) await invoke('xtra_vfx_no_update', { modPath: o.modPath, animsTold: layoutsTold }).catch(e => log(`Could not note that it needs nothing: ${e}`, 'warning'))
-    for (const modPath of repairedPaths(report)) {
+    for (const modPath of sameBuild ? repairedPaths(report) : []) { // installed during a patch: it stays flagged for the new build
       // the original: kept off by xtra_safe_off.rs first (Turn on anyway still works), so a later switch-on warns
       if (modPath !== report.placed!.fixed && !await invoke('xtra_vfx_turn_off', { modPath, reason: 'Its update replaced it. It was made for an older game build and can crash the game.' }).then(() => true, () => false)) continue
       await invoke('xtra_vfx_no_update', { modPath }).catch(e => {

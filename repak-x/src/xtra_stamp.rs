@@ -68,11 +68,12 @@ pub(crate) fn made(mod_path: &Path, written: u64) -> u64 {
 
 /// pipeline.ts, once an update is placed: stamps it with the game and the USMAP it was made with.
 #[tauri::command(async)]
-pub fn xtra_vfx_stamp(mod_path: String, game_paks: String, usmap_path: String) -> Result<(), String> {
+/// `game_updated`: the game build the update was made from (pipeline.ts reads it first), else the one installed now.
+pub fn xtra_vfx_stamp(mod_path: String, game_paks: String, usmap_path: String, game_updated: Option<u64>) -> Result<(), String> {
     let paks = Path::new(&game_paks);
     let s = Stamp {
         game_build: crate::xtra_vfx::game_cl(paks).unwrap_or(0),
-        game_updated: crate::xtra_broken::game_containers(paks).iter().map(|c| c.2).max().unwrap_or(0),
+        game_updated: game_updated.unwrap_or_else(|| crate::xtra_broken::game_containers(paks).iter().map(|c| c.2).max().unwrap_or(0)),
         usmap_build: crate::xtra_niagara::usmap_build(&usmap_path).unwrap_or(0),
     };
     put(&store(), Path::new(&mod_path), s)
