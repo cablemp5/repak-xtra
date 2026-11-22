@@ -254,14 +254,16 @@ export const returnTo = serial(async (d: KeepDeps, from: Bisect | null, to: Bise
 /** When the last test ended (ms). The game poll can find a test's own crash only after the answer put every mod back. */
 let ended = 0
 type Listed = { id?: string; time: number }
-/** Is this crash (its folder) one a test asked about: while a test runs, or made before the last one ended? App keeps
- *  its toast quiet then, the test already asked whether it crashed. */
+/** Is this crash (its folder) one a test asked about: while a test runs, or made before the last one ended (told late,
+ *  say after the app was minimized)? App keeps its toast quiet then, the test already asked whether it crashed. */
 export async function crashOfTest(folder?: string | null) {
   if (readBisect()) return true
-  if (Date.now() - ended > 120_000) return false
+  const end = ended   // read before the wait: a test ending meanwhile says nothing about this crash
+  if (!end) return false
   const id = folder?.split(/[\\/]/).pop()
   const c = (await invoke<Listed[]>('xtra_recent_crashes').catch(() => [] as Listed[])).find(x => x.id === id)
-  return !c || c.time * 1000 <= ended   // shortcut: a crash that cannot be looked up stays quiet, as during the test
+  // shortcut: a crash that cannot be looked up stays quiet only in the 2 minutes after a test, when it is most likely its own
+  return c ? c.time * 1000 <= end : Date.now() - end < 120_000
 }
 
 /** Every start mod on again (mods off at the start were never touched). The run stays saved until this works. */

@@ -209,7 +209,7 @@ struct AppState {
     /// Last known crash folder name for detecting crashes from previous sessions
     #[serde(default)]
     last_known_crash_folder: Option<String>,
-    /// repakxtra: when the newest crash folder known was made (Unix seconds): an older one is never news
+    /// repakxtra: when the newest crash folder known was made (Unix milliseconds): an older one is never news
     #[serde(default)]
     last_known_crash_created: Option<u64>,
     /// Cache for mod details to avoid redundant PAK opens (path -> (fingerprint, details))
@@ -7150,7 +7150,10 @@ async fn check_for_previous_crash(
     let newest = crash_monitor::get_newest_crash_folder();
     let created = newest.as_ref()
         .and_then(|(_, p)| std::fs::metadata(p).and_then(|m| m.created()).ok())
-        .and_then(|c| c.duration_since(std::time::UNIX_EPOCH).ok()).map(|d| d.as_secs());
+        .and_then(|c| c.duration_since(std::time::UNIX_EPOCH).ok()).map(|d| d.as_millis() as u64);
+    // a time saved while the clock ran ahead is no cutoff once it is set right
+    let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_millis() as u64);
+    let known_at = known_at.filter(|k| *k <= now);
     let fresh = newest.as_ref().is_some_and(|(name, _)| last_known.as_deref() != Some(name.as_str()));
     let older = fresh && matches!((created, known_at), (Some(c), Some(k)) if c <= k);
 
