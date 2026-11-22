@@ -5,18 +5,25 @@
 // match as typed. Short words never guess.
 
 /** Lowercase, no accents, punctuation as spaces, one space between words. Pure. */
-export const normText = (s: string) => s.normalize('NFKD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim()
+export const normText = (s: string) => s.normalize('NFKD').replace(/\p{M}/gu, '').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim()
 
-/** Whether `name` matches `query` as typed: every word (in any order), or with `exact` the phrase in order. A blank
- *  query matches everything. Pure. */
+/** Exact match's own spelling: case and spaces only, the phrase's punctuation counts. Pure. */
+const exactText = (s: string) => s.toLowerCase().replace(/\s+/g, ' ').trim()
+
+/** Whether `name` matches `query` as typed: every word (in any order), or with `exact` the phrase in order, ignoring
+ *  only case and extra spaces. A blank query matches everything, one of punctuation alone is matched as typed. Pure. */
 export function directMatch(name: string, query: string, exact = false): boolean {
+  if (!query.trim()) return true
+  if (exact) return exactText(name).includes(exactText(query))
   const q = normText(query)
-  if (!q) return true
+  if (!q) return name.toLowerCase().includes(query.trim().toLowerCase())
   const h = normText(name)
-  if (exact) return h.includes(q)
-  const compact = h.replace(/ /g, '')
-  return q.split(' ').every(t => h.includes(t) || compact.includes(t))
+  return q.split(' ').every(t => h.includes(t) || joinedFrom(h.split(' '), t))
 }
+
+/** Whether `t` reads as words written together from the start of one of `words` ("blackpanther" in "black panther"),
+ *  never a run across a word's middle ("thor" is not in "midnight horror"). Pure. */
+const joinedFrom = (words: string[], t: string) => words.some((_, i) => words.slice(i).join('').startsWith(t))
 
 /** Edit distance with an adjacent swap counting as one (optimal string alignment), stopping past `max`. Pure. */
 function distance(a: string, b: string, max = 1): number {
@@ -41,31 +48,35 @@ const MIN_FUZZY = 5
 export function closeMatch(name: string, query: string): number | null {
   const q = normText(query)
   if (!q) return null
-  const h = normText(name), compact = h.replace(/ /g, ''), words = h.split(' ')
+  const h = normText(name), words = h.split(' ')
   let fixes = 0
   for (const t of q.split(' ')) {
-    if (h.includes(t) || compact.includes(t)) continue
+    if (h.includes(t) || joinedFrom(words, t)) continue
     if (t.length < MIN_FUZZY || !words.some(w => distance(t, w) <= 1)) return null
     if (++fixes > 1) return null // one guess at most: the other words must match as typed
   }
   return fixes || null
 }
 
-/** Close matches among `items`, fewest fixes first, then by name, at most `limit`. Pure. */
+/** Close matches among `items`, at most `limit`: the ones whose first name matched (a loadout's own) before the ones
+ *  matched by a later one (a mod inside it), then by name. Pure. */
 export function closeMatches<T>(items: T[], names: (item: T) => string[], query: string, limit = 20): T[] {
-  const scored = items.map(item => ({ item, name: names(item)[0] ?? '', fixes: Math.min(...names(item).map(n => closeMatch(n, query) ?? Infinity)) }))
-  return scored.filter(s => s.fixes !== Infinity).sort((a, b) => a.fixes - b.fixes || a.name.localeCompare(b.name)).slice(0, limit).map(s => s.item)
+  const scored = items.map(item => { const all = names(item); return { item, name: all[0] ?? '', at: all.findIndex(n => closeMatch(n, query) !== null) } })
+  return scored.filter(s => s.at >= 0).sort((a, b) => Math.min(a.at, 1) - Math.min(b.at, 1) || a.name.localeCompare(b.name)).slice(0, limit).map(s => s.item)
 }
 
 if (import.meta.env.DEV) {
   const bp = 'Black Panther \u2014 Purple VFX', spidey = 'Purple Spider-Man'
   console.assert(directMatch(bp, 'purple panther') && !directMatch(spidey, 'purple panther'), 'every word, any order')
   console.assert(directMatch(bp, 'blackpanther purple'), 'words typed together find the name written apart')
+  console.assert(!directMatch('Midnight Horror', 'thor'), 'never a run across the middle of two words')
   console.assert(!directMatch(bp, 'purpel panther') && closeMatch(bp, 'purpel panther') === 1, 'a swapped pair is one fix, only as a close match')
   console.assert(closeMatch(spidey, 'purpel panther') === null, 'every other word must still match')
   console.assert(closeMatch('Hulk VFX', 'vxf') === null && closeMatch('Thor', 'thro') === null, 'short words never guess')
   console.assert(directMatch(bp, 'purple  vfx', true) && !directMatch('VFX Purple', 'purple vfx', true), 'exact: the phrase in order, extra spaces ignored')
   console.assert(directMatch('Café Mods', 'cafe') && directMatch('Spider-Man', 'spider man'), 'accents and punctuation ignored')
+  console.assert(!directMatch('Spider Man', 'spider-man', true) && directMatch('Spider-Man', 'SPIDER-man', true), 'exact: only case and spaces are ignored')
+  console.assert(directMatch('A - B', '-') && !directMatch('AB', '-'), 'a query of punctuation alone matches as typed')
   console.assert(directMatch(bp, '   ') && closeMatch(bp, ' ') === null, 'a blank query matches everything and guesses nothing')
   console.assert(closeMatches([spidey, bp, 'Purple Pnather Mod'], n => [n], 'purpel panther').join() === bp, 'only close matches, ranked')
 }

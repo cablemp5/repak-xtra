@@ -2995,14 +2995,19 @@ function App() {
   [filteredMods, builtinRows, selectedCharacters, selectedCategories, filterTag, selectedFolderId, searchQuery, exactSearch, modState, isEncrypted, brokenVersion])
   // repakxtra: nothing matches the search as typed, with every other filter on: the close matches (a word one letter off),
   // labeled as such, never below real matches. Exact match never guesses
+  // every filter but the search: what close matches pick from, and what On / Off / Problems count while nothing matches
+  // as typed (so a typo never resets Problems or Encrypted to All)
+  const unsearched = useMemo(() => (searchQuery.trim() ? mods.filter(m => keepMod(m, false) && inFolder(m)) : folderMods), [searchQuery, mods, keepMod, inFolder, folderMods])
   const closeMods = useMemo(() => (!searchQuery.trim() || exactSearch || libraryMods.length ? []
-    : closeMatches(mods.filter(m => keepMod(m, false) && inFolder(m) && matchesState(modState, isEncrypted)(m)), m => [libraryName(m)], searchQuery)),
-  [searchQuery, exactSearch, libraryMods.length, mods, keepMod, inFolder, modState, isEncrypted])
+    : closeMatches([...(selectedCharacters.size || selectedCategories.size || filterTag || selectedFolderId !== 'all' ? [] : builtinRows as ModRecord[]), ...unsearched]
+      .filter(matchesState(modState, isEncrypted)), m => [libraryName(m)], searchQuery)),
+  [searchQuery, exactSearch, libraryMods.length, unsearched, builtinRows, selectedCharacters, selectedCategories, filterTag, selectedFolderId, modState, isEncrypted, brokenVersion])
   const shownMods = closeMods.length ? closeMods : libraryMods
+  const navMods = closeMods.length ? closeMods : filteredMods // the arrow keys walk the rows shown (close matches too)
 
   // Keep filteredModsRef in sync for Shift+click range selection (repakxtra: the rows shown, built-ins too)
   filteredModsRef.current = shownMods
-  useLibraryFocus(filteredMods, viewMode, selectedMod?.path ?? null, setSelectedMod) // repakxtra: focus survives filters, sorts, deletes and view switches
+  useLibraryFocus(navMods, viewMode, selectedMod?.path ?? null, setSelectedMod) // repakxtra: focus survives filters, sorts, deletes and view switches
   useEffect(() => { // repakxtra: checked and viewed mods follow their files after a change made elsewhere (Home), removed ones drop
     const paths = [...mods.map(m => m.path), ...builtinList.map(b => b.path)] // repakxtra: and the built-in rows
     setSelectedMods(prev => { const now = relink(prev, paths); return now ? new Set(now) : prev })
@@ -3097,11 +3102,11 @@ function App() {
       }
       // Arrow navigation
       else if (['arrowup', 'arrowdown', 'arrowleft', 'arrowright'].includes(key)) {
-        if (filteredMods.length === 0) return
+        if (navMods.length === 0) return
         e.preventDefault()
 
         const currentIndex = selectedMod
-          ? filteredMods.findIndex(m => m.path === selectedMod.path)
+          ? navMods.findIndex(m => m.path === selectedMod.path)
           : -1
 
         let newIndex = currentIndex
@@ -3109,7 +3114,7 @@ function App() {
         if (viewMode === 'list' || viewMode === 'list-compact') {
           // List view: only up/down
           if (key === 'arrowup') newIndex = Math.max(0, currentIndex - 1)
-          else if (key === 'arrowdown') newIndex = Math.min(filteredMods.length - 1, currentIndex + 1)
+          else if (key === 'arrowdown') newIndex = Math.min(navMods.length - 1, currentIndex + 1)
         } else {
           // Grid/Card view: all 4 directions
           // Calculate actual items per row by measuring the grid layout
@@ -3129,13 +3134,13 @@ function App() {
             }
           }
           if (key === 'arrowup') newIndex = Math.max(0, currentIndex - itemsPerRow)
-          else if (key === 'arrowdown') newIndex = Math.min(filteredMods.length - 1, currentIndex + itemsPerRow)
+          else if (key === 'arrowdown') newIndex = Math.min(navMods.length - 1, currentIndex + itemsPerRow)
           else if (key === 'arrowleft') newIndex = Math.max(0, currentIndex - 1)
-          else if (key === 'arrowright') newIndex = Math.min(filteredMods.length - 1, currentIndex + 1)
+          else if (key === 'arrowright') newIndex = Math.min(navMods.length - 1, currentIndex + 1)
         }
 
         // repakxtra: focus moves with the viewed mod, so Enter and Space act on the row on show (custom/libraryFocus.ts)
-        const next = filteredMods[newIndex] ?? filteredMods[0]
+        const next = navMods[newIndex] ?? navMods[0]
         if (next.path !== selectedMod?.path) { cue('select'); setSelectedMod(next) } // repakxtra
         focusRow(next.path)
       }
@@ -3160,7 +3165,7 @@ function App() {
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [
     selectedMod, selectedMods, panels, viewMode,
-    filteredMods, isRightPanelOpen, lastPanelWidth
+    navMods, isRightPanelOpen, lastPanelWidth
   ])
 
   // Keep the selected mod on screen. `block: 'nearest'` makes this a no-op when
@@ -3190,7 +3195,7 @@ function App() {
 
     lastRevealedModRef.current = revealKey
     card.scrollIntoView({ block: 'nearest', inline: 'nearest' })
-  }, [selectedMod, filteredMods])
+  }, [selectedMod, navMods])
 
   // The list reflows when the details panel settles, which can push the
   // selected card out of view
@@ -4111,7 +4116,7 @@ function App() {
                     <button type="button" className="btn-ghost lib-show-all" onClick={showAll}
                       title="Every mod again: all folders, no hero, type, or tag filter, no search. Checked mods stay checked">Show all</button>
                   )}
-                  <ModStateFilter value={modState} onChange={setModState} mods={folderMods} encrypted={isEncrypted} />
+                  <ModStateFilter value={modState} onChange={setModState} mods={folderMods.length || !searchQuery.trim() ? folderMods : unsearched} encrypted={isEncrypted} />
                 </div>
                 <div className="header-actions" data-tour="header-actions">
                   {/* repakxtra: no Asset Explorer button and no dividers here: it opens from Tools, a mod's menu, and its details */}
@@ -4172,7 +4177,7 @@ function App() {
                 <div className="selection-info">
                   <span className="bulk-count">Selected<span className="mod-state-count bulk-count-value"><Num id="bulk-count" value={selectedMods.size.toLocaleString()} /></span></span>{/* repakxtra: the filter tabs' count chip */}
                   <button onClick={() => {
-                    const allPaths = libraryMods.map(m => m.path) // repakxtra: the built-in rows shown too
+                    const allPaths = shownMods.map(m => m.path) // repakxtra: the rows shown, built-ins and close matches too
                     setSelectedMods(new Set(allPaths))
                   }} className="btn-ghost" title="Select all mods in view">
                     <span className="bulk-label-full">Select All</span>

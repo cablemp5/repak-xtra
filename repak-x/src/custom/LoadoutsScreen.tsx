@@ -230,10 +230,10 @@ function LoadoutsHome(p: LoadoutProps) {
   const customNames = useMemo(() => new Map(p.mods.map(m => [modKey(m.path), (m as { custom_name?: string | null }).custom_name || ''])), [p.mods])
   const modNames = (l: Loadout) => (inside ? l.on.map(k => customNames.get(displayName(k)) || memberName(k)) : [])
   const passesShow = (l: Loadout) => show === 'all' || isOn(l) === (show === 'enabled')
-  const direct = useMemo(() => loadouts.filter(l => (!q || matchesLoadout(l, q, { exact, modNames: modNames(l) })) && passesShow(l)),
+  const direct = useMemo(() => loadouts.filter(l => (!q || matchesLoadout(l, q, { exact, modNames: modNames(l), inside })) && passesShow(l)),
     [loadouts, q, show, enabledKeys, exact, inside, p.mods]) // eslint-disable-line react-hooks/exhaustive-deps
   // nothing matches as typed: close matches (a word one letter off), never below real ones, never with Exact match
-  const close = useMemo(() => (!q || exact || direct.length ? [] : closeMatches(loadouts.filter(passesShow), l => loadoutNames(l, modNames(l)), q)),
+  const close = useMemo(() => (!q || exact || direct.length ? [] : closeMatches(loadouts.filter(passesShow), l => loadoutNames(l, modNames(l), inside), q)),
     [q, exact, direct.length, loadouts, show, enabledKeys, inside, p.mods]) // eslint-disable-line react-hooks/exhaustive-deps
   const matching = close.length ? close : direct
   const [said, setSaid] = useState('') // the result count for screen readers, once typing pauses
@@ -655,7 +655,7 @@ function LoadoutsHome(p: LoadoutProps) {
           </div>
         )}
 
-        {close.length > 0 && <p className="lib-close-label lo-close-label" role="status">Close matches for “{q}”</p>}
+        {close.length > 0 && <p className="lib-close-label lo-close-label">Close matches for “{q}”</p>}
         {groups.map(([group, list]) => {
           const foldId = groupBy === 'group' ? `group:${groupKey(group)}` : `hero:${group}`
           const isFolded = folded.has(foldId) && drag.dragId === null && !q // a drag or a search opens every group (the saved folding stays)
