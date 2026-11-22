@@ -142,7 +142,7 @@ function Editor({ onInstall, alert, blocked, shown }: KoEditorProps & { shown: b
   }, [openRequest, usmap, heroes]) // eslint-disable-line react-hooks/exhaustive-deps
   const applyMod = (heroId: string, patch: Saved[string], ownParts: boolean) => {
     saveFor(heroId, patch); setAskReplace(null); cue('ready')
-    if (ownParts) alert.info('Its own textures stay out', "The KO Editor sets only the prompt's colors. Textures or materials the mod ships are not in what it installs.")
+    if (ownParts) alert.warning('Its own textures stay out', "The KO Editor sets only the prompt's colors. Textures or materials the mod ships are not in what it installs.")
   }
   useEffect(() => { // its hero is up: the mod's colors on the game's roles, asking first over colors already picked
     if (!fromMod || loaded?.hero.id !== fromMod.heroId) return
