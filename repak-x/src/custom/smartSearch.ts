@@ -52,7 +52,8 @@ function closeNorm(name: string, q: string): number | null {
   let fixes = 0
   for (const t of q.split(' ')) {
     if (h.includes(t) || joinedFrom(words, t)) continue
-    if ([...t.normalize('NFC')].length < MIN_FUZZY || !words.some(w => withinOne(t, w))) return null // letters, not code units (Korean decomposes)
+    // letters, not code units (Korean decomposes), and never a number alone (every mod ends in _9999999_P)
+    if ([...t.normalize('NFC')].length < MIN_FUZZY || !/\p{L}/u.test(t) || !words.some(w => withinOne(t, w))) return null
     if (++fixes > 1) return null // one guess at most: the other words must match as typed
   }
   return fixes || null
@@ -75,6 +76,7 @@ if (import.meta.env.DEV) {
   console.assert(!directMatch(bp, 'purpel panther') && closeMatch(bp, 'purpel panther') === 1, 'a swapped pair is one fix, only as a close match')
   console.assert(closeMatch(spidey, 'purpel panther') === null, 'every other word must still match')
   console.assert(closeMatch('Hulk VFX', 'vxf') === null && closeMatch('Thor', 'thro') === null, 'short words never guess')
+  console.assert(closeMatch('Cool_9999999_P', '9999998') === null, 'a number alone never guesses')
   console.assert(directMatch(bp, 'purple  vfx', true) && !directMatch('VFX Purple', 'purple vfx', true), 'exact: the phrase in order, extra spaces ignored')
   console.assert(directMatch('Café Mods', 'cafe') && directMatch('Spider-Man', 'spider man'), 'accents and punctuation ignored')
   console.assert(!directMatch('Spider Man', 'spider-man', true) && directMatch('Spider-Man', 'SPIDER-man', true), 'exact: only case and spaces are ignored')
