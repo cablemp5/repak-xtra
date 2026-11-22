@@ -166,6 +166,7 @@ import { keepThisOne, setModsBlocked } from './custom/keepOne' // repakxtra: Kee
 import { NEXUS_TYPE, recordSourceAs, recordSources, renameSource, sourceOf, useNexusScan, useNexusSources } from './custom/nexusSource' // repakxtra: Nexus source
 import { stageOffFiles } from './custom/offFiles' // repakxtra: .pak.off files
 import CrashSuspects, { previousCrashes, withSuspects } from './custom/CrashSuspects' // repakxtra: crash suspects
+import { crashOfTest } from './custom/crashBisect' // repakxtra: a crash test shows its own crash note
 import { revealBuiltin, toggleBuiltin, useBuiltins, watchBuiltins } from './custom/BuiltinMods' // repakxtra: built-in mods
 import { isBuiltin, useBuiltinRows } from './custom/builtinRows'
 
@@ -1571,8 +1572,9 @@ function App() {
     })
 
     // Listen for game crash notifications
-    const unlistenCrash = listen('game_crash_detected', (event: any) => {
+    const unlistenCrash = listen('game_crash_detected', async (event: any) => {
       const payload = event.payload
+      if (await crashOfTest(payload.crash_folder)) return // repakxtra: Find the crashing mod asked about this crash itself
 
       // Show persistent error toast for crashes
       alert.crash(payload.title, payload.description, {
@@ -2082,6 +2084,10 @@ function App() {
     try {
       const running = await invoke('check_game_running') as any
       setGameRunning(running)
+      // repakxtra: a crash gets its toast once the game is gone, not only on the next start. Every poll while it is
+      // closed (one folder listing): a crash at startup can begin and end between two polls, and its report can land
+      // late. A crash already told stays quiet (the last known folder)
+      if (!running) void invoke('check_for_previous_crash').catch(() => {})
     } catch (error) {
       console.error('Failed to check game status:', error)
     }

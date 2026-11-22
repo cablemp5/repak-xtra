@@ -566,6 +566,41 @@ pub async fn xtra_crash_tiers(asset_path: String, hero_id: Option<String>, mod_p
     tauri::async_runtime::spawn_blocking(move || tiers(&asset_path, hero_id.as_deref(), &mod_paths, listed)).await.map_err(|e| e.to_string())
 }
 
+// ---- the live crash toast: which crash folder is news (main_tauri.rs check_for_previous_crash, every 5 s) ----
+
+/// The newest crash folder against the last known one: `fresh` (not the known one), `older` (fresh but made no later
+/// than the known one: its newer folder was deleted, so it is no news), and the known time, dropped when it is ahead of
+/// `now` (saved while the clock ran ahead). Times in Unix milliseconds. Pure.
+pub(crate) fn crash_news(last_known: Option<&str>, known_at: Option<u64>, newest: Option<&str>, created: Option<u64>, now: u64) -> (bool, bool, Option<u64>) {
+    let known_at = known_at.filter(|k| *k <= now);
+    let fresh = newest.is_some_and(|n| last_known != Some(n));
+    let older = fresh && matches!((created, known_at), (Some(c), Some(k)) if c <= k);
+    (fresh, older, known_at)
+}
+
+#[derive(Debug, PartialEq)]
+pub(crate) enum CrashSave {
+    Nothing,
+    /// the newest folder becomes the last known one, with this time
+    Known(Option<u64>),
+    /// only the known folder's time (a state saved before times were kept)
+    Time(u64),
+}
+
+/// What to save after the check: a fresh folder once told, once it is an older crash, or once watched 2 minutes with
+/// no report (`watched`: seconds, never written, or too old for the 24 hour check). Until then it stays unknown, so a
+/// report written late is still told. A time that cannot be read never replaces a good one, and a time ahead of `now`
+/// is never saved as the known folder's time (it would be dropped and saved again every call). Pure.
+pub(crate) fn crash_save(fresh: bool, older: bool, told: bool, watched: Option<u64>, known_at: Option<u64>, created: Option<u64>, now: u64) -> CrashSave {
+    if fresh && (told || older || watched.is_some_and(|s| s >= 120)) {
+        return CrashSave::Known(if older { known_at } else { created.or(known_at) });
+    }
+    match (fresh, known_at, created) {
+        (false, None, Some(c)) if c <= now => CrashSave::Time(c),
+        _ => CrashSave::Nothing,
+    }
+}
+
 #[cfg(test)]
 mod tests {
 
@@ -590,6 +625,36 @@ mod tests {
         assert_eq!(on_key(std::path::Path::new("C:/Mods/~mods/Cool Mod_9999999_P.utoc")), on);
     }
     use super::*;
+
+    #[test]
+    fn crash_news_and_save() {
+        let now = 10_000;
+        // the same folder: nothing new, nothing saved
+        assert_eq!(crash_news(Some("a"), Some(500), Some("a"), Some(500), now), (false, false, Some(500)));
+        assert_eq!(crash_save(false, false, false, None, Some(500), Some(500), now), CrashSave::Nothing);
+        // a new crash, told: known with its time
+        assert_eq!(crash_news(Some("a"), Some(500), Some("b"), Some(900), now), (true, false, Some(500)));
+        assert_eq!(crash_save(true, false, true, None, Some(500), Some(900), now), CrashSave::Known(Some(900)));
+        // its report not written yet: unknown while watched under 2 minutes, then settled
+        assert_eq!(crash_save(true, false, false, None, Some(500), Some(900), now), CrashSave::Nothing);
+        assert_eq!(crash_save(true, false, false, Some(119), Some(500), Some(900), now), CrashSave::Nothing);
+        assert_eq!(crash_save(true, false, false, Some(120), Some(500), Some(900), now), CrashSave::Known(Some(900)));
+        // the newest folder deleted: the one before it is older, known without a toast, the known time kept
+        assert_eq!(crash_news(Some("b"), Some(900), Some("a"), Some(500), now), (true, true, Some(900)));
+        assert_eq!(crash_save(true, true, false, None, Some(900), Some(500), now), CrashSave::Known(Some(900)));
+        // first run: nothing known, the folder is news (told when under 24 hours, else settled after 2 minutes)
+        assert_eq!(crash_news(None, None, Some("a"), Some(500), now), (true, false, None));
+        // a state from before times were kept: the known folder's time once
+        assert_eq!(crash_save(false, false, false, None, None, Some(500), now), CrashSave::Time(500));
+        // a time saved while the clock ran ahead is no cutoff
+        assert_eq!(crash_news(Some("b"), Some(99_999), Some("c"), Some(900), now), (true, false, None));
+        // an unreadable created time never replaces a good one
+        assert_eq!(crash_save(true, false, true, None, Some(500), None, now), CrashSave::Known(Some(500)));
+        // the known folder made while the clock ran ahead: its time is not saved until the clock passes it
+        assert_eq!(crash_save(false, false, false, None, None, Some(99_999), now), CrashSave::Nothing);
+        // no crash folder at all
+        assert_eq!(crash_news(Some("a"), Some(500), None, None, now), (false, false, Some(500)));
+    }
 
     #[test]
     fn crash_tiers_rank_asset_then_skin_then_hero() {
