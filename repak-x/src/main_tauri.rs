@@ -7132,6 +7132,10 @@ async fn check_for_previous_crash(
     state: State<'_, Arc<Mutex<AppState>>>,
     window: Window,
 ) -> Result<Option<crash_monitor::CrashInfo>, String> {
+    // repakxtra: App's game poll calls this every 5 s while the game is closed: one call at a time, so two never
+    // report the same new folder
+    static ONE: Mutex<()> = Mutex::new(());
+    let _one = ONE.lock().unwrap_or_else(|e| e.into_inner());
     let last_known = {
         let state_guard = state.lock().unwrap();
         state_guard.last_known_crash_folder.clone()
@@ -7141,7 +7145,7 @@ async fn check_for_previous_crash(
     let crash_info = crash_monitor::check_for_previous_session_crash(last_known.as_deref());
 
     if let Some(ref info) = crash_info {
-        ui_log::error("Crash", "Marvel Rivals crashed during a previous session");
+        ui_log::error("Crash", "Marvel Rivals crashed"); // repakxtra: also a crash found while the app runs
         ui_log::debug(
             "Crash",
             format!("Crash folder: {}", info.crash_folder.display()),
@@ -7153,15 +7157,18 @@ async fn check_for_previous_crash(
 
         // Emit toast notification
         toast_events::emit_crash_from_info(&window, info);
-    } else {
-        ui_log::debug("Crash", "No unreported crashes from previous sessions");
-    }
+    } // repakxtra: no "no crashes" line, this runs every 5 s
 
     // Update last known crash folder to the newest one (whether crash detected or not)
-    if let Some((newest_name, _)) = crash_monitor::get_newest_crash_folder() {
+    if let Some((newest_name, newest_path)) = crash_monitor::get_newest_crash_folder() {
         let mut state_guard = state.lock().unwrap();
-        state_guard.last_known_crash_folder = Some(newest_name);
-        let _ = save_state(&state_guard);
+        // repakxtra: a new folder whose report is not written yet stays unknown, so a later call still tells it. And the
+        // state file is written only when the folder changed (this runs every 5 s)
+        let pending = crash_info.is_none() && !newest_path.join("CrashContext.runtime-xml").exists();
+        if !pending && state_guard.last_known_crash_folder.as_deref() != Some(newest_name.as_str()) {
+            state_guard.last_known_crash_folder = Some(newest_name);
+            let _ = save_state(&state_guard);
+        }
     }
 
     Ok(crash_info)

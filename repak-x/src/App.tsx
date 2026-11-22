@@ -523,7 +523,6 @@ function App() {
   const searchInputRef = useRef<HTMLInputElement | null>(null)
   const modsGridRef = useRef<HTMLDivElement | null>(null)
   const gameRunningRef = useRef(false)
-  const crashChecksRef = useRef(0) // repakxtra: crash folder checks left after the game closed
   const bypassRef = useRef(false); bypassRef.current = bypassGameRunningLock // repakxtra: live game lock for Undo toasts
   const undoBlocked = () => gameRunningRef.current && !bypassRef.current // repakxtra
   setModsBlocked(undoBlocked) // repakxtra: the same guard for Setup's Ban risk and Why isn't it working? (refs keep it live)
@@ -1727,7 +1726,7 @@ function App() {
     const intervalId = setInterval(() => {
       if (!document.hidden) checkGame()
     }, 5000)
-    const onShow = () => { if (!document.hidden) { crashChecksRef.current ||= 1; checkGame() } } // repakxtra: a game played and closed while minimized
+    const onShow = () => { if (!document.hidden) checkGame() }
     document.addEventListener('visibilitychange', onShow)
 
     return () => {
@@ -2085,10 +2084,10 @@ function App() {
     try {
       const running = await invoke('check_game_running') as any
       setGameRunning(running)
-      // repakxtra: a crash gets its toast once the game is gone, not only on the next start. Three tries (about 15 s):
-      // the crash folder can land after the game closes. A crash already told stays quiet (the last known folder)
-      if (gameRunningRef.current && !running) crashChecksRef.current = 3
-      if (!running && crashChecksRef.current > 0) { crashChecksRef.current--; void invoke('check_for_previous_crash').catch(() => {}) }
+      // repakxtra: a crash gets its toast once the game is gone, not only on the next start. Every poll while it is
+      // closed (one folder listing): a crash at startup can begin and end between two polls, and its report can land
+      // late. A crash already told stays quiet (the last known folder)
+      if (!running) void invoke('check_for_previous_crash').catch(() => {})
     } catch (error) {
       console.error('Failed to check game status:', error)
     }
