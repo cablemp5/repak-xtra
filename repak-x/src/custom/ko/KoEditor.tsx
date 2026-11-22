@@ -19,7 +19,7 @@ import { type Hero, type Loaded, type Progress, forgetHero, loadHero, usmapPath 
 import sceneBackground from './scene-background.jpg'
 import { randomizeColors } from './randomize'
 import RandomizeButton from './RandomizeButton'
-import { takeKoOpen, useKoOpen } from './openMod'
+import { MOD_EXT, takeKoOpen, useKoOpen } from './openMod'
 import ConfirmRow from '../ConfirmRow'
 import './ko.css'
 import { useSkeletonFill } from '../useSkeletonFill'
@@ -156,7 +156,7 @@ function Editor({ onInstall, onReplace, alert, blocked, shown }: KoEditorProps &
   // another hero picked, or the mod's hero failed to load: the open is dropped, never applied later out of nowhere
   useEffect(() => { if (fromMod && (heroId !== fromMod.heroId || loadError)) setFromMod(null) }, [heroId, loadError]) // eslint-disable-line react-hooks/exhaustive-deps
   const applyMod = (heroId: string, patch: Saved[string], ownParts: boolean, path: string) => {
-    saveFor(heroId, patch); setAskReplace(null); cue('ready')
+    saveFor(heroId, patch); setAskReplace(null); setTaken(null); cue('ready') // a Replace question from before was about another mod
     source.current[heroId] = { stem: koStem(patch.name ?? '').toLowerCase(), path }
     if (ownParts) alert.warning('Its own textures stay out', "The KO Editor sets only the prompt's colors. Textures or materials the mod ships are not in what it installs.")
   }
@@ -282,7 +282,7 @@ function Editor({ onInstall, onReplace, alert, blocked, shown }: KoEditorProps &
       const stem = koStem(name).toLowerCase()
       const installed = replace ? [] : await invoke<{ path: string }[]>('get_pak_files').catch(() => [])
       const from = source.current[hero.id]
-      const stemOf = (p: string) => (p.split(/[\\/]/).pop() ?? '').replace(/\..*$/, '').replace(/(_\d+)?_P$/i, '').toLowerCase()
+      const stemOf = (p: string) => (p.split(/[\\/]/).pop() ?? '').replace(MOD_EXT, '').replace(/(_\d+)?_P$/i, '').toLowerCase()
       const hit = installed.find(m => from?.stem === stem && m.path === from.path) ?? installed.find(m => stemOf(m.path) === stem)
       if (hit) { setTaken({ name, path: hit.path }); cue('warning'); return }
       // a game update while the app was open: the prompt is read again before anything is built from it
