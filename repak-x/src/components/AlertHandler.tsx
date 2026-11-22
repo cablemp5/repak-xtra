@@ -179,7 +179,6 @@ export function AlertProvider({ children, placement = DEFAULT_CONFIG.placement }
     const updateToast = useCallback((id: number, updates: AlertOptions) => {
         // repakxtra: Minimal toasts: a progress toast that finished as an everyday success goes away instead
         if (updates.color && quietToast(updates)) { setToasts(prev => prev.filter(toast => toast.id !== id)); return; }
-        if (updates.color) alertSound(updates.color, updates.isLoading); // repakxtra: a loading toast that finished
         // repakxtra: a loading toast that ends as a problem lands in Logs once (outside the updater, which may run twice)
         const was = toastsNow.current.find(toast => toast.id === id);
         // repakxtra: a loading toast that ends as the same problem another toast already shows goes away (an install's
@@ -187,8 +186,10 @@ export function AlertProvider({ children, placement = DEFAULT_CONFIG.placement }
         const end = was && { ...was, ...updates };
         if (end && updates.color && (end.color === 'danger' || end.color === 'warning') && toastsNow.current.some(t => t.id !== id && t.color === end.color
             && t.title === end.title && (t.fullText ?? t.description) === end.description)) {
+            toastsNow.current = toastsNow.current.filter(toast => toast.id !== id);
             setToasts(prev => prev.filter(toast => toast.id !== id)); return;
         }
+        if (updates.color) alertSound(updates.color, updates.isLoading); // repakxtra: a loading toast that finished (after the fold: one notice, one sound)
         const logged = updates.color && was && !was.logId ? logProblem({ ...was, ...updates }, () => dismissAlert(id)) : null;
         toastsNow.current = toastsNow.current.map(toast => toast.id === id ? { ...toast, ...updates, ...logged } : toast); // repakxtra: in step for a same-tick call
         setToasts(prev => prev.map(toast =>

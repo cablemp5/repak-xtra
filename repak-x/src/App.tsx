@@ -3286,6 +3286,7 @@ function App() {
     const installed = (async () => {
         // Create a promise that resolves when install_complete event fires
         type Outcome = { name: string; source: string; requested?: string; whole?: boolean } // repakxtra
+        const request = `${Date.now()}-${Math.random().toString(36).slice(2)}` // repakxtra: install_complete names it
         const installCompletePromise = new Promise<{ failed: Outcome[]; done?: Outcome[] }>((resolve, reject) => { // repakxtra: what failed in a partial install
           let unlistenComplete: UnlistenFn | null = null
           let unlistenError: UnlistenFn | null = null
@@ -3302,6 +3303,7 @@ function App() {
 
           // Listen for success
           listen('install_complete', (event: any) => {
+            if (event.payload?.request && event.payload.request !== request) return // repakxtra: another install's
             if (timeoutId) clearTimeout(timeoutId)
             if (unlistenComplete) unlistenComplete()
             if (unlistenError) unlistenError()
@@ -3335,7 +3337,7 @@ function App() {
         })
 
         // Start the installation (returns immediately since backend spawns threads)
-        await invoke('install_mods', { mods: sent }) // repakxtra: with the left-out ones
+        await invoke('install_mods', { mods: sent, request }) // repakxtra: with the left-out ones, and this install's id
 
         // Wait for the actual installation to complete
         // repakxtra: a failed mod is known by the file or archive it came from (its output name may have changed: a
@@ -3363,7 +3365,8 @@ function App() {
         },
         success: (result) => result.failedNames.length ? { // repakxtra: a partial install is a warning that names what is missing
           color: 'warning',
-          title: result.failed.length ? `Installed ${result.count} of ${plural(result.count + result.failed.length, 'mod')}` : 'Some mods not installed',
+          // a count only when every name is a row of the card, so the title and the names never disagree
+          title: result.failed.length && result.failedNames.length === result.failed.length ? `Installed ${result.count} of ${plural(result.count + result.failed.length, 'mod')}` : 'Some mods not installed',
           description: `Not installed: ${result.failedNames.slice(0, 3).join(', ')}${result.failedNames.length > 3 ? ` and ${result.failedNames.length - 3} more` : ''}. Details are in Logs.`,
           progressValue: undefined,
         } : {

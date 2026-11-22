@@ -5,18 +5,19 @@
  *  (C:\Users\First Last\..., D:/Build Farm/...), so a path runs to its last separator before the line, a | or quote, a
  *  square bracket, or the next drive path ends it: too much goes rather than a name staying. A network path (\\server\share or
  *  //server/share) goes whole. */
-// a path character: not ): Program Files (x86) is one folder. An apostrophe before a letter is part of a name
-// (O'Brien), one before anything else closes a quoted path
-const PC = String.raw`(?:[^\r\n|"'<>\]]|'(?=[A-Za-z]))`
+// a path character: not ): Program Files (x86) is one folder, and not ': a name may hold one (O'Brien, D'Ávila,
+// Players' Mods). A quoted path then runs past its closing quote to the line's last separator: too much goes rather than
+// part of a name staying
+const PC = String.raw`[^\r\n|"<>\]]`
 const NEXT_DRIVE = String.raw`(?![A-Za-z]:[\\/])`
 export const scrub = (text: string) => text
   // the // of https:// follows a colon, so it is not a network path
-  .replace(new RegExp(String.raw`(?<![:\w])[\\/]{2}(?:[^\s\\/|"']|'(?=[A-Za-z]))+[\\/]${PC}*`, 'g'), '<network path>')
+  .replace(new RegExp(String.raw`(?<![:\w])[\\/]{2}[^\s\\/|"]+[\\/]${PC}*`, 'g'), '<network path>')
   // a drive letter stands alone: the s: of https:// is not one
   // a path under a user folder keeps only its file name (or what follows ~mods): folder names (OneDrive - Company) can
   // name the player too
   .replace(new RegExp(String.raw`(?<![A-Za-z])[A-Za-z]:[\\/]+Users[\\/]+(?:${NEXT_DRIVE}(?![\\/]~mods[\\/])${PC})*[\\/]`, 'gi'), '%USERPROFILE%\\…\\')
-  .replace(/(?<![A-Za-z])[A-Za-z]:[\\/]+Users[\\/]+(?:[^\\/\r\n|"']|'(?=[A-Za-z]))+/gi, '%USERPROFILE%')
+  .replace(/(?<![A-Za-z])[A-Za-z]:[\\/]+Users[\\/]+[^\\/\r\n|"]+/gi, '%USERPROFILE%')
   .replace(new RegExp(String.raw`(?<![A-Za-z])[A-Za-z]:[\\/](?:${NEXT_DRIVE}${PC})*?[\\/](~mods[\\/])`, 'gi'), '$1')
   .replace(new RegExp(String.raw`(?<![A-Za-z])[A-Za-z]:[\\/](?:${NEXT_DRIVE}${PC})*[\\/]`, 'g'), '') // any other drive path keeps only its file name
   .replace(/(?<![A-Za-z])[A-Za-z]:[\\/](?=[^\\/]*$)/gm, '') // a file at a drive's root
@@ -29,8 +30,10 @@ export const scrub = (text: string) => text
   .replace(/\b(authorization)(["']?\s*[=:]\s*)(?:(?:basic|bearer)\s+)?[^\s"'&,;]+/gi, '$1$2<hidden>')
   // a user name written plainly runs to the end of its field: "Username: First Last"
   .replace(/\b(\w*?user[ _]?name)(\s*[=:]\s*)(?!\\?["'])([^\r\n,;|&"<>{}]+)/gi, '$1$2<hidden>')
+  // a uid or guid key on its own or after a prefix (player_uid), never the end of another word (fluid)
+  .replace(/\b((?:[A-Za-z]+_)?g?uid)(["']?\s*[=:]\s*)("[^"]*"|[^\s"'&,;]+)/gi, '$1$2<hidden>')
   // a keyed value: accessToken=, account_id:, username="First Last" (a quoted value goes whole, escaped JSON too)
-  .replace(/\b(\w*?(?:token|password|passwd|secret|api[-_]?key|account[ _]?id|client[ _]?id|user[ _]?id|player[ _]?id|uid|user[ _]?name|authorization))(\\?["']?\s*[=:]\s*)(\\"(?:[^\\]|\\[^"])*\\"|"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|[^\s"'&,;\\]+)/gi, '$1$2<hidden>')
+  .replace(/\b(\w*?(?:token|password|passwd|secret|api[-_]?key|account[ _]?id|client[ _]?id|user[ _]?id|player[ _]?id|user[ _]?name|authorization))(\\?["']?\s*[=:]\s*)(\\"(?:[^\\]|\\[^"])*\\"|"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|[^\s"'&,;\\]+)/gi, '$1$2<hidden>')
 
 if (import.meta.env.DEV) {
   console.assert(scrub('C:\\Users\\someone\\Desktop\\x and D:/Games/MarvelRivals/~mods/a.pak') === '%USERPROFILE%\\…\\x and ~mods/a.pak', 'no user name, no drive paths', scrub('C:\\Users\\someone\\Desktop\\x and D:/Games/MarvelRivals/~mods/a.pak'))
@@ -55,9 +58,11 @@ if (import.meta.env.DEV) {
   console.assert(scrub('steam_username: Jane Doe') === 'steam_username: <hidden>', 'a prefixed user name key', scrub('steam_username: Jane Doe'))
   const apos = "at C:\\Users\\O'Brien\\Games\\a.pak and Username: D'Arcy Smith"
   console.assert(scrub(apos) === 'at %USERPROFILE%\\…\\a.pak and Username: <hidden>', 'an apostrophe in a user folder or name', scrub(apos))
-  const quoted = "D:\\O'Brien\\Downloads\\test.txt, '\\\\NAS\\O'Brien\\x.txt' failed, see logs/x.txt, uid=77 player_id: 88"
-  console.assert(scrub(quoted) === "test.txt, '<network path>' failed, see logs/x.txt, uid=<hidden> player_id: <hidden>", 'an apostrophe in any path, a closing quote still ends it, uid and player ids', scrub(quoted))
-  console.assert(scrub("'C:\\Users\\Jane\\a.pak' failed, see logs/x.txt") === "'%USERPROFILE%\\…\\a.pak' failed, see logs/x.txt", 'a quoted user path keeps the words after it', scrub("'C:\\Users\\Jane\\a.pak' failed, see logs/x.txt"))
+  const quoted = "D:\\O'Brien\\Downloads\\test.txt, '\\\\NAS\\O'Brien\\x.txt' failed"
+  console.assert(scrub(quoted) === "test.txt, '<network path>", 'an apostrophe in any path, a network path goes whole', scrub(quoted))
+  const named = "C:\\Users\\D'Ávila\\Games\\a.pak and C:\\Users\\Jane\\Players' Mods\\b.pak"
+  console.assert(!/Ávila|Jane|Players/.test(scrub(named)), 'accented names and apostrophe folders never stay', scrub(named))
+  console.assert(scrub('uid=77 player_id: 88 player_uid=9 fluid: 3 liquid=4') === 'uid=<hidden> player_id: <hidden> player_uid=<hidden> fluid: 3 liquid=4', 'uid keys only', scrub('uid=77 player_id: 88 player_uid=9 fluid: 3 liquid=4'))
   console.assert(scrub(keyed) === 'accountId=<hidden> username=<hidden> accessToken=<hidden> author: Someone', 'keyed ids, quoted names, camelCase tokens', scrub(keyed))
   console.assert(scrub(ids) ==='mail <email>, steam <account id>, Bearer <hidden>, token=<hidden>&x=1', 'ids and tokens', scrub(ids))
 }

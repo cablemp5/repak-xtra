@@ -2923,6 +2923,7 @@ mod quick_organize_tests {
 #[tauri::command]
 async fn install_mods(
     mods: Vec<ModToInstall>,
+    request: Option<String>, // repakxtra: echoed in install_complete, so overlapping installs each hear their own
     window: Window,
     state: State<'_, Arc<Mutex<AppState>>>,
 ) -> Result<(), String> {
@@ -3145,8 +3146,9 @@ async fn install_mods(
     let counter_clone = installed_counter.clone();
     let _stop_clone = stop_flag.clone();
     let window_clone = window.clone();
-    // repakxtra: set once the results are reported, so install_complete never comes before a failure toast
-    let reported = StdArc::new(AtomicBool::new(false));
+    // repakxtra: set once the results are reported, so install_complete never comes before a failure toast. A lock, not
+    // a flag: a progress event and the completion never cross (no percent after it is done)
+    let reported = StdArc::new(std::sync::Mutex::new(false));
     let reported_by_install = reported.clone();
 
     // Spawn installation thread
@@ -3336,8 +3338,11 @@ async fn install_mods(
         }
         if !all_failed { partly_failed.extend(unmapped); } // repakxtra: in the result unless nothing installed
         // repakxtra: after any failure toast above (events reach the window in order), with the mods that failed
-        window_for_logs.emit("install_complete", serde_json::json!({ "failed": partly_failed, "done": done, "all_failed": all_failed })).ok();
-        reported_by_install.store(true, std::sync::atomic::Ordering::SeqCst);
+        {
+            let mut finished = reported_by_install.lock().unwrap_or_else(|e| e.into_inner());
+            window_for_logs.emit("install_complete", serde_json::json!({ "failed": partly_failed, "done": done, "all_failed": all_failed, "request": request })).ok();
+            *finished = true;
+        }
 
         // --- CLEANUP TEMP HYBRID FOLDERS ---
         // Only our own merge folders: a user's folder with the same prefix must survive
@@ -3371,13 +3376,16 @@ async fn install_mods(
         let mut last = i32::MIN;
         loop {
             let current = counter_clone.load(std::sync::atomic::Ordering::SeqCst);
-            if reported.load(std::sync::atomic::Ordering::SeqCst) {
-                break; // repakxtra: the install thread sent install_complete itself, after its results
-            }
-            if current != last && current >= 0 { // repakxtra: -255 is the done mark, never a percent
-                last = current;
-                let progress = (current as f32 / total as f32) * 100.0;
-                window_clone.emit("install_progress", progress).ok();
+            {
+                let finished = reported.lock().unwrap_or_else(|e| e.into_inner());
+                if *finished {
+                    break; // repakxtra: the install thread sent install_complete itself, after its results
+                }
+                if current != last && current >= 0 { // repakxtra: -255 is the done mark, never a percent
+                    last = current;
+                    let progress = (current as f32 / total as f32) * 100.0;
+                    window_clone.emit("install_progress", progress).ok();
+                }
             }
             std::thread::sleep(std::time::Duration::from_millis(100));
         }

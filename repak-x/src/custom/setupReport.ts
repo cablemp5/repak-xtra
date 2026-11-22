@@ -180,7 +180,8 @@ export async function gatherReport(onStage?: (stage: ReportStage) => void, notes
   const dumpSuspect = new Set(dumpHeld.flatMap(d => d.held ?? []).map(key)) // hold an asset the crash dump has
   const verdictOf = new Map((verdicts ?? []).map(v => [key(v.path), v]))
   const hasNiagara = new Set((niagara ?? []).map(key))
-  const g = galacta && galactaChecked?.installed === galacta.installed ? { ...galacta, ...galactaChecked } : galacta
+  // the online check adds only its version facts: on or off is the fresh read's
+  const g = galacta && galactaChecked?.installed === galacta.installed ? { ...galacta, latest: galactaChecked.latest, up_to_date: galactaChecked.up_to_date } : galacta
   const galactaText = !g ? 'could not be read' : !g.installed ? 'not installed' : [
     /[\\/]~mods([\\/]|$)/i.test(g.installed) ? g.installed.replace(/^.*?[\\/]~mods/i, '~mods').replace(/\\/g, '/') : 'outside ~mods',
     g.disabled ? 'off' : 'on',
