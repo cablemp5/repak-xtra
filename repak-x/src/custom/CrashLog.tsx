@@ -5,8 +5,9 @@ import { useEffect, useState } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { Check, ChevronRight, CircleAlert, ClipboardCopy, Download, Package, Timer, TriangleAlert } from 'lucide-react'
 import type { useAlert } from '../components/AlertHandler'
-import { onKey } from './setupReport'
+import { logStatusText, onKey } from './setupReport'
 import { copyText } from './CopySetupReport'
+import { scrub } from './scrub'
 import { useShownBusy } from './shownBusy'
 import { nameKey } from './loadoutStore'
 import { ModName } from './modName'
@@ -51,7 +52,8 @@ export default function CrashLog({ id, time, alert, modPaths }: { id: string; ti
   }, [id])
   if (!s) return null
 
-  const logText = () => invoke<string>('xtra_crash_log_text', { id })
+  // repakxtra: the backend takes out names and ids, scrub also takes out folder paths, as in Copy setup report
+  const logText = () => invoke<string>('xtra_crash_log_text', { id }).then(scrub)
   const copy = async () => {
     if (busy) return
     setBusy('copy')
@@ -59,7 +61,7 @@ export default function CrashLog({ id, time, alert, modPaths }: { id: string; ti
       await copyText(await logText())
       setCopied(true); setTimeout(() => setCopied(false), 3000)
       alert.success('Game log copied', 'Your user name, account ids, and login tokens were taken out.')
-    } catch (e) { alert.warning('Not copied', String(e)) } finally { setBusy(null) }
+    } catch (e) { alert.warning('Game log not copied', logStatusText(e)) } finally { setBusy(null) }
   }
   const save = async () => {
     if (busy) return
@@ -73,7 +75,7 @@ export default function CrashLog({ id, time, alert, modPaths }: { id: string; ti
       const { writeFile } = await import('@tauri-apps/plugin-fs')
       await writeFile(target, new TextEncoder().encode(await logText()))
       alert.success('Game log saved', 'Your user name, account ids, and login tokens were taken out.')
-    } catch (e) { alert.warning('Not saved', String(e)) } finally { setBusy(null) }
+    } catch (e) { alert.warning('Game log not saved', logStatusText(e)) } finally { setBusy(null) }
   }
   const byKey = new Map(modPaths.map(p => [onKey(p), p]))
   const missing = s.not_mounted ?? []

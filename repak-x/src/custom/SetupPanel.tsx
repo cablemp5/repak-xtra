@@ -215,6 +215,8 @@ const withLastCheck = (g: Galacta): Galacta => lastCheck && !g.latest && lastChe
 export function SetupPanel({ alert, onClose, focus }: { alert: Alert; onClose: () => void; focus?: string | null }) {
   const [bypass, setBypass] = useState<Bypass | null>(null)
   const [galacta, setGalacta] = useState<Galacta | null>(lastCheck)
+  const [galactaError, setGalactaError] = useState<string | null>(null) // repakxtra: its state could not be read
+  const [bypassError, setBypassError] = useState(false) // repakxtra: the same for the bypass
   const [folders, setFolders] = useState<string[]>([])
   const [folder, setFolder] = useState(savedItem(FOLDER_KEY) || HERE)
   const [auto, setAuto] = useState(autoCheck())
@@ -231,14 +233,14 @@ export function SetupPanel({ alert, onClose, focus }: { alert: Alert; onClose: (
   // repakxtra: and a startup toast's card (Snapshots, Ban risk)
   useEffect(() => { const card = focus && ({ previews: '.su-previews', snapshots: '.su-snapshots', safety: '.su-safety-card' } as Record<string, string>)[focus]; if (card) document.querySelector(card)?.scrollIntoView({ block: 'start' }) }, [focus])
   useEffect(() => {
-    invoke<Bypass>('setup_bypass_status').then(setBypass).catch(e => alert.warning('Setup', String(e)))
+    invoke<Bypass>('setup_bypass_status').then(setBypass).catch(e => { setBypassError(true); alert.warning('Signature bypass not checked', String(e)) }) // repakxtra: the card says so too
     // Its version, What's new and Up to date from the start: without a check this run, a quiet one now (offline: none)
     const at = acted.current // an action from here on makes the quiet check out of date
     invoke<Galacta>('setup_galacta_status', { online: false }).then(g => {
       const known = withLastCheck(g)
       setGalacta(known)
       if (!known.latest && autoCheck()) invoke<Galacta>('setup_galacta_status', { online: true }).then(o => { if (acted.current === at) setGalacta(remember(o)) }).catch(() => {})
-    }).catch(() => {})
+    }).catch(e => setGalactaError(String(e))) // repakxtra: never Checking… for ever
     invoke<{ id: string; depth: number }[]>('get_folders')   // subfolders by their path below ~mods ("A/B")
       .then(fs => setFolders((fs ?? []).filter(f => f.depth > 0).map(f => f.id))).catch(() => {})
   }, [])
@@ -291,7 +293,7 @@ export function SetupPanel({ alert, onClose, focus }: { alert: Alert; onClose: (
   const b = bypass
   const g = galacta
   const bypassOn = b?.state === 'installed' || b?.state === 'disabled' || b?.state === 'outdated'
-  const bypassLine = !b ? 'Checking…' : {
+  const bypassLine = !b ? (bypassError ? 'Could not check it. Close and reopen Setup to check again.' : 'Checking…') : {
     missing: 'Not installed', outdated: 'An older version that does not work with the performance DLC', installed: `Performance DLC compatible · in ${b.files[0]?.place ?? 'the game folder'}`, disabled: 'Off, its files stay in place',
     partial: b.files.filter(f => f.found !== 'same').map(f => `${f.name} is ${({ blocked: 'blocked', old: 'an older version' } as Record<string, string>)[f.found] ?? 'missing'}`).join(', '), other: 'A different loader or bypass is there',
   }[b.state]
@@ -319,7 +321,7 @@ export function SetupPanel({ alert, onClose, focus }: { alert: Alert; onClose: (
                 <h3>Signature bypass</h3>
                 <p>Lets the game load mods that replace its files. Every mod needs it. Comes with {APP_NAME}.</p>
               </div>
-              <span className={`su-chip is-${b?.state === 'outdated' ? 'update' : b?.state ?? 'missing'}`}>{b ? BYPASS_LABEL[b.state] : 'Checking…'}</span>
+              <span className={`su-chip is-${b?.state === 'outdated' ? 'update' : b?.state ?? 'missing'}`}>{b ? BYPASS_LABEL[b.state] : bypassError ? 'Not read' : 'Checking…'}</span>
             </div>
             {b?.state === 'partial' && <p className="su-note">Repair puts it back. If it goes missing again, an antivirus removed it. Allow it in Windows Security &gt; Virus &amp; threat protection &gt; Protection history, then press Repair.</p>}
             {b?.state === 'other' && <p className="su-note">A different loader or bypass is installed. Installing keeps it next to the new one as a .repakxtra-backup file.</p>}
@@ -363,7 +365,7 @@ export function SetupPanel({ alert, onClose, focus }: { alert: Alert; onClose: (
                 <h3>{LOADER_NAME}</h3>
                 <p>{<>Loads more types of mods and lets you toggle mods in game. By <a onClick={() => open(GALACTA)}>0xSaturno</a>.</>}</p>
               </div>
-              <span className={`su-chip ${g?.up_to_date === false ? 'is-update' : g?.installed ? 'is-installed' : 'is-missing'}`}>{g ? galactaState : 'Checking…'}</span>
+              <span className={`su-chip ${g?.up_to_date === false ? 'is-update' : g?.installed ? 'is-installed' : 'is-missing'}`}>{g ? galactaState : galactaError ? 'Not read' : 'Checking…'}</span>
             </div>
             {/* One part row, the same as the preview kit's: state, where it is and the newest release, links on the right */}
             <ul className="su-parts">
@@ -373,7 +375,7 @@ export function SetupPanel({ alert, onClose, focus }: { alert: Alert; onClose: (
                   <b>{GALACTA_PAK}</b>
                   {/* like the preview kit's line: its version (known once a check finds it matches), where, then What's new */}
                   <span>
-                    {!g ? 'Checking…' : [g.installed && g.up_to_date && g.latest, g.installed ? `in ${where}${g.disabled ? ', switched off' : ''}` : 'Not installed'].filter(Boolean).join(' · ')}
+                    {!g ? (galactaError ? 'Could not read it. Close and reopen Setup to check again.' : 'Checking…') : [g.installed && g.up_to_date && g.latest, g.installed ? `in ${where}${g.disabled ? ', switched off' : ''}` : 'Not installed'].filter(Boolean).join(' · ')}
                     {g?.latest && <> · <button type="button" className="su-link" onClick={() => setNotes("What's new")}>{g.up_to_date === false ? `${g.latest} on GitHub` : `What's new in ${g.latest}`}</button></>}
                   </span>
                 </div>

@@ -36,7 +36,11 @@ export function SnapshotCard({ alert }: { alert: Alert }) {
     : `the ${drops.length} oldest, from ${when(drops[drops.length - 1].created)} to ${when(drops[0].created)}`
   const make = () => run('make', async () => {
     const s = await invoke<Snapshot>('snapshot_create')
-    alert.success('Backup saved', `${plural(s.files, 'file')}, ${size(s.bytes)}.${drops.length ? ` Removed ${dropText}.` : ''} You can verify game files in Steam now.`)
+    // repakxtra: "Removed" only for the old ones really gone (the backend's prune can fail on a file in use)
+    const after = drops.length ? await invoke<Snapshot[]>('snapshot_list').catch(() => null) : []
+    const kept = after ? drops.filter(d => after.some(x => x.id === d.id)).length : 0
+    const pruned = !drops.length ? '' : !after ? ' Could not check that the older ones were removed.' : kept ? ` Could not remove ${plural(kept, 'older backup')}. Delete ${kept === 1 ? 'it' : 'them'} below.` : ` Removed ${dropText}.`
+    alert[kept || (drops.length && !after) ? 'warning' : 'success']('Backup saved', `${plural(s.files, 'file')}, ${size(s.bytes)}.${pruned} You can verify game files in Steam now.`)
   })
   // a .zip of a snapshot or of mod files becomes the newest snapshot (snapshot_import keeps only mod files)
   const importZip = async () => {

@@ -3452,6 +3452,18 @@ body:has(.bs-modal) .toast-container { z-index: 1999; }
 .crash-screen h2 { margin: 0; font-size: 18px; font-weight: 600; }
 .crash-screen p { margin: 0; color: var(--text-secondary); }
 .crash-screen pre { max-width: min(640px, 100%); margin: 4px 0; padding: 10px 12px; border-radius: 8px; background: var(--bg-light); color: var(--text-secondary); font: 12px 'Geist Mono', monospace; white-space: pre-wrap; overflow-wrap: anywhere; text-align: left; }
+.crash-screen-actions { display: flex; gap: 8px; }
+/* Copy setup report's optional notes (ReportNotes.tsx): a fold under the Setup report row, quiet fields like .lp-group */
+.rpn { padding: 0 0 10px; }
+.rpn-fields { display: grid; gap: 10px; padding-top: 10px; }
+.app .rpn-field { display: grid; gap: 6px; margin: 0; }
+.rpn-label { font-size: 12px; font-weight: 500; color: var(--text-secondary); }
+.app .rpn .setting-subtext { margin: 0; padding: 0; }
+.app .rpn-field textarea { width: 100%; box-sizing: border-box; padding: 8px 12px; resize: vertical; min-height: 52px; font: 13px/1.45 var(--font-primary);
+  color: var(--text-primary); background: var(--field-bg); border: 1px solid var(--panel-border); border-radius: var(--quiet-radius); outline: none; margin: 0; display: block; }
+/* the line a toast's Details opened the Logs drawer on (toastLog.ts): an accent tint for a moment, its bar fades */
+.log-drawer-line { transition: background 0.1s, box-shadow 0.6s; }
+.log-drawer-line.is-target { background: color-mix(in srgb, var(--accent-primary), transparent 82%); box-shadow: inset 2px 0 0 var(--accent-primary); }
 html[data-toasts-held] .toast-container { display: none; }   /* the welcome flow is open: no toasts, also ones shown before it (uiPrefs.tsx holdToasts) */
 
 /* Transitions.dev: Banner stacking (toasts, AlertHandler.tsx). Sonner-style: a new banner enters at depth 0 from the

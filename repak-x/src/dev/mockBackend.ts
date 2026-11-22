@@ -327,10 +327,15 @@ if (import.meta.env.DEV && !('__TAURI_INTERNALS__' in window)) {
           not_mounted: worst ? mods.slice(0, 5).map(p => p.replaceAll('\\', '/').toLowerCase().replace(/[.](pak|bak_repak|utoc|ucas)$/, '')) /* setupReport onKey */ : [],
         }
       }
-      case 'xtra_crash_log_text': return 'LogPakFile: Display: Mounted Pak file ...'
+      // NOLOG has no engine log (xtra_crash_log.rs log_status's code)
+      case 'xtra_crash_log_text': if (args?.id === 'UECC-Windows-NOLOG_0000') throw 'log_missing'
+        return Array.from({ length: 200 }, (_, i) => `[2026.11.21-21.0${i % 10}] LogPakFile: Display: Mounted Pak file line ${i}`).join(String.fromCharCode(10))
+      // Copy setup report's Recent activity when there is no crash
+      case 'xtra_recent_activity': { const now = Math.floor(Date.now() / 1000)
+        return { crash: now, from: null, started: null, coverage: 'full', events: [{ t: now - 900, kind: 'install', ok: ['Purple VFX'], failed: [], detail: '' }, { t: now - 300, kind: 'disable', ok: ['Old Hat'], failed: [], detail: '' }] } }
       // localStorage 'mock.crash' = '1': the newest crash the setup report names
       case 'xtra_newest_crash': return localStorage.getItem('mock.crash') === '1'
-        ? { time: Math.floor(Date.now() / 1000) - 3600, crash_type: 'Access Violation', asset_path: '/Game/Marvel/Characters/1026/1026001/Meshes/SK_1026_1026001', seconds_since_start: 412,
+        ? { id: 'UECC-Windows-MOCK2_0000', time: Math.floor(Date.now() / 1000) - 3600, crash_type: 'Access Violation', asset_path: '/Game/Marvel/Characters/1026/1026001/Meshes/SK_1026_1026001', seconds_since_start: 412,
             message: 'Fatal error: [File:D:/build/Engine/Source/Runtime/CoreUObject/ObjectSerializationError.cpp] ObjectSerializationError', detail: 'Serial size mismatch: Got 4096, Expected 4112',
             build_version: '3962284', engine_version: '5.3.2-3962284+++depot_marvel+S10.5_release', cpu: 'AMD Ryzen 5 5600X 6-Core Processor', gpu: 'AMD Radeon RX 6700 XT',
             gpu_driver: 'AMD Software: Adrenalin Edition 26.10.1', rhi: 'D3D12', os: 'Windows 10 (22H2) [10.0.19045.6466]', ram_gb: 16, oom: false, thread: 'FAsyncLoadingThread',
@@ -451,7 +456,7 @@ if (import.meta.env.DEV && !('__TAURI_INTERNALS__' in window)) {
         }
         if (mock.__mockSame) setTimeout(() => emit('xtra_install_same', [{ name: 'Dropped mod', path: data.mods[0].path }]), 200)
         if (slow()) [20, 45, 70, 90, 100].forEach((p, i) => setTimeout(() => emit('install_progress', p), slow() * 0.3 * (i + 1)))
-        setTimeout(() => emit('install_complete', null), 300 + slow() * 1.6)
+        setTimeout(() => emit('install_complete', { failed: [], done: [], all_failed: false, request: args?.request }), 300 + slow() * 1.6) // the install's own id, as main_tauri.rs sends it
         return null
       // repakxtra: Duplicates (xtra_dupes.rs) and the shared dialogs' refusals (xtra_ops.rs):
       // window.__mockDupes = true lists two sets, __mockLocked = part of a path makes its toggle refused as in use,

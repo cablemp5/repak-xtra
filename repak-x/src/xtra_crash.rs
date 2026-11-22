@@ -103,6 +103,8 @@ pub fn xtra_mods_on_at(time: u64) -> Option<Vec<String>> {
 
 #[derive(Serialize)]
 pub struct NewestCrash {
+    /// the UECC folder's name: the report reads this crash's history and engine log by it, never by its time
+    id: String,
     /// Unix seconds when the crash folder was made
     time: u64,
     crash_type: Option<String>,
@@ -148,7 +150,7 @@ pub async fn xtra_newest_crash() -> Option<NewestCrash> {
 }
 
 fn newest_crash() -> Option<NewestCrash> {
-    let (_, folder) = crash_monitor::get_newest_crash_folder()?;
+    let (id, folder) = crash_monitor::get_newest_crash_folder()?;
     let info = crash_monitor::parse_crash_info(&folder, Vec::new())?;
     let (asset_path, error_type, detail) = crash_monitor::parse_error_details(info.error_message.as_deref().unwrap_or(""));
     let time = info.timestamp.duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
@@ -168,6 +170,7 @@ fn newest_crash() -> Option<NewestCrash> {
     let users = user_names();
     let r = |s: Option<String>| s.map(|s| redact(&s, &users));
     Some(NewestCrash {
+        id,
         time,
         crash_type: r(error_type.or(info.crash_type)),
         character_id: info.error_message.as_deref().and_then(crash_monitor::extract_character_id),

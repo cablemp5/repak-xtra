@@ -31,6 +31,7 @@ import { IoIosSettings } from "react-icons/io"
 import { REPAKXTRA_VERSION } from '../custom/version' // repakxtra
 import CableDiscord, { RepakXDiscord } from '../custom/CableDiscord' // repakxtra: both servers as quiet cards
 import CopySetupReport from '../custom/CopySetupReport' // repakxtra: setup report for help channels
+import ReportNotes from '../custom/ReportNotes' // repakxtra: its optional notes
 import BetaNote from '../custom/BetaNote' // repakxtra
 import AppFiles from '../custom/AppFiles' // repakxtra: Check app files and Repair
 import StorageCleanup from '../custom/StorageCleanup' // repakxtra: Settings > Storage
@@ -528,6 +529,7 @@ export default function SettingsPanel({ settings, onSave, onClose, theme, setThe
                       </div>
                       <CopySetupReport alert={alert} />
                     </div>
+                    <ReportNotes />
                   </div>
                 </div>
 

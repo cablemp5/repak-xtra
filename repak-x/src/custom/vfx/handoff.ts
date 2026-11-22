@@ -26,8 +26,11 @@ export async function openVfxWindow() {
   const existing = await WebviewWindow.getByLabel('vfx-updater')
   if (existing) { await existing.unminimize().catch(() => {}); await existing.setFocus(); return }
   const w = new WebviewWindow('vfx-updater', { url: '/vfx-updater', title: 'Mod Updater', width: 760, height: 820, minWidth: 600, minHeight: 560, center: true, resizable: true, decorations: false })
-  w.once('tauri://error', e => console.error('[VFX] Failed to create window:', e))
+  // repakxtra: the window fails after this returns, so App hears it as an event and says it (every opener, one toast)
+  w.once('tauri://error', e => { console.error('[VFX] Failed to create window:', e); window.dispatchEvent(new CustomEvent(VFX_WINDOW_FAILED, { detail: String((e as { payload?: unknown }).payload ?? e) })) })
 }
+/** window event: the Mod Updater window could not be made (detail: the error) */
+export const VFX_WINDOW_FAILED = 'repakxtra:vfx-window-failed'
 
 /** Hands mods to the VFX window and opens it: `start` updates them at once (the Update VFX mods notice). */
 export async function fixInVfxWindow(paths: string[], start: boolean) {
