@@ -27,3 +27,6 @@
 - Fixed Moved N mods and Backup saved claiming more than was done, and the game-close wait waiting for ever when the game could not be checked
 - Fixed a game folder that could not be saved still being used until restart
 - Changed the Mod Updater's Failed badge to orange, matching the Failed heading
+- Fixed the first launch after each daily character database check reading every mod again (4 to 5 seconds at 350 mods), and the check saving a new backup file every day when nothing was new
+- Fixed folders, the game check, and the folder watcher waiting for every mod's details at launch
+- Fixed an install listing the mods folder 5 times: it now lists it 3 times
