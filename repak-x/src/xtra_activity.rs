@@ -1,17 +1,22 @@
 //! repakxtra: what changed before a crash (Settings > Crash reports' What changed?, and Copy setup report). The mod
-//! operations the app saw finish (installs, Mod Updater results, on and off, deletes, loadout switches) and the app or
-//! game updates it noticed, each with when and how it ended. Local and bounded (the newest MAX_EVENTS), mod names only:
-//! never a folder, a user name or an id. The game sessions xtra_crash.rs keeps say when the game started and ended.
+//! operations the app saw finish (installs, replacements, Mod Updater results, on and off, deletes, loadout switches) and
+//! the app or game updates it noticed, each with when and how it ended. Local and bounded (the newest MAX_EVENTS, at most
+//! MAX_NAMES names each), mod names only: never a folder, a user name or an id. The game sessions xtra_crash.rs keeps say
+//! when the game started and ended.
+//! Kept in memory and saved by a background writer a moment after a change, so a loadout switch of a hundred mods does
+//! not rewrite the file a hundred times. A file that cannot be read (locked, damaged) is never replaced by an empty one.
 
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
 const MAX_EVENTS: usize = 2000;
+const MAX_NAMES: usize = 50;
 
 /// One finished operation. `ok`: the mods it changed, `failed`: the ones it tried and could not (a partial batch has
-/// both). `detail`: a loadout's name, a version, a game build.
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+/// both), at most MAX_NAMES each, with `n_ok`/`n_failed` the full counts. `detail`: a loadout's name, a version, a game
+/// build. `from`: when a batch began (a loadout switch: its own toggles are between `from` and `t`).
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Default)]
 pub struct Event {
     pub t: u64,
     pub kind: String,
@@ -20,12 +25,18 @@ pub struct Event {
     #[serde(default)]
     pub failed: Vec<String>,
     #[serde(default)]
+    pub n_ok: usize,
+    #[serde(default)]
+    pub n_failed: usize,
+    #[serde(default)]
     pub detail: String,
+    #[serde(default)]
+    pub from: u64,
 }
 
 #[derive(Serialize, Deserialize, Default)]
 struct Store {
-    /// when recording began: before it nothing is known
+    /// when what is kept begins: before it nothing is known (recording began, or older events were let go)
     since: u64,
     #[serde(default)]
     events: Vec<Event>,
@@ -40,79 +51,128 @@ fn store_path() -> PathBuf {
     dirs::config_dir().unwrap_or_else(|| PathBuf::from(".")).join("Repak-X").join("repakxtra-activity.json")
 }
 
-static WRITING: Mutex<()> = Mutex::new(());
+/// The store in memory: None until first read. `Err` when the file exists but could not be read: nothing is written then.
+static STORE: Mutex<Option<Result<Store, String>>> = Mutex::new(None);
+static SAVING: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
 fn now() -> u64 {
     std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_secs())
 }
 
-fn load(path: &Path) -> Store {
-    std::fs::read(path).ok().and_then(|b| serde_json::from_slice(&b).ok()).unwrap_or_default()
+fn read(path: &Path) -> Result<Store, String> {
+    match std::fs::read(path) {
+        Ok(b) => serde_json::from_slice(&b).map_err(|e| e.to_string()),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(Store::default()),
+        Err(e) => Err(e.to_string()),
+    }
 }
 
-fn save(path: &Path, s: &Store) {
-    let tmp = path.with_extension("json.tmp");
-    if std::fs::write(&tmp, serde_json::to_vec(s).unwrap_or_default()).is_ok() {
-        let _ = std::fs::rename(&tmp, path);
+/// Runs `f` on the store in memory (read once). Nothing when the file could not be read: a locked or damaged file stays.
+fn with_store<T>(f: impl FnOnce(&mut Store) -> T) -> Option<T> {
+    let mut g = STORE.lock().unwrap_or_else(|e| e.into_inner());
+    if g.is_none() { *g = Some(read(&store_path())); }
+    match g.as_mut() {
+        Some(Ok(s)) => Some(f(s)),
+        Some(Err(e)) => { log::warn!("[activity] not recording, the history file could not be read: {e}"); None }
+        None => None,
     }
+}
+
+/// Saves the store a moment later, once, however many changes come meanwhile.
+fn save_soon() {
+    if SAVING.swap(true, std::sync::atomic::Ordering::AcqRel) { return; }
+    std::thread::spawn(|| {
+        std::thread::sleep(std::time::Duration::from_millis(400));
+        SAVING.store(false, std::sync::atomic::Ordering::Release);
+        let bytes = with_store(|s| serde_json::to_vec(s).unwrap_or_default());
+        if let Some(bytes) = bytes {
+            let path = store_path();
+            let tmp = path.with_extension("json.tmp");
+            if let Some(dir) = path.parent() { let _ = std::fs::create_dir_all(dir); } // a fresh profile has no Repak-X folder yet
+            if let Err(e) = std::fs::write(&tmp, bytes).and_then(|_| std::fs::rename(&tmp, &path)) {
+                log::warn!("[activity] could not save the history: {e}");
+            }
+        }
+    });
+}
+
+/// Drops events past MAX_EVENTS, moving `since` to the newest one let go: a span before it is no longer covered.
+fn push_into(s: &mut Store, e: Event) {
+    if s.since == 0 { s.since = e.t; }
+    s.events.push(e);
+    let skip = s.events.len().saturating_sub(MAX_EVENTS);
+    if skip > 0 {
+        s.since = s.since.max(s.events[skip - 1].t);
+        s.events.drain(..skip);
+    }
+}
+
+/// A text with folders taken out (a path keeps only its last part) and no user name.
+fn plain(text: &str) -> String {
+    let no_dirs = regex_lite::Regex::new(r"[A-Za-z]:[\\/](?:[^\\/\r\n]*[\\/])*").map(|re| re.replace_all(text, "").into_owned()).unwrap_or_else(|_| text.to_string());
+    crate::xtra_crash::redact(&no_dirs, &crate::xtra_crash::user_names())
 }
 
 /// A mod's name as the Library shows it: the file name without folders, extension or priority suffix, and no user name.
 pub(crate) fn mod_name(path: &str) -> String {
     let file = path.rsplit(['\\', '/']).next().unwrap_or(path);
-    let stem = [".pak", ".bak_repak", ".utoc", ".ucas", ".zip", ".rar", ".7z"].iter().find_map(|x| {
-        file.len().checked_sub(x.len()).filter(|&at| file[at..].eq_ignore_ascii_case(x)).map(|at| &file[..at])
-    }).unwrap_or(file);
-    let stem = regex_lite::Regex::new(r"(?i)(_\d+)?_P$").map(|re| re.replace(stem, "").into_owned()).unwrap_or_else(|_| stem.to_string());
+    let lower = file.to_ascii_lowercase();
+    // the extensions are ASCII, so where one starts is a character boundary
+    let stem = [".pak", ".bak_repak", ".utoc", ".ucas", ".zip", ".rar", ".7z"].iter().find(|x| lower.ends_with(*x)).map_or(file, |x| &file[..file.len() - x.len()]);
+    static PRIORITY: std::sync::OnceLock<Option<regex_lite::Regex>> = std::sync::OnceLock::new();
+    let stem = PRIORITY.get_or_init(|| regex_lite::Regex::new(r"(?i)(_\d+)?_P$").ok()).as_ref().map_or_else(|| stem.to_string(), |re| re.replace(stem, "").into_owned());
     crate::xtra_crash::redact(&stem, &crate::xtra_crash::user_names())
 }
 
-fn push(path: &Path, e: Event) {
-    let _one = WRITING.lock().unwrap_or_else(|e| e.into_inner());
-    let mut s = load(path);
-    if s.since == 0 { s.since = e.t; }
-    s.events.push(e);
-    let skip = s.events.len().saturating_sub(MAX_EVENTS);
-    s.events.drain(..skip);
-    save(path, &s);
+fn event(t: u64, kind: &str, ok: &[String], failed: &[String], detail: &str, from: u64) -> Event {
+    let names = |v: &[String]| v.iter().take(MAX_NAMES).map(|p| mod_name(p)).collect::<Vec<_>>();
+    Event { t, kind: kind.into(), ok: names(ok), failed: names(failed), n_ok: ok.len(), n_failed: failed.len(), detail: plain(detail), from }
 }
 
 /// Records an operation that finished: `ok` and `failed` are mod paths or names (kept as names only). Nothing when both
 /// are empty and there is no detail (nothing changed).
 pub(crate) fn record(kind: &str, ok: &[String], failed: &[String], detail: &str) {
-    if ok.is_empty() && failed.is_empty() && detail.is_empty() { return; }
-    let names = |v: &[String]| v.iter().map(|p| mod_name(p)).collect::<Vec<_>>();
-    push(&store_path(), Event { t: now(), kind: kind.into(), ok: names(ok), failed: names(failed), detail: crate::xtra_crash::redact(detail, &crate::xtra_crash::user_names()) });
+    record_from(kind, ok, failed, detail, 0)
 }
 
-/// The frontend's operations (a loadout switch, a Mod Updater result): only kinds it may send.
+fn record_from(kind: &str, ok: &[String], failed: &[String], detail: &str, from: u64) {
+    if ok.is_empty() && failed.is_empty() && detail.is_empty() { return; }
+    let e = event(now(), kind, ok, failed, detail, from);
+    if with_store(|s| push_into(s, e)).is_some() { save_soon(); }
+}
+
+/// The frontend's operations (a loadout switch, a Mod Updater result): only kinds it may send. `started`: when its batch
+/// began.
 #[tauri::command(async)]
-pub fn xtra_activity_record(kind: String, ok: Vec<String>, failed: Vec<String>, detail: Option<String>) -> Result<(), String> {
+pub fn xtra_activity_record(kind: String, ok: Vec<String>, failed: Vec<String>, detail: Option<String>, started: Option<u64>) -> Result<(), String> {
     if !["loadout", "update", "update_failed"].contains(&kind.as_str()) { return Err(format!("not an activity kind: {kind}")); }
-    record(&kind, &ok, &failed, detail.as_deref().unwrap_or(""));
+    record_from(&kind, &ok, &failed, detail.as_deref().unwrap_or(""), started.unwrap_or(0));
     Ok(())
 }
 
-/// The game started: an app or game update since the last start is recorded first, so it shows before that launch.
-pub(crate) fn note_versions(mods_dir: &Path) {
-    let path = store_path();
-    let _one = WRITING.lock().unwrap_or_else(|e| e.into_inner());
-    let mut s = load(&path);
+/// The game started at `start`: an app or game update since the last start is recorded just before it, so it shows
+/// before that launch.
+pub(crate) fn note_versions(mods_dir: &Path, start: u64) {
     let app = crate::xtra_update::version().to_string();
     let game = crate::xtra_broken::paks_dir(mods_dir).and_then(|p| crate::xtra_vfx::game_cl(&p)).map(|c| c.to_string()).unwrap_or_default();
-    let t = now();
-    if s.since == 0 { s.since = t; }
-    // the first start only learns them: an update is a change from a version seen before
-    if !s.app.is_empty() && s.app != app { s.events.push(Event { t, kind: "app_update".into(), ok: vec![], failed: vec![], detail: app.clone() }); }
-    if !s.game.is_empty() && !game.is_empty() && s.game != game { s.events.push(Event { t, kind: "game_update".into(), ok: vec![], failed: vec![], detail: game.clone() }); }
-    s.app = app;
-    if !game.is_empty() { s.game = game; }
-    save(&path, &s);
+    let t = start.saturating_sub(1);
+    let changed = with_store(|s| {
+        // the first start only learns them: an update is a change from a version seen before
+        let mut changed = false;
+        if !s.app.is_empty() && s.app != app { push_into(s, event(t, "app_update", &[], &[], &app, 0)); changed = true; }
+        if !s.game.is_empty() && !game.is_empty() && s.game != game { push_into(s, event(t, "game_update", &[], &[], &game, 0)); changed = true; }
+        changed |= s.app != app || (!game.is_empty() && s.game != game) || s.since == 0;
+        if s.since == 0 { s.since = t; }
+        s.app = app;
+        if !game.is_empty() { s.game = game; }
+        changed
+    });
+    if changed == Some(true) { save_soon(); }
 }
 
 /// What changed before one crash: from the previous observed game launch through the crash. `coverage`: "full" (the
-/// whole span was recorded), "partial" (recording began inside it, or no earlier launch is known), "none" (nothing was
-/// recorded before the crash).
+/// whole span was recorded and the crash fell in an observed session), "partial" (recording began inside the span, no
+/// earlier launch is known, or the app did not see the session it crashed in), "none" (nothing recorded before it).
 #[derive(Serialize, Debug, PartialEq)]
 pub struct Timeline {
     pub crash: u64,
@@ -125,41 +185,43 @@ pub struct Timeline {
     pub events: Vec<Event>,
 }
 
-/// Pure: the timeline for a crash at `crash` from the sessions (start times), the store's `since`, and its events.
+/// Pure: the timeline for a crash at `crash` from the sessions (start and end), the store's `since`, and its events.
 fn timeline_of(crash: u64, starts: &[(u64, Option<u64>)], since: u64, events: &[Event]) -> Timeline {
     // the session it crashed in: started before it and not ended long before it (xtra_crash.rs on_at's rule)
     let session = starts.iter().filter(|(s, e)| *s <= crash && crash <= e.map_or(s + 6 * 3600, |e| e + 120)).map(|(s, _)| *s).max();
     let from = starts.iter().map(|(s, _)| *s).filter(|s| *s < session.unwrap_or(crash)).max();
-    let coverage = if since == 0 || since > crash { "none" } else if from.is_some_and(|f| since <= f) { "full" } else { "partial" };
-    let events = events.iter().filter(|e| from.is_none_or(|f| e.t > f) && e.t <= crash).cloned().collect();
+    let coverage = if since == 0 || since > crash { "none" } else if session.is_some() && from.is_some_and(|f| since <= f) { "full" } else { "partial" };
+    // strictly before the crash second: one finished in the same second may have come after it
+    let events = if coverage == "none" { Vec::new() } else { events.iter().filter(|e| from.is_none_or(|f| e.t > f) && e.t < crash).cloned().collect() };
     Timeline { crash, from, started: session, coverage, events }
 }
 
 /// The timeline of the crash whose folder is `id` (xtra_recent_crashes' id): its own time, never another crash's.
 #[tauri::command(async)]
 pub fn xtra_crash_timeline(id: String) -> Result<Timeline, String> {
-    if id.is_empty() || id.contains(['/', '\\']) || id.contains("..") { return Err("not a crash report".into()); }
+    if id.is_empty() || id.starts_with('.') || id.contains(['/', '\\', ':']) { return Err("not a crash report".into()); }
     let folder = crate::crash_monitor::get_crash_log_path().join(&id);
-    let crash = std::fs::metadata(&folder).and_then(|m| m.created()).map_err(|_| "That crash report is gone.".to_string())?
+    // the report's own folder, never a link or a file
+    let crash = std::fs::symlink_metadata(&folder).ok().filter(|m| m.is_dir()).ok_or_else(|| "That crash report is gone.".to_string())?
+        .created().map_err(|_| "That crash report is gone.".to_string())?
         .duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_secs());
-    let s = load(&store_path());
-    Ok(timeline_of(crash, &crate::xtra_crash::session_times(), s.since, &s.events))
+    with_store(|s| timeline_of(crash, &crate::xtra_crash::session_times(), s.since, &s.events)).ok_or_else(|| "The history could not be read.".to_string())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    fn ev(t: u64, kind: &str) -> Event { Event { t, kind: kind.into(), ok: vec!["A".into()], failed: vec![], detail: String::new() } }
+    fn ev(t: u64, kind: &str) -> Event { Event { t, kind: kind.into(), ok: vec!["A".into()], ..Default::default() } }
 
     #[test]
     fn a_crash_gets_the_changes_since_the_launch_before_its_own() {
         // launches at 100 (ended 200) and 500 (crashed at 600): changes from after 100 through 600
         let starts = [(100, Some(200)), (500, None)];
-        let events = [ev(50, "install"), ev(150, "enable"), ev(400, "install"), ev(550, "disable"), ev(700, "install")];
+        let events = [ev(50, "install"), ev(150, "enable"), ev(400, "install"), ev(550, "disable"), ev(600, "install"), ev(700, "install")];
         let t = timeline_of(600, &starts, 10, &events);
         assert_eq!((t.from, t.started, t.coverage), (Some(100), Some(500), "full"));
-        assert_eq!(t.events.iter().map(|e| e.t).collect::<Vec<_>>(), vec![150, 400, 550], "never after the crash, never before the earlier launch");
+        assert_eq!(t.events.iter().map(|e| e.t).collect::<Vec<_>>(), vec![150, 400, 550], "never after the crash or in its second, never before the earlier launch");
         // an older crash opened later still stops at its own time
         let older = timeline_of(180, &starts, 10, &events);
         assert_eq!((older.from, older.started), (None, Some(100)));
@@ -175,6 +237,17 @@ mod tests {
         assert_eq!(timeline_of(600, &starts, 300, &[]).coverage, "partial", "recording began inside the span");
         let empty = timeline_of(600, &starts, 50, &[]);
         assert_eq!((empty.coverage, empty.events.len()), ("full", 0), "covered and empty: No changes recorded");
+        // the app did not see the session it crashed in (the crash is long after the last one ended)
+        assert_eq!(timeline_of(9000, &[(100, Some(200))], 50, &[]).coverage, "partial", "an unobserved session is not full coverage");
+    }
+
+    #[test]
+    fn letting_go_of_old_events_moves_since() {
+        let mut s = Store { since: 5, ..Default::default() };
+        for t in 0..(MAX_EVENTS as u64 + 3) { push_into(&mut s, ev(10 + t, "enable")); }
+        assert_eq!(s.events.len(), MAX_EVENTS);
+        assert_eq!(s.since, 12, "the newest event let go");
+        assert_eq!(timeline_of(30, &[(8, Some(9)), (20, None)], s.since, &s.events).coverage, "partial", "an evicted span is never full");
     }
 
     #[test]
@@ -182,5 +255,10 @@ mod tests {
         assert_eq!(mod_name(r"C:\Games\Paks\~mods\Purple VFX_9999999_P.pak"), "Purple VFX");
         assert_eq!(mod_name("D:/x/Cool_P.bak_repak"), "Cool");
         assert_eq!(mod_name("Plain"), "Plain");
+        assert_eq!(mod_name("猫猫猫.utoc"), "猫猫猫", "never slices through a character");
+        assert_eq!(mod_name("猫"), "猫");
+        assert_eq!(plain(r"Mine C:\Users\Alice\Private Client\Draft.pak on"), "Mine Draft.pak on", "a path in a loadout name keeps only its last part");
+        let e = event(1, "install", &vec!["m".to_string(); MAX_NAMES + 5], &[], "", 0);
+        assert_eq!((e.ok.len(), e.n_ok), (MAX_NAMES, MAX_NAMES + 5), "names are capped, the count is kept");
     }
 }

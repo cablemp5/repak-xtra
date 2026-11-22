@@ -3774,6 +3774,7 @@ async fn update_mod(
     window.emit("install_complete", ()).ok();
 
     info!("update_mod completed successfully");
+    xtra_activity::record("replace", &[new_mod_path.to_string_lossy().to_string()], &[], ""); // repakxtra: What changed?
 
     Ok(UpdateModResult {
         new_mod_path: new_mod_path.to_string_lossy().to_string(),
@@ -5433,7 +5434,7 @@ async fn check_game_running(state: State<'_, Arc<Mutex<AppState>>>) -> Result<bo
     if WAS.swap(running, std::sync::atomic::Ordering::Relaxed) != running {
         let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_secs());
         let mods = state.lock().unwrap().game_path.clone();
-        std::thread::spawn(move || if running { xtra_activity::note_versions(&mods); xtra_crash::remember_on(&mods, now) } else { xtra_crash::remember_end(now) });
+        std::thread::spawn(move || if running { xtra_activity::note_versions(&mods, now); xtra_crash::remember_on(&mods, now) } else { xtra_crash::remember_end(now) });
     }
     if running {
         crate::xtra_previews::stop_kept(false); // repakxtra: a game started outside the app (Steam) gets the kept preview helpers' memory too

@@ -13,7 +13,7 @@ export default function CrashChanges({ id }: { id: string }) {
   // read when first opened, then kept: it is history, it does not change under the row
   const [t, setT] = useState<Timeline | null | undefined>(undefined)
   const toggle = () => {
-    if (!open && t === undefined) void crashTimeline(id).then(setT)
+    if (!open && !t) { setT(undefined); void crashTimeline(id).then(setT) } // unread or unreadable: read again
     setOpen(!open)
   }
   const rows = t ? timelineRows(t) : []

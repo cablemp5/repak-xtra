@@ -192,11 +192,13 @@ export async function fixVfxMod(o: FixOptions): Promise<VfxReport> {
     report.decrypted = true
     report.error = undefined
     log(`Decrypted ${stem(o.modPath)}: the game's Season 11 check can read it now. The encrypted copy is in Recently deleted.`, 'success')
+    void recordActivity('update', [report.output], [], 'decrypted')
   } catch (e) {
     report.status = 'failed'
     report.error = `Not decrypted: ${String(e).replace(/[.!]?\s*$/, '')}. The mod was not changed. Try again later.`
     log(report.error, 'warning')
     await invoke('xtra_vfx_outcome', { modPath: o.modPath, status: 'failed', error: report.error, next: 'again', usmap: o.usmapPath, game: null }).then(() => { report.kept = true }, () => {})
+    void recordActivity('update_failed', [], [o.modPath])
   }
   // only a decrypt that worked says how long it took: a failed one never counts as a rebuild's time (ms 0 is never recorded)
   if (direct && report.decrypted) report.ms = performance.now() - t0

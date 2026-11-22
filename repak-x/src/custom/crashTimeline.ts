@@ -3,33 +3,37 @@
 // the crash. A batch (a loadout switch, several mods turned on at once) is one row.
 import { invoke } from '@tauri-apps/api/core'
 
-export type ActivityEvent = { t: number; kind: string; ok: string[]; failed: string[]; detail: string }
+/** n_ok, n_failed: the full counts (the names are capped), from: when a batch began */
+export type ActivityEvent = { t: number; kind: string; ok: string[]; failed: string[]; detail: string; n_ok?: number; n_failed?: number; from?: number }
 export type Timeline = { crash: number; from?: number | null; started?: number | null; coverage: 'full' | 'partial' | 'none'; events: ActivityEvent[] }
 export type TimelineRow = { t: number; text: string; problem?: boolean }
 
 /** The timeline of one crash, by its report's stable id (never by time). Null when it could not be read. */
 export const crashTimeline = (id: string) => invoke<Timeline>('xtra_crash_timeline', { id }).catch(() => null)
+/** What a timeline that could not be read says (the report is gone, or the history file could not be read). */
+export const UNREADABLE = "This crash's history could not be read."
 
 /** Records an operation the frontend finished (a loadout switch, a Mod Updater result) for What changed? */
-export const recordActivity = (kind: 'loadout' | 'update' | 'update_failed', ok: string[], failed: string[] = [], detail = '') =>
-  invoke('xtra_activity_record', { kind, ok, failed, detail }).catch(() => {})
+export const recordActivity = (kind: 'loadout' | 'update' | 'update_failed', ok: string[], failed: string[] = [], detail = '', started?: number) =>
+  invoke('xtra_activity_record', { kind, ok, failed, detail, started: started ?? null }).catch(() => {})
 
-const names = (list: string[], max = 2) => (list.length <= max ? list.join(', ') : `${list.slice(0, max).join(', ')} and ${list.length - max} more`)
+const names = (list: string[], total = list.length, max = 2) => { const shown = list.slice(0, max); return total <= shown.length ? shown.join(', ') : `${shown.join(', ')} and ${total - shown.length} more` }
 const count = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`
 
 /** One event in words: "Installed Purple VFX", "Turned on 12 mods", "Installed 3 of 5 mods (2 failed: A, B)". Pure. */
 function words(e: ActivityEvent): string {
-  const all = e.ok.length + e.failed.length
-  const subject = (list: string[]) => (list.length === 1 ? list[0] : count(list.length, 'mod'))
-  const failedPart = e.failed.length ? ` (${e.failed.length} failed: ${names(e.failed)})` : ''
+  const nOk = Math.max(e.n_ok ?? 0, e.ok.length), nFailed = Math.max(e.n_failed ?? 0, e.failed.length)
+  const subject = (list: string[], n: number) => (n === 1 && list.length ? list[0] : count(n, 'mod'))
+  const failedPart = nFailed ? ` (${nFailed} failed: ${names(e.failed, nFailed)})` : ''
   switch (e.kind) {
-    case 'install': return e.ok.length ? `Installed ${e.failed.length ? `${e.ok.length} of ${count(all, 'mod')}` : subject(e.ok)}${failedPart}` : `Install failed for ${subject(e.failed)}`
-    case 'enable': return `Turned on ${subject(e.ok)}`
-    case 'disable': return `Turned off ${subject(e.ok)}`
-    case 'delete': return `Moved ${subject(e.ok)} to Recently deleted`
-    case 'update': return `${e.detail === 'partial' ? 'Partly updated' : 'Updated'} ${subject(e.ok)} in the Mod Updater`
-    case 'update_failed': return `Mod Updater could not update ${subject(e.failed)}, which stayed as ${e.failed.length === 1 ? 'it was' : 'they were'}`
-    case 'loadout': return `Turned ${e.detail || 'a loadout'}${e.ok.length ? ` (${count(e.ok.length, 'mod')} switched)` : ''}${failedPart}`
+    case 'install': return nOk ? `Installed ${nFailed ? `${nOk} of ${count(nOk + nFailed, 'mod')}` : subject(e.ok, nOk)}${failedPart}` : `Install failed for ${subject(e.failed, nFailed)}`
+    case 'replace': return `Replaced ${subject(e.ok, nOk)} with a new copy`
+    case 'enable': return `Turned on ${subject(e.ok, nOk)}`
+    case 'disable': return `Turned off ${subject(e.ok, nOk)}`
+    case 'delete': return `Moved ${subject(e.ok, nOk)} to Recently deleted`
+    case 'update': return `${e.detail === 'partial' ? 'Partly updated' : e.detail === 'decrypted' ? 'Decrypted' : 'Updated'} ${subject(e.ok, nOk)} in the Mod Updater`
+    case 'update_failed': return `Mod Updater could not update ${subject(e.failed, nFailed)}, which stayed as ${nFailed === 1 ? 'it was' : 'they were'}`
+    case 'loadout': return nOk ? `Turned ${e.detail || 'a loadout'} (${count(nOk, 'mod')} switched)${failedPart}` : `Could not turn ${e.detail || 'a loadout'}${failedPart}`
     case 'app_update': return `repakxtra updated to ${e.detail}`
     case 'game_update': return `The game updated${e.detail ? ` (build ${e.detail})` : ''}`
     default: return e.kind
@@ -41,33 +45,38 @@ function words(e: ActivityEvent): string {
 export function timelineRows(t: Timeline): TimelineRow[] {
   const loadouts = t.events.filter(e => e.kind === 'loadout')
   // a loadout's own switches (recorded by each toggle) are its row, not rows of their own
-  const own = (e: ActivityEvent) => (e.kind === 'enable' || e.kind === 'disable') && loadouts.some(l => l.t >= e.t && l.t - e.t <= 120 && e.ok.every(n => l.ok.includes(n)))
+  const own = (e: ActivityEvent) => (e.kind === 'enable' || e.kind === 'disable') && loadouts.some(l => l.t >= e.t && e.t >= (l.from || l.t - 120) && e.ok.every(n => l.ok.includes(n)))
   const merged: ActivityEvent[] = []
   for (const e of t.events.filter(e => !own(e))) {
     const last = merged[merged.length - 1]
     if (last && (e.kind === 'enable' || e.kind === 'disable' || e.kind === 'delete') && last.kind === e.kind && e.t - last.t <= 60) {
-      merged[merged.length - 1] = { ...last, t: e.t, ok: [...last.ok, ...e.ok], failed: [...last.failed, ...e.failed] }
+      merged[merged.length - 1] = { ...last, t: e.t, ok: [...last.ok, ...e.ok], failed: [...last.failed, ...e.failed],
+        n_ok: Math.max(last.n_ok ?? 0, last.ok.length) + Math.max(e.n_ok ?? 0, e.ok.length), n_failed: Math.max(last.n_failed ?? 0, last.failed.length) + Math.max(e.n_failed ?? 0, e.failed.length) }
     } else merged.push(e)
   }
-  const rows: TimelineRow[] = merged.map(e => ({ t: e.t, text: words(e), problem: e.failed.length > 0 }))
+  const rows: TimelineRow[] = merged.map(e => ({ t: e.t, text: words(e), problem: e.failed.length > 0 || (e.n_failed ?? 0) > 0 || e.detail === 'partial' }))
   if (t.started) rows.push({ t: t.started, text: 'Started the game' })
   return rows.sort((a, b) => b.t - a.t)
 }
 
 /** What the timeline can say: why it is empty, or how much of the span it covers. Pure. */
 export function coverageText(t: Timeline | null, rows: number): string | null {
-  if (!t || t.coverage === 'none') return 'No history available for this crash.'
-  if (t.coverage === 'partial') return t.from ? 'History only covers part of the time before this crash.' : 'No earlier game launch was recorded, so changes before this one may be missing.'
+  if (!t) return UNREADABLE
+  if (t.coverage === 'none') return 'No history available for this crash.'
+  if (t.coverage === 'partial') return !t.started ? 'This launch was not seen by the app, so the history may be incomplete.' : t.from ? 'History only covers part of the time before this crash.' : 'No earlier game launch was recorded, so changes before this one may be missing.'
   return rows === 0 || (rows === 1 && t.started) ? 'No changes recorded.' : null
 }
 
-export const whenText = (secs: number) => new Date(secs * 1000).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
+/** "Nov 21, 9:42 PM", with the year when it is not this year. */
+export const whenText = (secs: number) => { const d = new Date(secs * 1000); return d.toLocaleString(undefined, { month: 'short', day: 'numeric', ...(d.getFullYear() !== new Date().getFullYear() ? { year: 'numeric' } : {}), hour: 'numeric', minute: '2-digit' }) }
 
-/** Copy setup report's lines: newest first, the note first. No names beyond mod names. Pure. */
+/** Copy setup report's lines: newest first, the note first, at most MAX_LINES rows so the report stays short. No names
+ *  beyond mod names. Pure. */
+const MAX_LINES = 15
 export function timelineLines(t: Timeline | null): string[] {
-  const rows = t ? timelineRows(t) : []
+  const rows = (t ? timelineRows(t) : []).filter((r, _, all) => r.text !== 'Started the game' || all.length > 1)
   const note = coverageText(t, rows.length)
-  return [...(note ? [note] : []), ...rows.filter(r => r.text !== 'Started the game' || rows.length > 1).map(r => `${whenText(r.t)}  ${r.text}`)]
+  return [...(note ? [note] : []), ...rows.slice(0, MAX_LINES).map(r => `${whenText(r.t)}  ${r.text}`), ...(rows.length > MAX_LINES ? [`and ${rows.length - MAX_LINES} earlier changes (Settings > Crash reports shows them all)`] : [])]
 }
 
 /** The note under the list: a timeline is not a diagnosis. */
@@ -83,5 +92,7 @@ if (import.meta.env.DEV) {
   console.assert(rows[0] === 'Started the game' && rows.includes('Installed Purple VFX') && rows.includes('Turned on 2 mods'), 'plain rows, a batch is one row', rows)
   console.assert(rows.includes('Installed 3 of 5 mods (2 failed: F, G)') && rows.includes('Turned Panther looks on (2 mods switched)') && !rows.includes('Turned off X'), 'partial batches stay distinct, a loadout holds its switches', rows)
   console.assert(coverageText({ ...tl, coverage: 'none' }, 0) === 'No history available for this crash.' && coverageText({ ...tl, events: [] }, 1) === 'No changes recorded.', 'empty states')
-  console.assert(coverageText({ ...tl, from: null, coverage: 'partial' }, 2)!.startsWith('No earlier game launch'), 'no earlier launch said')
+  console.assert(coverageText({ ...tl, from: null, coverage: 'partial' }, 2)!.startsWith('No earlier game launch') && coverageText(null, 0) === UNREADABLE, 'no earlier launch said, unreadable apart from no history')
+  const capped = timelineRows({ ...tl, started: null, events: [e(10, 'install', ['A', 'B'], ['C'], ''), e(20, 'loadout', [], ['Z'], 'Mine on')].map(x => (x.kind === 'install' ? { ...x, n_ok: 120, n_failed: 3 } : x)) }).map(r => r.text)
+  console.assert(capped.includes('Installed 120 of 123 mods (3 failed: C and 2 more)') && capped.includes('Could not turn Mine on (1 failed: Z)'), 'full counts beyond the capped names, a loadout that switched nothing', capped)
 }
