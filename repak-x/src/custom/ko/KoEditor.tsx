@@ -12,13 +12,15 @@ import { readLoadouts, useView, writeLoadouts } from '../loadoutStore'
 import { useKoHeroPortraits } from './portraits'
 import { cue } from '../sounds'
 import { modalOpen } from '../dialogFocus'
-import { type Role, hexOf, shiftHue } from './model'
+import { type Role, colorsFrom, hexOf, readWidget, shiftHue } from './model'
 import { draw, duration, frameFor } from './render'
-import { type KoStep, buildKo, koStem } from './export'
+import { type KoStep, buildKo, koStem, readAsset } from './export'
 import { type Hero, type Loaded, type Progress, forgetHero, loadHero, usmapPath } from './load'
 import sceneBackground from './scene-background.jpg'
 import { randomizeColors } from './randomize'
 import RandomizeButton from './RandomizeButton'
+import { takeKoOpen, useKoOpen } from './openMod'
+import ConfirmRow from '../ConfirmRow'
 import './ko.css'
 import { useSkeletonFill } from '../useSkeletonFill'
 
@@ -64,11 +66,12 @@ function Editor({ onInstall, alert, blocked, shown }: KoEditorProps & { shown: b
   const [init, setInit] = useState<{ step: string; at: number } | null>(() => ({ step: "Getting the game's property layout", at: Date.now() }))
   const first = useRef(true) // the first hero after starting: its bar goes on from where starting left it
   const [, setNow] = useState(0)
+  const [opening, setOpening] = useState<{ name: string; since: number } | null>(null) // Open in KO Editor: the mod being read
   useEffect(() => { // the bar creeps on while a step with no count of its own runs
-    if (!loading && !init) return
+    if (!loading && !init && !opening) return
     const t = setInterval(() => setNow(Date.now()), 120)
     return () => clearInterval(t)
-  }, [loading, init])
+  }, [loading, init, opening])
   const [loadError, setLoadError] = useState<string | null>(null)
   const [saved, setSaved] = useState<Saved>(readSaved)
   const [focus, setFocus] = useState<string[] | null>(null)
@@ -110,11 +113,45 @@ function Editor({ onInstall, alert, blocked, shown }: KoEditorProps & { shown: b
   const [, mainSaturation, mainValue] = hexToHsv(defaultMain.slice(1))
   const main = '#' + hsvToHex(mainHue, mainSaturation, mainValue)
   const hueTrack = `linear-gradient(90deg, ${[-180, -120, -60, 0, 60, 120, 180].map(d => shiftHue(main, d)).join(', ')})`
-  const save = (patch: Saved[string]) => {
-    if (!hero) return
-    const next = { ...saved, [hero.id]: { ...entry, ...patch } }
-    setSaved(next); localStorage.setItem(STORE, JSON.stringify(next))
+  const saveFor = (id: string, patch: Saved[string]) => setSaved(old => {
+    const next = { ...old, [id]: { ...old[id], ...patch } }
+    localStorage.setItem(STORE, JSON.stringify(next))
+    return next
+  })
+  const save = (patch: Saved[string]) => { if (hero) saveFor(hero.id, patch) }
+
+  // Library right-click > Open in KO Editor: the mod's widget is read, its hero opens, then its colors go on the game's roles
+  const openRequest = useKoOpen()
+  const [fromMod, setFromMod] = useState<{ heroId: string; roles: Role[]; name: string; ownParts: boolean } | null>(null)
+  const [askReplace, setAskReplace] = useState<{ heroId: string; patch: Saved[string]; ownParts: boolean } | null>(null)
+  useEffect(() => {
+    if (!openRequest || !usmap || !heroes) return
+    const r = takeKoOpen()
+    if (!r) return
+    setOpening({ name: r.name, since: Date.now() }); setAskReplace(null); setFromMod(null)
+    invoke<{ hero: string; widgetJson: string; ownParts: boolean } | null>('xtra_ko_mod', { usmapPath: usmap, modPath: r.path, colorsOnly: true })
+      .then(async m => {
+        if (!m) throw new Error('It is not a KO prompt mod (one KO prompt, maybe with its textures, and nothing else).')
+        const h = heroes.find(x => x.id === m.hero)
+        if (!h) throw new Error(`Your game has no KO prompt for hero ${m.hero}.`)
+        setFromMod({ heroId: h.id, roles: readWidget(await readAsset(m.widgetJson)).roles, name: r.name, ownParts: m.ownParts })
+        setQuery(''); setHeroId(h.id)
+      })
+      .catch(e => { cue('warning'); alert.warning(`Could not open ${r.name}`, e instanceof Error ? e.message : String(e)) })
+      .finally(() => setOpening(null))
+  }, [openRequest, usmap, heroes]) // eslint-disable-line react-hooks/exhaustive-deps
+  const applyMod = (heroId: string, patch: Saved[string], ownParts: boolean) => {
+    saveFor(heroId, patch); setAskReplace(null); cue('ready')
+    if (ownParts) alert.info('Its own textures stay out', "The KO Editor sets only the prompt's colors. Textures or materials the mod ships are not in what it installs.")
   }
+  useEffect(() => { // its hero is up: the mod's colors on the game's roles, asking first over colors already picked
+    if (!fromMod || loaded?.hero.id !== fromMod.heroId) return
+    setFromMod(null)
+    const patch = { colors: colorsFrom(loaded.scene.w.roles, fromMod.roles), hue: 0, name: fromMod.name }
+    const had = saved[fromMod.heroId]
+    if (Object.keys(had?.colors ?? {}).length || had?.hue) setAskReplace({ heroId: fromMod.heroId, patch, ownParts: fromMod.ownParts })
+    else applyMod(fromMod.heroId, patch, fromMod.ownParts)
+  }, [fromMod, loaded]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // once: loadouts the first KO Editor made keyed their mod by its .utoc, which never matches the Library's name for it
   useEffect(() => {
@@ -302,7 +339,23 @@ function Editor({ onInstall, alert, blocked, shown }: KoEditorProps & { shown: b
         </div>
 
           <canvas ref={canvas} className={scene ? 'is-ready' : ''} aria-label={hero ? `${hero.name}'s KO prompt` : 'KO prompt'} />
-          {!scene && (
+          {(opening || askReplace) && (
+            <div className="ko-stage-msg" role="status">
+              {opening ? (
+                <div className="ko-load">
+                  <strong>Opening {opening.name}</strong>
+                  <div className="ko-load-bar" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(creep(opening.since, Date.now(), 90))}>
+                    <span style={{ width: `${creep(opening.since, Date.now(), 90)}%` }} />
+                  </div>
+                  <span className="ko-load-step"><span className="ko-shimmer">Reading the mod's KO prompt</span></span>
+                </div>
+              ) : askReplace && (
+                <ConfirmRow text={`Replace your colors for ${heroes?.find(h => h.id === askReplace.heroId)?.name ?? 'this hero'} with ${askReplace.patch.name}'s?`} yes="Replace"
+                  onNo={() => { setAskReplace(null); cue('close') }} onYes={() => applyMod(askReplace.heroId, askReplace.patch, askReplace.ownParts)} />
+              )}
+            </div>
+          )}
+          {!scene && !opening && !askReplace && (
             <div className="ko-stage-msg" role="status">
               {loadError ? <><strong>Could not open this KO prompt</strong><span>{loadError}</span></>
                 : loading || (!listError && !scene) ? (

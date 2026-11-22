@@ -345,12 +345,15 @@ pub struct KoMod {
     /// sheet, say), by package path: they replace the game's
     materials: Vec<(String, String)>,
     textures: Vec<(String, String)>,
+    /// The mod ships its own textures or materials: the KO Editor, which colors the game's prompt, leaves them out
+    own_parts: bool,
 }
 
 /// A KO prompt mod (one KO widget, maybe with the prompt's textures and materials, nothing else) read for a preview the
 /// KO Editor's renderer draws (custom/ko/koPreview.ts). None for any other mod, which the preview kit renders.
+/// `colors_only`: no texture PNGs (the KO Editor opening the mod reads only its widget's colors).
 #[tauri::command]
-pub async fn xtra_ko_mod(usmap_path: String, mod_path: String, state: State<'_, Arc<Mutex<AppState>>>) -> Result<Option<KoMod>, String> {
+pub async fn xtra_ko_mod(usmap_path: String, mod_path: String, colors_only: Option<bool>, state: State<'_, Arc<Mutex<AppState>>>) -> Result<Option<KoMod>, String> {
     let _one = ONE.lock().await;
     let Some((utoc, assets)) = mod_assets(&mod_path).await else { return Ok(None) };
     if !is_ko_only(&assets) {
@@ -375,7 +378,7 @@ pub async fn xtra_ko_mod(usmap_path: String, mod_path: String, state: State<'_, 
     let pngs: Vec<String> = files.iter().filter(|p| norm(&text(p)).contains("/ui/textures/")).map(text).collect();
     let base_path = Some(ex.to_string_lossy().to_string());
     uat(VfxUatRequest { action: "batch_to_json", file_paths: Some(to_json), usmap_path: Some(&usmap_path), output_path: Some(json.to_string_lossy().to_string()), base_path: base_path.clone(), ..Default::default() }, "Reading the mod's KO prompt").await?;
-    if !pngs.is_empty() {
+    if !pngs.is_empty() && colors_only != Some(true) {
         uat(VfxUatRequest { action: "batch_extract_texture_png", file_paths: Some(pngs), usmap_path: Some(&usmap_path), output_path: Some(png.to_string_lossy().to_string()), base_path, parallel: Some(true), ..Default::default() }, "Reading the mod's textures").await?;
     }
     let out = json.join(format!("{r}.json"));
@@ -388,6 +391,7 @@ pub async fn xtra_ko_mod(usmap_path: String, mod_path: String, state: State<'_, 
         widget_json: out.to_string_lossy().replace('\\', "/"),
         materials: listed(&json, "json").into_iter().filter(|(k, _)| !k.ends_with(&stem)).collect(),
         textures: listed(&png, "png"),
+        own_parts: assets.iter().any(|a| is_ko_part(a)),
     }))
 }
 
