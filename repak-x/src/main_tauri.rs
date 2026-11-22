@@ -3066,7 +3066,7 @@ async fn install_mods(
         let own_row = (installable.source != installable.mod_path).then(|| {
             let mut rows = mods.iter().filter(|m| m.enabled && PathBuf::from(&m.path) == installable.source);
             rows.next().filter(|_| rows.next().is_none())
-        }).flatten();
+        }).flatten().filter(|row| row.mod_name != installable.mod_name); // same name: the lookup below applies it whole
         if let Some(row) = own_row {
             if let Some(custom) = row.custom_name.as_ref().filter(|c| !c.is_empty()) {
                 installable.mod_name = custom.clone();
