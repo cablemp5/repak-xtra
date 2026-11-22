@@ -6,10 +6,11 @@ import { invoke } from '@tauri-apps/api/core'
 import { motion } from 'framer-motion'
 import { ArchiveRestore, ArrowLeftRight, Check, CircleCheck, CircleHelp, CircleX, Gamepad2, ListChecks, Repeat, RotateCcw, TriangleAlert, Undo2 } from 'lucide-react'
 import { useDialogFocus } from './dialogFocus'
-import { type Bisect, type Outcome, OPEN_BISECT, answerBisect, estimate, gameOpen, gameRunning, readBisect, restoreBisect, resumeBisect, returnTo, roundsLeft, startBisect, suspects, testOff } from './crashBisect'
+import { type Bisect, type Outcome, OPEN_BISECT, answerBisect, estimate, estimateLikely, firstTest, gameOpen, gameRunning, likelyIn, readBisect, restoreBisect, resumeBisect, returnTo, roundsLeft, startBisect, suspects, testOff } from './crashBisect'
 import { Step } from './FirstRun'
 import { type KeepDeps, stem, turnOffWithUndo } from './keepOne'
-import { nameKey } from './loadoutStore'
+import { isModLoader, nameKey } from './loadoutStore'
+import { recentCrashes } from './setupReport'
 import { ModName, plural } from './modName'
 import { cue } from './sounds'
 
@@ -18,6 +19,10 @@ type End = Exclude<Outcome, { kind: 'run' }>
 /** `resumed`: a saved test reopened (after a restart): its switch is checked and finished first, and the player may have
  *  played it while repakxtra was closed. */
 type View = { step: 'intro' } | { step: 'test'; run: Bisect; resumed?: boolean } | { step: 'end'; end: End; last: Bisect }
+/** The newest crash report: when, the file it names, and the mods on now that replace it (tested first). */
+type Hint = { time: number; asset: string; likely: string[] }
+type Listed = { id?: string; time: number; crash_type?: string | null; asset_path?: string | null }
+const when = (secs: number) => new Date(secs * 1000).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
 
 export default function BisectPanel({ deps, mods }: { deps: KeepDeps; mods: Mod[] }) {
   const [view, setView] = useState<View | null>(() => { const r = readBisect(); return r ? { step: 'test', run: r, resumed: true } : null })
@@ -28,7 +33,22 @@ export default function BisectPanel({ deps, mods }: { deps: KeepDeps; mods: Mod[
     const say = (title: string, text?: string) => { cue('warning'); setNote({ title, text: text ?? '' }); return -1 }
     return { ...deps, alert: { ...deps.alert, warning: say, error: say } }
   }, [deps])
-  const { ref, onKeyDown } = useDialogFocus(Boolean(view))
+  // Esc closes it only where nothing is switched (before the start, and at the end with every mod back)
+  const { ref, onKeyDown } = useDialogFocus(Boolean(view), view && view.step !== 'test' && !busy ? () => { cue('close'); setNote(null); setView(null) } : undefined)
+  const [hint, setHint] = useState<Hint | null>(null)
+  const intro = view?.step === 'intro'
+  useEffect(() => {
+    if (!intro) return
+    let live = true
+    setHint(null)
+    const onNow = suspects(mods).map(m => m.path)
+    // the newest crash only: an older one is likely about something since fixed
+    invoke<Listed[]>('xtra_recent_crashes').then(([c]) => c?.asset_path ? recentCrashes(mods.map(m => m.path), onNow, [c]) : []).then(([c]) => {
+      const likely = likelyIn(onNow, onNow.filter(p => c?.held?.some(h => stem(h) === stem(p))))
+      if (live && c?.asset && likely.length) setHint({ time: c.time, asset: c.asset, likely })
+    }).catch(() => {})
+    return () => { live = false }
+  }, [intro])   // once per opening: the line does not change under the reader
   useEffect(() => {
     const open = () => { cue('open'); const r = readBisect(); setView(r ? { step: 'test', run: r, resumed: true } : { step: 'intro' }) }
     window.addEventListener(OPEN_BISECT, open)
@@ -37,6 +57,7 @@ export default function BisectPanel({ deps, mods }: { deps: KeepDeps; mods: Mod[
   if (!view) return null
 
   const on = suspects(mods)
+  const loader = mods.some(m => m.enabled !== false && isModLoader(m.path))
   const work = async (fn: () => Promise<View | null>) => {
     setBusy(true)
     setNote(null)
@@ -80,8 +101,13 @@ export default function BisectPanel({ deps, mods }: { deps: KeepDeps; mods: Mod[
                   <li key={t}><Icon size={15} aria-hidden="true" />{t}</li>)}</ul>
               </section>
             </div>
+            {/* why the first split is not a plain half: the reason before the number it changes */}
+            {hint && <p className="cs-note">Your newest crash report ({when(hint.time)}) names <b>{hint.asset}</b>. {hint.likely.length === 1
+              ? <><ModName name={nameKey(hint.likely[0])} /> replaces that file, so it is tested first.</>
+              : <>{plural(hint.likely.length, 'mod')} you have on replace that file, so they are tested first.</>}</p>}
             <dl className="bs-facts">
-              <div><dt>Launches, at most (with {plural(on.length, 'mod')} enabled)</dt><dd>{estimate({ start: [], candidates: on.map(m => m.path), off: [], phase: 'baseline', tests: 0 })}</dd></div>
+              <div><dt>Launches, at most (with {plural(on.length, 'mod')} enabled)</dt><dd>{estimate(firstTest(on.map(m => m.path), hint?.likely))}</dd></div>
+              {hint && <div><dt>When the crash report is right</dt><dd>{estimateLikely(hint.likely.length)}</dd></div>}
             </dl>
             <p className="cs-note">That is when one mod causes the crash. Each other mod that crashes it adds up to {roundsLeft(on.length) + 1} launches.</p>
           </div>
@@ -90,13 +116,13 @@ export default function BisectPanel({ deps, mods }: { deps: KeepDeps; mods: Mod[
             <span className="bs-hint">Restore your mods at any time</span>
             <button type="button" className="lo-text-btn" onClick={close}>Not now</button>
             <button type="button" className="btn-primary" disabled={busy || on.length === 0}
-              onClick={() => work(async () => { cue('tap'); const r = await startBisect(d, mods); if (r) cue('toggle'); return r && { step: 'test', run: r } })}>
+              onClick={() => work(async () => { cue('tap'); const r = await startBisect(d, mods, hint?.likely); if (r) cue('toggle'); return r && { step: 'test', run: r } })}>
               {busy ? 'Switching mods…' : 'Start testing'}
             </button>
           </div>
         </>}
 
-        {view.step === 'test' && <Test key={`${view.run.tests}-${view.run.phase}`} run={view.run} resumed={Boolean(view.resumed)} busy={busy} deps={d}
+        {view.step === 'test' && <Test key={`${view.run.tests}-${view.run.phase}`} run={view.run} resumed={Boolean(view.resumed)} busy={busy} deps={d} loader={loader}
           answer={crashed => work(async () => {
             cue('tap')
             const o = await answerBisect(d, view.run, crashed)
@@ -113,7 +139,7 @@ export default function BisectPanel({ deps, mods }: { deps: KeepDeps; mods: Mod[
             return null
           })} />}
 
-        {view.step === 'end' && <End view={view} busy={busy} close={close}
+        {view.step === 'end' && <End view={view} busy={busy} close={close} loader={loader}
           undo={() => work(async () => { cue('navigate'); const r = await returnTo(d, null, view.last); return r && { step: 'test', run: r } })}
           turnOff={culprits => work(async () => {
             const off = mods.filter(m => culprits.some(c => stem(c) === stem(m.path)))
@@ -129,8 +155,8 @@ export default function BisectPanel({ deps, mods }: { deps: KeepDeps; mods: Mod[
 
 /** One test: launch, play, answer. The answers open once the game was seen running and then closed (a crash closes it
  *  too), or when the player says they already tested (the app was closed while they played). */
-function Test({ run, resumed, busy, deps, answer, undo, stop }: {
-  run: Bisect; resumed: boolean; busy: boolean; deps: KeepDeps; answer: (crashed: boolean) => void; undo: () => void; stop: () => void
+function Test({ run, resumed, busy, deps, loader, answer, undo, stop }: {
+  run: Bisect; resumed: boolean; busy: boolean; deps: KeepDeps; loader: boolean; answer: (crashed: boolean) => void; undo: () => void; stop: () => void
 }) {
   const [running, setRunning] = useState(false)
   const [played, setPlayed] = useState(false)
@@ -143,6 +169,9 @@ function Test({ run, resumed, busy, deps, answer, undo, stop }: {
   useEffect(() => () => clearTimeout(unseen.current), [])
   // each attempt watches for its own launch and exit: Not sure, test again starts a new one
   const [attempt, setAttempt] = useState(0)
+  // when this launch began (Unix seconds), and whether the game wrote a crash report since: a hint beside the answers
+  const since = useRef<number | null>(null)
+  const [report, setReport] = useState<boolean | null>(null)
   // a reopened test finishes the switch a restart cut off before Launch opens
   const [ready, setReady] = useState(!resumed)
   // the resume had to switch files: play from before the restart was with other mods, so only a new launch counts
@@ -166,25 +195,43 @@ function Test({ run, resumed, busy, deps, answer, undo, stop }: {
       const r = await gameRunning().catch(() => false)
       if (!live) return
       setRunning(r)
-      if (r) { seen = true; setStarting(false) }
+      // seen up to 1.5 s after it started: a few seconds back, so a crash at once still counts
+      if (r) { seen = true; setStarting(false); since.current ??= Date.now() / 1000 - 5 }
       else if (seen) { seen = false; cue('ready'); setPlayed(true) }
     }
     void check()
     const t = setInterval(check, 1500)
     return () => { live = false; clearInterval(t) }
   }, [attempt])
+  useEffect(() => {
+    const from = since.current
+    if (!played || from === null) { setReport(null); return }
+    // the crash folder can land a little after the game is gone: look again every 3 s for 30 s, until one shows
+    let live = true
+    let tries = 0
+    const look = () => invoke<Listed[]>('xtra_recent_crashes').then(list => {
+      if (!live) return
+      const found = list.some(c => c.time >= from)
+      setReport(found)
+      if (found || ++tries >= 10) clearInterval(t)
+    }).catch(() => {})
+    void look()
+    const t = setInterval(look, 3000)
+    return () => { live = false; clearInterval(t) }
+  }, [played, attempt])
   const launch = async () => {
     cue('tap')
     // a new launch is a new try: the last one's answer no longer counts
     setPlayed(false)
     setLaunched(false)
     setStarting(true)
+    since.current = Date.now() / 1000
     clearTimeout(unseen.current)
     try { await invoke('launch_game'); unseen.current = setTimeout(() => setLaunched(true), 20000) } catch (e) { setStarting(false); deps.alert.error('Game did not launch', String(e)) }
   }
   const offNow = testOff(run)
   const found = run.found ?? []
-  const what = run.phase === 'baseline' ? `repakxtra turned off all ${plural(offNow.length, 'mod')} you had on, to check a mod is the cause.`
+  const what = run.phase === 'baseline' ? `repakxtra turned off all ${plural(offNow.length, 'mod')} you had on, to check a mod is the cause.${loader ? ' The mod loader stays on.' : ''}`
     : run.phase === 'confirm' ? (found.length ? 'Last check: repakxtra turned every mod back on except this one and the ones found so far.' : 'Last check: repakxtra turned every mod back on except this one.')
     : `repakxtra turned ${run.start.length - offNow.length} of your mods on and ${offNow.length} off for this test. ${plural(run.candidates.length, 'suspect')} left.`
   const live = running || starting
@@ -213,6 +260,7 @@ function Test({ run, resumed, busy, deps, answer, undo, stop }: {
             <button type="button" className="lo-text-btn bs-ans is-fine" disabled={waiting} onClick={() => answer(false)}><CircleCheck size={15} aria-hidden="true" />No crash</button>
           </span>}>
           {running && <p>Close the game, then answer.</p>}
+          {!running && played && report !== null && <p role="status">{report ? 'The game wrote a crash report as it closed.' : 'No crash report from this launch so far.'}</p>}
         </Step>
       </ol>
       {launched && !played && !running && <button type="button" className="bs-link" onClick={() => { setStarting(false); setPlayed(true) }}>The game closed before repakxtra saw it running</button>}
@@ -227,7 +275,7 @@ function Test({ run, resumed, busy, deps, answer, undo, stop }: {
     </div>
     <div className="modal-footer cs-footer">
       {run.prev && <button type="button" className="lo-text-btn bs-back" disabled={busy || live || !ready} onClick={undo}><Undo2 size={14} aria-hidden="true" />Undo last answer</button>}
-      {played && <button type="button" className="lo-text-btn bs-back" disabled={busy || live || !ready} onClick={() => { cue('navigate'); setPlayed(false); setLaunched(false); setStarting(false); clearTimeout(unseen.current); setAttempt(a => a + 1) }}><CircleHelp size={14} aria-hidden="true" />Not sure, test again</button>}
+      {played && <button type="button" className="lo-text-btn bs-back" disabled={busy || live || !ready} onClick={() => { cue('navigate'); setPlayed(false); setLaunched(false); setStarting(false); since.current = null; clearTimeout(unseen.current); setAttempt(a => a + 1) }}><CircleHelp size={14} aria-hidden="true" />Not sure, test again</button>}
       {/* the way back, always in the same place */}
       <button type="button" className="lo-text-btn bs-stop" disabled={busy || live || (!ready && !stuck)} onClick={stop}
         title="Ends the test and turns every mod back on or off exactly as before it started"><RotateCcw size={14} aria-hidden="true" />Stop and restore mods</button>
@@ -235,8 +283,8 @@ function Test({ run, resumed, busy, deps, answer, undo, stop }: {
   </>
 }
 
-function End({ view, busy, close, undo, turnOff }: {
-  view: Extract<View, { step: 'end' }>; busy: boolean; close: () => void; undo: () => void; turnOff: (culprits: string[]) => void
+function End({ view, busy, close, loader, undo, turnOff }: {
+  view: Extract<View, { step: 'end' }>; busy: boolean; close: () => void; loader: boolean; undo: () => void; turnOff: (culprits: string[]) => void
 }) {
   const e = view.end
   const one = e.kind === 'found' && e.culprits.length === 1
@@ -246,7 +294,11 @@ function End({ view, busy, close, undo, turnOff }: {
         <ul className="bs-culprits">{e.culprits.map(c => <li key={c} className="bs-culprit"><Check size={16} aria-hidden="true" /><span className="cs-name"><ModName name={nameKey(c)} /></span></li>)}</ul>
         <p className="cs-note">{one ? 'The game played fine with only this mod off.' : `Each of these ${e.culprits.length} mods crashes the game, and it played fine with all of them off.`} Every mod is back as it was, {one ? 'this one' : 'these'} included, so turn {one ? 'it' : 'them'} off to play without the crash.</p>
       </>}
-      {e.kind === 'not-mods' && <p className="bs-lead">The game crashed with every mod off, so the crash also happens without these mods. They are back on. Verify the game files in Steam, or update your graphics driver.</p>}
+      {e.kind === 'not-mods' && <>
+        <p className="bs-lead">The game crashed with every mod off, so the crash also happens without these mods. They are back on. Verify the game files in your launcher, or update your graphics driver.</p>
+        {/* never tested: every mod made for it needs it on, but an old loader crashes the game by itself */}
+        {loader && <p className="cs-note">The mod loader stayed on in every test. If the game crashes without mods only since a game update, turn the loader off and launch once to rule it out.</p>}
+      </>}
       {e.kind === 'unsure' && <>
         <p className="bs-lead">The game kept crashing with <strong><ModName name={nameKey(e.culprit)} /></strong> off, and every other mod tested fine. The crash may not happen every time, or it needs several mods at once.</p>
         <p className="cs-note">Every mod is back as it was. Test again and repeat the same thing each launch, or turn off the mods you added most recently.</p>
