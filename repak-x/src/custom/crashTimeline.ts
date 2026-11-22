@@ -23,7 +23,8 @@ const count = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`
 /** One event in words: "Installed Purple VFX", "Turned on 12 mods", "Installed 3 of 5 mods (2 failed: A, B)". Pure. */
 function words(e: ActivityEvent): string {
   const nOk = Math.max(e.n_ok ?? 0, e.ok.length), nFailed = Math.max(e.n_failed ?? 0, e.failed.length)
-  const subject = (list: string[], n: number) => (n === 1 && list.length ? list[0] : count(n, 'mod'))
+  // a few are named ("Installed A, B and 1 more"), a big batch is counted
+  const subject = (list: string[], n: number) => (list.length && n <= 3 ? names(list, n) : count(n, 'mod'))
   const failedPart = nFailed ? ` (${nFailed} failed: ${names(e.failed, nFailed)})` : ''
   switch (e.kind) {
     case 'install': return nOk ? `Installed ${nFailed ? `${nOk} of ${count(nOk + nFailed, 'mod')}` : subject(e.ok, nOk)}${failedPart}` : `Install failed for ${subject(e.failed, nFailed)}`
@@ -98,7 +99,7 @@ if (import.meta.env.DEV) {
     e(500, 'disable', ['X']), e(501, 'enable', ['Y']), e(505, 'loadout', ['X', 'Y'], [], 'Panther looks on'),
   ] }
   const rows = timelineRows(tl).map(r => r.text)
-  console.assert(rows[0] === 'Started the game' && rows.includes('Installed Purple VFX') && rows.includes('Turned on 2 mods'), 'plain rows, a batch is one row', rows)
+  console.assert(rows[0] === 'Started the game' && rows.includes('Installed Purple VFX') && rows.includes('Turned on A, B'), 'plain rows, a batch is one row (a few named)', rows)
   console.assert(rows.includes('Installed 3 of 5 mods (2 failed: F, G)') && rows.includes('Turned Panther looks on (2 mods switched)') && !rows.includes('Turned off X'), 'partial batches stay distinct, a loadout holds its switches', rows)
   console.assert(coverageText({ ...tl, coverage: 'none' }, 0) === 'No history available for this crash.' && coverageText({ ...tl, events: [] }, 1) === 'No changes recorded.', 'empty states')
   console.assert(coverageText({ ...tl, from: null, coverage: 'partial' }, 2)!.startsWith('No earlier game launch') && coverageText(null, 0) === UNREADABLE, 'no earlier launch said, unreadable apart from no history')

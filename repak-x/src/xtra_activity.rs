@@ -89,6 +89,7 @@ fn save_soon() {
     DIRTY.store(true, SeqCst);
     if SAVING.swap(true, SeqCst) { return; }
     std::thread::spawn(|| loop {
+        std::thread::sleep(std::time::Duration::from_millis(300)); // a switch of many mods lands in one write
         DIRTY.store(false, SeqCst);
         write_now();
         // done unless a change came meanwhile (and no other writer took over)

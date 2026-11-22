@@ -8,7 +8,7 @@ use std::sync::OnceLock;
 
 // ---- which mods were on while the game ran: a crash report names only those ----
 // Saved when the game is seen starting (main_tauri.rs check_game_running, the app's 5 s poll): its start time and every
-// .pak in the mods folder then (on), as keys (on_key), and its end once it is seen gone. The newest ten are kept.
+// .pak in the mods folder then (on), as keys (on_key), and its end once it is seen gone. The newest 40 are kept.
 
 #[derive(serde::Serialize, serde::Deserialize)]
 struct Session {
@@ -55,7 +55,7 @@ pub(crate) fn remember_on(mods_dir: &std::path::Path, start: u64) -> bool {
     }
     all.push(Session { start, end: None, on });
     all.sort_by_key(|s| s.start);
-    let skip = all.len().saturating_sub(10);
+    let skip = all.len().saturating_sub(40); // enough that every crash Crash reports lists keeps its launch
     all.drain(..skip);
     let _ = std::fs::write(sessions_store(), serde_json::to_vec(&all).unwrap_or_default());
     true
