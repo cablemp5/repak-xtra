@@ -166,7 +166,7 @@ import { keepThisOne, setModsBlocked } from './custom/keepOne' // repakxtra: Kee
 import { NEXUS_TYPE, recordSourceAs, recordSources, renameSource, sourceOf, useNexusScan, useNexusSources } from './custom/nexusSource' // repakxtra: Nexus source
 import { stageOffFiles } from './custom/offFiles' // repakxtra: .pak.off files
 import CrashSuspects, { previousCrashes, withSuspects } from './custom/CrashSuspects' // repakxtra: crash suspects
-import { testRecent } from './custom/crashBisect' // repakxtra: a crash test shows its own crash note
+import { gameSeen, testRecent } from './custom/crashBisect' // repakxtra: a crash test shows its own crash note
 import { revealBuiltin, toggleBuiltin, useBuiltins, watchBuiltins } from './custom/BuiltinMods' // repakxtra: built-in mods
 import { isBuiltin, useBuiltinRows } from './custom/builtinRows'
 
@@ -2088,6 +2088,7 @@ function App() {
       // closed (one folder listing): a crash at startup can begin and end between two polls, and its report can land
       // late. A crash already told stays quiet (the last known folder)
       if (!running) void invoke('check_for_previous_crash').catch(() => {})
+      else gameSeen()
     } catch (error) {
       console.error('Failed to check game status:', error)
     }

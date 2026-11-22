@@ -410,8 +410,8 @@ pub fn get_newest_crash_folder() -> Option<(String, PathBuf)> {
 /// Returns crash info if a new crash is detected since last_known_crash_folder
 pub fn check_for_previous_session_crash(
     last_known_crash_folder: Option<&str>,
+    newest: Option<(String, PathBuf)>, // repakxtra: the caller's one listing (get_newest_crash_folder), reused
 ) -> Option<CrashInfo> {
-    let newest = get_newest_crash_folder();
 
     match (newest, last_known_crash_folder) {
         (Some((newest_name, newest_path)), Some(last_known)) => {

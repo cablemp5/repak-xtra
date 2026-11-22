@@ -7141,8 +7141,16 @@ async fn check_for_previous_crash(
         state_guard.last_known_crash_folder.clone()
     };
 
+    // repakxtra: one listing per call. A newest folder no newer than the newest one known this session is an older crash
+    // whose newer folder was deleted: never told again
+    static SEEN: Mutex<Option<std::time::SystemTime>> = Mutex::new(None);
+    let newest = crash_monitor::get_newest_crash_folder();
+    let created = newest.as_ref().and_then(|(_, p)| std::fs::metadata(p).and_then(|m| m.created()).ok());
+    let seen = *SEEN.lock().unwrap_or_else(|e| e.into_inner());
+    let older = matches!((created, seen), (Some(c), Some(s)) if c <= s);
+
     // Check for crashes since last known
-    let crash_info = crash_monitor::check_for_previous_session_crash(last_known.as_deref());
+    let crash_info = if older { None } else { crash_monitor::check_for_previous_session_crash(last_known.as_deref(), newest.clone()) };
 
     if let Some(ref info) = crash_info {
         ui_log::error("Crash", "Marvel Rivals crashed"); // repakxtra: also a crash found while the app runs
@@ -7159,15 +7167,20 @@ async fn check_for_previous_crash(
         toast_events::emit_crash_from_info(&window, info);
     } // repakxtra: no "no crashes" line, this runs every 5 s
 
-    // Update last known crash folder to the newest one (whether crash detected or not)
-    if let Some((newest_name, newest_path)) = crash_monitor::get_newest_crash_folder() {
+    // repakxtra: the newest folder becomes the last known one once told, or once it is no news: older than 2 minutes
+    // (a report never written, or a crash too old for the 24 hour check), or an older crash as above. A new folder whose
+    // report is still being written stays unknown, so the next call (5 s later) tells it. The state file is written only
+    // when the folder changed
+    let settled = crash_info.is_some() || older || created.and_then(|c| c.elapsed().ok()).is_some_and(|age| age.as_secs() >= 120);
+    if let (true, Some((name, _))) = (settled, newest) {
         let mut state_guard = state.lock().unwrap();
-        // repakxtra: a new folder whose report is not written yet stays unknown, so a later call still tells it. And the
-        // state file is written only when the folder changed (this runs every 5 s)
-        let pending = crash_info.is_none() && !newest_path.join("CrashContext.runtime-xml").exists();
-        if !pending && state_guard.last_known_crash_folder.as_deref() != Some(newest_name.as_str()) {
-            state_guard.last_known_crash_folder = Some(newest_name);
+        if state_guard.last_known_crash_folder.as_deref() != Some(name.as_str()) {
+            state_guard.last_known_crash_folder = Some(name);
             let _ = save_state(&state_guard);
+        }
+        drop(state_guard);
+        if !older {
+            *SEEN.lock().unwrap_or_else(|e| e.into_inner()) = created;
         }
     }
 
