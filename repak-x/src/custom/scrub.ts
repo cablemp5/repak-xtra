@@ -6,6 +6,7 @@
  *  square bracket, or the next drive path ends it: too much goes rather than a name staying. A network path (\\server\share or
  *  //server/share) goes whole. */
 const ENDS = String.raw`\r\n|"'<>\]` // not ): Program Files (x86) is one folder
+const USER_ENDS = String.raw`\r\n|"<>\]` // a user folder may hold an apostrophe (O'Brien), so it runs past one
 const NEXT_DRIVE = String.raw`(?![A-Za-z]:[\\/])`
 export const scrub = (text: string) => text
   // the // of https:// follows a colon, so it is not a network path
@@ -13,8 +14,8 @@ export const scrub = (text: string) => text
   // a drive letter stands alone: the s: of https:// is not one
   // a path under a user folder keeps only its file name (or what follows ~mods): folder names (OneDrive - Company) can
   // name the player too
-  .replace(new RegExp(String.raw`(?<![A-Za-z])[A-Za-z]:[\\/]+Users[\\/]+(?:${NEXT_DRIVE}(?![\\/]~mods[\\/])[^${ENDS}])*[\\/]`, 'gi'), '%USERPROFILE%\\…\\')
-  .replace(/(?<![A-Za-z])[A-Za-z]:[\\/]+Users[\\/]+[^\\/\r\n|"']+/gi, '%USERPROFILE%')
+  .replace(new RegExp(String.raw`(?<![A-Za-z])[A-Za-z]:[\\/]+Users[\\/]+(?:${NEXT_DRIVE}(?![\\/]~mods[\\/])[^${USER_ENDS}])*[\\/]`, 'gi'), '%USERPROFILE%\\…\\')
+  .replace(/(?<![A-Za-z])[A-Za-z]:[\\/]+Users[\\/]+[^\\/\r\n|"]+/gi, '%USERPROFILE%')
   .replace(new RegExp(String.raw`(?<![A-Za-z])[A-Za-z]:[\\/](?:${NEXT_DRIVE}[^${ENDS}])*?[\\/](~mods[\\/])`, 'gi'), '$1')
   .replace(new RegExp(String.raw`(?<![A-Za-z])[A-Za-z]:[\\/](?:${NEXT_DRIVE}[^${ENDS}])*[\\/]`, 'g'), '') // any other drive path keeps only its file name
   .replace(/(?<![A-Za-z])[A-Za-z]:[\\/](?=[^\\/]*$)/gm, '') // a file at a drive's root
@@ -26,7 +27,7 @@ export const scrub = (text: string) => text
   .replace(/\beyJ[\w-]{6,}\.[\w-]{6,}\.[\w-]+/g, '<hidden>') // a JWT
   .replace(/\b(authorization)(["']?\s*[=:]\s*)(?:(?:basic|bearer)\s+)?[^\s"'&,;]+/gi, '$1$2<hidden>')
   // a user name written plainly runs to the end of its field: "Username: First Last"
-  .replace(/\b(user[ _]?name)(\s*[=:]\s*)(?!\\?["'])([^\r\n,;|&"'<>{}]+)/gi, '$1$2<hidden>')
+  .replace(/\b(\w*?user[ _]?name)(\s*[=:]\s*)(?!\\?["'])([^\r\n,;|&"<>{}]+)/gi, '$1$2<hidden>')
   // a keyed value: accessToken=, account_id:, username="First Last" (a quoted value goes whole, escaped JSON too)
   .replace(/\b(\w*?(?:token|password|passwd|secret|api[-_]?key|account[ _]?id|client[ _]?id|user[ _]?id|user[ _]?name|authorization))(\\?["']?\s*[=:]\s*)(\\"(?:[^\\]|\\[^"])*\\"|"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|[^\s"'&,;\\]+)/gi, '$1$2<hidden>')
 
@@ -50,6 +51,9 @@ if (import.meta.env.DEV) {
   console.assert(scrub(spaced) === 'Account ID: <hidden> {"username":<hidden>,"x":1}', 'spaced keys, a quoted value with escaped quotes goes whole', scrub(spaced))
   const escaped = '{\\"access_token\\":\\"abc123\\",\\"account_id\\":\\"42\\"} Username: Jane Doe, next'
   console.assert(scrub(escaped) === '{\\"access_token\\":<hidden>,\\"account_id\\":<hidden>} Username: <hidden>, next', 'escaped JSON values, a plain user name to the end of its field', scrub(escaped))
+  console.assert(scrub('steam_username: Jane Doe') === 'steam_username: <hidden>', 'a prefixed user name key', scrub('steam_username: Jane Doe'))
+  const apos = "at C:\\Users\\O'Brien\\Games\\a.pak and Username: D'Arcy Smith"
+  console.assert(scrub(apos) === 'at %USERPROFILE%\\…\\a.pak and Username: <hidden>', 'an apostrophe in a user folder or name', scrub(apos))
   console.assert(scrub(keyed) === 'accountId=<hidden> username=<hidden> accessToken=<hidden> author: Someone', 'keyed ids, quoted names, camelCase tokens', scrub(keyed))
   console.assert(scrub(ids) ==='mail <email>, steam <account id>, Bearer <hidden>, token=<hidden>&x=1', 'ids and tokens', scrub(ids))
 }

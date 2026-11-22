@@ -347,6 +347,8 @@ pub struct ModInstallResult {
     pub mod_name: String,
     /// repakxtra: the file or archive it came from, so the frontend can name a failed mod whatever its output name became
     pub source: std::path::PathBuf,
+    /// repakxtra: the name the install card asked for, before the priority suffix or a Keep both number: the row's key
+    pub requested: String,
     pub success: bool,
     pub error: Option<String>,
 }
@@ -360,6 +362,7 @@ pub fn install_mods_in_viewport(
     let mut results: Vec<ModInstallResult> = Vec::with_capacity(mods.len());
 
     for installable_mod in mods.iter_mut() {
+        let requested = installable_mod.mod_name.clone(); // repakxtra: before normalize_mod_base_name and free_name
         let source = installable_mod.mod_path.clone(); // repakxtra: its files keep when it was made (xtra_made.rs)
         if !installable_mod.enabled {
             // Nothing is written, but keep the name canonical for the UI.
@@ -383,7 +386,7 @@ pub fn install_mods_in_viewport(
                 if let Err(e) = fs::create_dir_all(&subfolder_path) {
                     let msg = format!("Failed to create subfolder '{}': {}", installable_mod.install_subfolder, e);
                     error!("{}", msg);
-                    results.push(ModInstallResult { mod_name: installable_mod.mod_name.clone(), source: installable_mod.source.clone(), success: false, error: Some(msg) });
+                    results.push(ModInstallResult { mod_name: installable_mod.mod_name.clone(), source: installable_mod.source.clone(), requested: requested.clone(), success: false, error: Some(msg) });
                     continue;
                 }
                 info!("Created install subfolder: {}", subfolder_path.display());
@@ -433,6 +436,7 @@ pub fn install_mods_in_viewport(
                 results.push(ModInstallResult {
                     mod_name: installable_mod.mod_name.clone(),
                     source: installable_mod.source.clone(),
+                    requested: requested.clone(),
                     success: false,
                     error: Some(msg),
                 });
@@ -444,6 +448,7 @@ pub fn install_mods_in_viewport(
                 results.push(ModInstallResult {
                     mod_name: installable_mod.mod_name.clone(),
                     source: installable_mod.source.clone(),
+                    requested: requested.clone(),
                     success: false,
                     error: Some("This mod is already installed in that folder".to_string()),
                 });
@@ -475,6 +480,7 @@ pub fn install_mods_in_viewport(
                 results.push(ModInstallResult {
                     mod_name: installable_mod.mod_name.clone(),
                     source: installable_mod.source.clone(),
+                    requested: requested.clone(),
                     success: false,
                     error: Some(e),
                 });
@@ -486,6 +492,7 @@ pub fn install_mods_in_viewport(
                 results.push(ModInstallResult {
                     mod_name: installable_mod.mod_name.clone(),
                     source: installable_mod.source.clone(),
+                    requested: requested.clone(),
                     success: true,
                     error: None,
                 });
@@ -493,6 +500,7 @@ pub fn install_mods_in_viewport(
                 results.push(ModInstallResult {
                     mod_name: installable_mod.mod_name.clone(),
                     source: installable_mod.source.clone(),
+                    requested: requested.clone(),
                     success: false,
                     error: Some(copy_errors.join("; ")),
                 });
@@ -511,6 +519,7 @@ pub fn install_mods_in_viewport(
                 results.push(ModInstallResult {
                     mod_name: installable_mod.mod_name.clone(),
                     source: installable_mod.source.clone(),
+                    requested: requested.clone(),
                     success: false,
                     error: Some(msg),
                 });
@@ -527,6 +536,7 @@ pub fn install_mods_in_viewport(
                     results.push(ModInstallResult {
                         mod_name: installable_mod.mod_name.clone(),
                         source: installable_mod.source.clone(),
+                        requested: requested.clone(),
                         success: false,
                         error: Some(e),
                     });
@@ -537,6 +547,7 @@ pub fn install_mods_in_viewport(
                     results.push(ModInstallResult {
                         mod_name: installable_mod.mod_name.clone(),
                         source: installable_mod.source.clone(),
+                        requested: requested.clone(),
                         success: true,
                         error: None,
                     });
@@ -566,6 +577,7 @@ pub fn install_mods_in_viewport(
                     results.push(ModInstallResult {
                         mod_name: installable_mod.mod_name.clone(),
                         source: installable_mod.source.clone(),
+                        requested: requested.clone(),
                         success: true,
                         error: None,
                     });
@@ -576,6 +588,7 @@ pub fn install_mods_in_viewport(
                     results.push(ModInstallResult {
                         mod_name: installable_mod.mod_name.clone(),
                         source: installable_mod.source.clone(),
+                        requested: requested.clone(),
                         success: false,
                         error: Some(msg),
                     });
@@ -592,6 +605,7 @@ pub fn install_mods_in_viewport(
                 results.push(ModInstallResult {
                     mod_name: installable_mod.mod_name.clone(),
                     source: installable_mod.source.clone(),
+                    requested: requested.clone(),
                     success: false,
                     error: Some(msg),
                 });
@@ -606,6 +620,7 @@ pub fn install_mods_in_viewport(
                     results.push(ModInstallResult {
                         mod_name: installable_mod.mod_name.clone(),
                         source: installable_mod.source.clone(),
+                        requested: requested.clone(),
                         success: false,
                         error: Some(msg),
                     });
@@ -622,6 +637,7 @@ pub fn install_mods_in_viewport(
                 results.push(ModInstallResult {
                     mod_name: installable_mod.mod_name.clone(),
                     source: installable_mod.source.clone(),
+                    requested: requested.clone(),
                     success: false,
                     error: Some(msg),
                 });
@@ -639,6 +655,7 @@ pub fn install_mods_in_viewport(
                     results.push(ModInstallResult {
                         mod_name: installable_mod.mod_name.clone(),
                         source: installable_mod.source.clone(),
+                        requested: requested.clone(),
                         success: false,
                         error: Some(e),
                     });
@@ -648,6 +665,7 @@ pub fn install_mods_in_viewport(
                     results.push(ModInstallResult {
                         mod_name: installable_mod.mod_name.clone(),
                         source: installable_mod.source.clone(),
+                        requested: requested.clone(),
                         success: true,
                         error: None,
                     });

@@ -2988,6 +2988,7 @@ async fn install_mods(
     // partial install never reads as complete
     let unmapped: Vec<serde_json::Value> = unique_paths.iter().filter(|p| !installable_mods.iter().any(|m| &m.source == *p))
         .map(|p| serde_json::json!({ "name": p.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default(), "source": p.to_string_lossy(), "whole": true })).collect();
+    let unmapped_names: Vec<String> = unmapped.iter().filter_map(|u| u["name"].as_str().map(String::from)).collect();
 
     // Filter out mods the user disabled in the frontend (multi-PAK selection)
     // Build a set of enabled mod_names; only keep installable_mods that match
@@ -3021,6 +3022,7 @@ async fn install_mods(
 
     // Check if we actually have mods to install
     if installable_mods.is_empty() {
+        if !unmapped_names.is_empty() { xtra_activity::record("install", &[], &unmapped_names, ""); } // repakxtra: What changed? hears it too
         error!(
             "[Install] No valid mods found from {} input path(s)",
             unique_paths.len()
@@ -3255,7 +3257,8 @@ async fn install_mods(
                     .emit("install_log", format!("[FAIL] {}: {}", name, err))
                     .ok();
             }
-            xtra_activity::record("install", &succeeded, &failed.iter().map(|f| f.0.clone()).collect::<Vec<_>>(), ""); // repakxtra: What changed?
+            // repakxtra: What changed?, one line per install, the paths that gave no mod among the failed ones
+            xtra_activity::record("install", &succeeded, &failed.iter().map(|f| f.0.clone()).chain(unmapped_names.iter().cloned()).collect::<Vec<_>>(), "");
             window_for_logs
                 .emit(
                     "install_log",
@@ -3270,9 +3273,11 @@ async fn install_mods(
         }));
 
         let mut all_failed = false; // repakxtra: a failure toast went out, nothing installed
+        let mut done: Vec<serde_json::Value> = Vec::new(); // repakxtra: the rows that installed, by the name each was asked for
         let mut partly_failed: Vec<serde_json::Value> = Vec::new(); // repakxtra: install_complete names them (and their source), the frontend says it
         match result {
             Ok(install_results) => {
+                done = install_results.iter().filter(|r| r.success).map(|r| serde_json::json!({ "name": r.requested, "source": r.source.to_string_lossy() })).collect();
                 let total = install_results.len();
                 let failed: Vec<&crate::install_mod::install_mod_logic::ModInstallResult> =
                     install_results.iter().filter(|r| !r.success).collect();
@@ -3308,7 +3313,7 @@ async fn install_mods(
                         names.join(", ")
                     );
                     window_for_logs.emit("install_log", &msg).ok();
-                    partly_failed = failed.iter().map(|r| serde_json::json!({ "name": r.mod_name, "source": r.source.to_string_lossy() })).collect();
+                    partly_failed = failed.iter().map(|r| serde_json::json!({ "name": r.mod_name, "requested": r.requested, "source": r.source.to_string_lossy() })).collect();
                 } else {
                     window_for_logs
                         .emit("install_log", "Installation completed successfully!")
@@ -3329,13 +3334,9 @@ async fn install_mods(
                 error!("Installation thread panicked!");
             }
         }
-        if !unmapped.is_empty() { // repakxtra: in What changed? too, and in the result unless nothing installed
-            let names: Vec<String> = unmapped.iter().filter_map(|u| u["name"].as_str().map(String::from)).collect();
-            xtra_activity::record("install", &[], &names, "");
-        }
-        if !all_failed { partly_failed.extend(unmapped); } // repakxtra
+        if !all_failed { partly_failed.extend(unmapped); } // repakxtra: in the result unless nothing installed
         // repakxtra: after any failure toast above (events reach the window in order), with the mods that failed
-        window_for_logs.emit("install_complete", serde_json::json!({ "failed": partly_failed, "all_failed": all_failed })).ok();
+        window_for_logs.emit("install_complete", serde_json::json!({ "failed": partly_failed, "done": done, "all_failed": all_failed })).ok();
         reported_by_install.store(true, std::sync::atomic::Ordering::SeqCst);
 
         // --- CLEANUP TEMP HYBRID FOLDERS ---

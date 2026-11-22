@@ -3285,7 +3285,8 @@ function App() {
     })
     const installed = (async () => {
         // Create a promise that resolves when install_complete event fires
-        const installCompletePromise = new Promise<{ name: string; source: string; whole?: boolean }[]>((resolve, reject) => { // repakxtra: what failed in a partial install
+        type Outcome = { name: string; source: string; requested?: string; whole?: boolean } // repakxtra
+        const installCompletePromise = new Promise<{ failed: Outcome[]; done?: Outcome[] }>((resolve, reject) => { // repakxtra: what failed in a partial install
           let unlistenComplete: UnlistenFn | null = null
           let unlistenError: UnlistenFn | null = null
           let unlistenRefused: UnlistenFn | null = null // repakxtra
@@ -3306,7 +3307,7 @@ function App() {
             if (unlistenError) unlistenError()
             if (unlistenRefused) unlistenRefused() // repakxtra
             if (event.payload?.all_failed) reject(new Error('Nothing was installed. Details are in Logs.')) // repakxtra: not only from the failure toast's title
-            else resolve(Array.isArray(event.payload?.failed) ? event.payload.failed : [])
+            else resolve({ failed: Array.isArray(event.payload?.failed) ? event.payload.failed : [], done: Array.isArray(event.payload?.done) ? event.payload.done : undefined })
           }).then(unlisten => { unlistenComplete = unlisten })
 
           // repakxtra: a failure the shared dialog explains (game open, file in use) comes without a toast
@@ -3339,20 +3340,17 @@ function App() {
         // Wait for the actual installation to complete
         // repakxtra: a failed mod is known by the file or archive it came from (its output name may have changed: a
         // priority suffix, a number for Keep both). One that matches no row is still counted and named.
-        const failedList = await installCompletePromise
+        const { failed: failedList, done: doneList } = await installCompletePromise
         const pathKey = (p: string) => p.replace(/\\/g, '/').toLowerCase()
-        // the name without the priority suffix, a Keep both number, or .pak, so a renamed output still finds its row
-        // (Keep both writes "Name (2)_9999999_P", so the suffix goes before the number)
-        const baseName = (n: string) => n.toLowerCase().replace(/\.pak$/, '').replace(/_\d+_p$/, '').replace(/_p$/, '').replace(/ \(\d+\)$/, '').replace(/^!/, '').trim()
-        const rowName = (m: InstallModPayload) => baseName(m.customName || m.mod_name || nameKey(m.path))
-        const failedRows = (f: { name: string; source: string; whole?: boolean }) => {
-          const rows = modsWithSettings.filter(m => isNew(m) && pathKey(m.path) === pathKey(f.source))
-          // a path that gave no mod fails every row it had, one archive with several paks is told apart by name
-          return f.whole || rows.length <= 1 ? rows : rows.filter(m => rowName(m) === baseName(f.name))
-        }
-        const failed = [...new Set(failedList.flatMap(failedRows))]
-        const unmatched = failedList.filter(f => !failedRows(f).length).map(f => f.name)
-        const failedNames = [...failed.map(m => m.customName || m.mod_name || nameKey(m.path)), ...unmatched]
+        const asked = (m: InstallModPayload) => m.customName || m.mod_name || ''
+        const sameSource = (m: InstallModPayload) => modsWithSettings.filter(x => isNew(x) && pathKey(x.path) === pathKey(m.path))
+        // a row installed when a result for its file says so, by the name it asked for when one archive had several
+        // rows (the output name may carry a priority suffix or a Keep both number, the asked-for name does not)
+        const installedRow = (m: InstallModPayload) => (doneList ?? []).some(d => pathKey(d.source) === pathKey(m.path) && (sameSource(m).length <= 1 || d.name === asked(m)))
+        // without the done list (an older backend), the failed results by file and name
+        const failedByList = (m: InstallModPayload) => failedList.some(f => pathKey(f.source) === pathKey(m.path) && (f.whole || sameSource(m).length <= 1 || (f.requested ?? f.name) === asked(m)))
+        const failed = modsWithSettings.filter(m => isNew(m) && (doneList ? !installedRow(m) : failedByList(m)))
+        const failedNames = failed.length ? failed.map(m => asked(m) || nameKey(m.path)) : failedList.map(f => f.requested || f.name)
         return { count: Math.max(0, modsWithSettings.filter(isNew).length - failed.length), failed, failedNames } // repakxtra: without the ones already installed
       })().finally(() => { ended = true; unlistenToastProgress.then(u => u()) })
     installToast = alert.promise(installed, {
