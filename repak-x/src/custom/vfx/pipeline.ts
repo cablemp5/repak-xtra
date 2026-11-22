@@ -45,7 +45,7 @@ export const unsupportedFailure = (r: Pick<VfxReport, 'status' | 'error'>) =>
   r.status === 'failed' && (/without the game's class names/.test(r.error ?? '') // that extract was already read again one-shot (xtra_uat_cli.rs)
     || !/^(Not updated yet|Stopped on an unexpected problem|Not decrypted|Could not turn it off)|internet|game updated|could not be encrypted|layout could not be checked|could not be listed/i.test(r.error ?? ''))
 
-export const repairOutcome = (r: VfxReport) => (r.status === 'mappings' ? 'Waiting for mappings' : r.status !== 'fixed' ? 'Failed' : incompleteAssets(r) ? 'Partially updated' : 'Updated')
+export const repairOutcome = (r: VfxReport) => (r.status === 'mappings' ? 'Waiting for mappings' : r.status !== 'fixed' ? 'Failed' : incompleteAssets(r) || r.lost ? 'Partially updated' : 'Updated')
 
 /** What a Failed row offers: Retry in Best effort for a rejection only Strict makes, Try again for a problem another try
  *  may pass, else a newer copy of the mod (its page, when one is known). */
@@ -72,6 +72,8 @@ export type VfxReport = {
   offError?: string
   /** Its Failed or Waiting outcome was kept (xtra_broken.rs Outcome): the Mod Updater drops the row once that stops holding */
   kept?: boolean
+  /** Rebuilt assets that lost an edit the game no longer has a place for: the update is Partially updated */
+  lost?: number
   /** A kept outcome's next step as it was saved (savedFailure): wins over working it out again from the error */
   next?: 'best' | 'again' | 'page'
   assets: AssetResult[]
@@ -193,7 +195,7 @@ export async function fixVfxMod(o: FixOptions): Promise<VfxReport> {
     report.status = 'failed'
     report.error = `Not decrypted: ${String(e).replace(/[.!]?\s*$/, '')}. The mod was not changed. Try again later.`
     log(report.error, 'warning')
-    await invoke('xtra_vfx_outcome', { modPath: o.modPath, status: 'failed', error: report.error, next: 'again', usmap: o.usmapPath }).catch(() => {})
+    await invoke('xtra_vfx_outcome', { modPath: o.modPath, status: 'failed', error: report.error, next: 'again', usmap: o.usmapPath, game: null }).then(() => { report.kept = true }, () => {})
   }
   // only a decrypt that worked says how long it took: a failed one never counts as a rebuild's time (ms 0 is never recorded)
   if (direct && report.decrypted) report.ms = performance.now() - t0
@@ -264,7 +266,7 @@ async function rebuild(o: FixOptions): Promise<VfxReport> {
     }
     // the USMAP may be older than the game: fine unless the patch rewrote files this update decodes
     const wait = await invoke<UsmapWait | null>('xtra_vfx_usmap_wait', { modPath: from, gamePaks: o.gamePaksPath, usmapPath: o.usmapPath })
-    // not a policy refusal: the flagged mod cannot be made safe yet, so it still follows Safety and can turn off
+    // not a policy refusal: it waits for the game's new mappings, and its files stay as they are
     if (wait?.changed) { report.status = 'mappings'; report.error = `Not updated yet. ${usmapWaitText(wait)}`; return report }
     runId = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
     const dirs = await invoke<Dirs>('xtra_vfx_dirs', { gamePaks: o.gamePaksPath, runId, usmapPath: o.usmapPath }) // the game files' cache is per USMAP too
@@ -658,7 +660,8 @@ async function rebuild(o: FixOptions): Promise<VfxReport> {
           warn(`${stem(p)}: rebuilt on vanilla using supported parameters. Other creator edits are not proven preserved.`)
           await invoke('vfx_write_json_file', { path: `${dirs.editedJson}/${jsonRel}`, content: JSON.stringify(json) })
           report.counts.changes += changed.length
-          asset(p, 'updated', `Rebuilt on the game's file with ${plural(changed.length, 'edit')}: ${changed.slice(0, 6).join(', ')}${changed.length > 6 ? `, and ${changed.length - 6} more` : ''}. Other creator edits are not proven preserved.`)
+          if (notes.length) report.lost = (report.lost ?? 0) + 1 // known edits left behind: partial, not whole
+          asset(p, 'updated', `Rebuilt on the game's file with ${plural(changed.length, 'edit')}: ${changed.slice(0, 6).join(', ')}${changed.length > 6 ? `, and ${changed.length - 6} more` : ''}.${notes.length ? ` ${plural(notes.length, 'edit')} could not be carried.` : ''} Other creator edits are not proven preserved.`)
         } else {
           warn(`${stem(p)}: supported parameters match, but replacing the original with vanilla may lose other creator edits.`)
           asset(p, 'same', 'Supported parameters match the game. Original asset omitted, so vanilla is used. Other creator edits are not proven preserved.')
@@ -683,7 +686,7 @@ async function rebuild(o: FixOptions): Promise<VfxReport> {
       }
       report.strictOnly = !failedN && !report.counts.unreadable && Boolean(report.counts.updated || report.counts.added || report.assets.some(a => relaid.has(assetKey(rel(a.path))) && a.kind !== 'same')) // Best effort would install it (a match alone it would not)
       const why = [failedN && plural(failedN, 'material or blueprint', 'materials and blueprints') + ' could not be rebuilt', report.counts.unreadable && plural(report.counts.unreadable, 'asset') + ' could not be read', report.warnings.length && `Strict found ${plural(report.warnings.length, 'warning')}`].filter(Boolean).join(', and ')
-      report.error = `Not updated: ${why}. The mod was not changed. ${report.strictOnly ? changePolicy : failedN || report.counts.unreadable ? 'If the USMAP in Advanced is current, a newer copy of the mod may be needed.' : 'Its creator edits could not be proven preserved.'}`
+      report.error = `Not updated: ${why}. The mod was not changed. ${report.strictOnly ? changePolicy : failedN || report.counts.unreadable ? 'If the USMAP in Advanced is current, a newer copy of the mod may be needed.' : 'Its creator edits could not be proven preserved.'}${report.assets.some(a => /game's copy could not be read/.test(a.detail)) ? " Try again: the game's files are read again." : ''}`
       log(report.error, 'warning')
       return report // failed: the mod stays as it was
     }

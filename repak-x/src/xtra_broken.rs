@@ -929,6 +929,14 @@ fn usmap_name() -> String {
     crate::vfx_updater::commands::saved_usmap_path().map(|u| usmap_id(&u)).unwrap_or_default()
 }
 
+/// The mod's files as one stamp: its .utoc, .ucas and .pak (on or off) together, sizes summed and the newest time, so a
+/// new copy of any of them (a hybrid mod's .pak half too) is a new mod.
+fn mod_stamp(utoc: &Path) -> Option<(u64, u64)> {
+    let (size, modified) = file_stamp(utoc)?;
+    let more = ["ucas", "pak", "bak_repak"].iter().filter_map(|x| file_stamp(&utoc.with_extension(x)));
+    Some(more.fold((size, modified), |(s, m), (s2, m2)| (s + s2, m.max(m2))))
+}
+
 /// Whether `o` still describes the mod: the same file, game build and mappings it was recorded with.
 fn outcome_holds(o: &Outcome, stamp: Option<(u64, u64)>, game: u64, usmap: &str) -> bool {
     stamp == Some((o.size, o.modified)) && o.game == game && o.usmap == usmap
@@ -949,7 +957,7 @@ pub fn xtra_vfx_outcome(mod_path: String, status: Option<String>, error: Option<
     match status {
         None => { if all.remove(&checked_key(&utoc)).is_none() { return Ok(()); } }
         Some(status) => {
-            let (size, modified) = file_stamp(&utoc).ok_or_else(|| format!("{} is not there", utoc.display()))?;
+            let (size, modified) = mod_stamp(&utoc).ok_or_else(|| format!("{} is not there", utoc.display()))?;
             all.insert(checked_key(&utoc), Outcome { status, error: error.unwrap_or_default(), next: next.unwrap_or_default(), size, modified, game: game.unwrap_or_else(|| game_updated(&mods_dir)),
                 usmap: usmap.map(|u| usmap_id(&u)).unwrap_or_else(usmap_name) });
         }
@@ -957,7 +965,7 @@ pub fn xtra_vfx_outcome(mod_path: String, status: Option<String>, error: Option<
     // bounded: outcomes that no longer hold go first (a mod updated, removed or made for an older game)
     if all.len() > 1000 {
         let (game, usmap) = (game_updated(&mods_dir), usmap_name());
-        all.retain(|k, o| outcome_holds(o, file_stamp(Path::new(k)), game, &usmap));
+        all.retain(|k, o| outcome_holds(o, mod_stamp(Path::new(k)), game, &usmap));
     }
     let tmp = store.with_extension("json.tmp");
     std::fs::write(&tmp, serde_json::to_string(&all).map_err(|e| e.to_string())?).map_err(|e| e.to_string())?;
@@ -973,7 +981,7 @@ pub fn xtra_vfx_outcomes(mod_paths: Vec<String>, state: State<'_, Arc<Mutex<AppS
         .into_iter()
         .filter_map(|p| {
             let utoc = Path::new(&p).with_extension("utoc");
-            let o = all.get(&checked_key(&utoc)).filter(|o| outcome_holds(o, file_stamp(&utoc), game, &usmap))?.clone();
+            let o = all.get(&checked_key(&utoc)).filter(|o| outcome_holds(o, mod_stamp(&utoc), game, &usmap))?.clone();
             Some((p, o))
         })
         .collect()
@@ -1196,13 +1204,13 @@ pub async fn xtra_broken_mods(mod_paths: Vec<String>, state: State<'_, Arc<Mutex
         verdicts.retain_mut(|v| {
             if v.kind != "vfx" { return true; }
             let utoc = Path::new(&v.path).with_extension("utoc");
-            !outcomes.get(&checked_key(&utoc)).is_some_and(|o| o.status == "failed" && outcome_holds(o, file_stamp(&utoc), game_updated, &usmap_now))
+            !outcomes.get(&checked_key(&utoc)).is_some_and(|o| o.status == "failed" && outcome_holds(o, mod_stamp(&utoc), game_updated, &usmap_now))
         });
         // a waiting one: its verdict waits (a May crash or Safety unknown keeps its badge, the Mod Updater keeps it out of
         // Update), and one with no verdict of its own (updated from All mods, or Add .utoc) gets a Waiting one
         for p in &mod_paths {
             let utoc = Path::new(p).with_extension("utoc");
-            if !outcomes.get(&checked_key(&utoc)).is_some_and(|o| o.status == "waiting" && outcome_holds(o, file_stamp(&utoc), game_updated, &usmap_now)) { continue; }
+            if !outcomes.get(&checked_key(&utoc)).is_some_and(|o| o.status == "waiting" && outcome_holds(o, mod_stamp(&utoc), game_updated, &usmap_now)) { continue; }
             if let Some(v) = verdicts.iter_mut().find(|v| v.path == *p) {
                 if v.kind != "broken" && v.usmap_wait == 0 {
                     v.usmap_wait = 1;

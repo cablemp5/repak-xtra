@@ -115,7 +115,7 @@ export const MAPPINGS_NOTE = 'Mappings usually arrive within 24 hours of a game 
 const KIND_ORDER: AssetKind[] = ['failed', 'left', 'unreadable', 'added', 'updated', 'same', 'passed']
 const KIND_LABEL: Record<AssetKind, string> = { updated: 'Rebuilt', same: 'Match the game', added: 'The mod\'s own', passed: 'Kept as they were', left: 'Left out', unreadable: 'Could not be read', failed: 'Not updated' }
 /** An update that left out Niagara files made for an older game build: it works, without those effects' colors */
-const isPartial = (r?: VfxReport) => r?.status === 'fixed' && (r.counts.left + r.counts.ownGame + r.counts.unreadable > 0 || r.assets.some(a => a.kind === 'failed'))
+const isPartial = (r?: VfxReport) => r?.status === 'fixed' && (r.counts.left + r.counts.ownGame + r.counts.unreadable > 0 || r.assets.some(a => a.kind === 'failed') || Boolean(r.lost))
 const statusText = (r: VfxReport) => (isPartial(r) ? 'Partially updated'
   : r.turnedOff && r.status !== 'fixed' ? `${r.counts.relaid ? 'Not updated' : 'May crash'}, turned off` : r.status === 'fixed' || r.status === 'failed' || r.status === 'mappings' ? repairOutcome(r) : STATUS[r.status])
 const leftText = (r: VfxReport) => `Left out ${plural(r.counts.left, 'effect file')} made for an older game build, so the game uses its own and ${r.counts.left === 1 ? 'that effect shows' : 'those effects show'} their usual colors.`
@@ -509,10 +509,11 @@ export function VfxUpdaterPanel() {
         if (seeded.current) pick(list.filter(m => waitsRef.current.has(norm(m.utoc)) && !nowWaits.has(norm(m.utoc)) && n.has(norm(m.path))).map(m => norm(m.utoc)), true)
         setWaits(nowWaits)
         const failedNow = new Map(Object.entries(outcomes).filter(([, o]) => o.status === 'failed').map(([p, o]) => [norm(p), o]))
+        const was = savedRef.current // read before the batch: the runs updater below runs after this render's saved
         setSaved(failedNow)
         // this session's failures whose kept outcome stopped holding (a new copy, a new game build, new mappings) are judged
         // again. One never kept (a Safety turn-off that failed, an outcome that could not be saved) stays
-        setRuns(rs => { const gone = list.filter(m => (rs[norm(m.utoc)]?.status === 'failed' && (rs[norm(m.utoc)]?.report?.kept || savedRef.current.has(norm(m.path))) && !failedNow.has(norm(m.path))) || (rs[norm(m.utoc)]?.status === 'mappings' && !nowWaits.has(norm(m.utoc)))).map(m => norm(m.utoc)); if (!gone.length) return rs; const n = { ...rs }; gone.forEach(k => delete n[k]); return n })
+        setRuns(rs => { const gone = list.filter(m => (rs[norm(m.utoc)]?.status === 'failed' && (rs[norm(m.utoc)]?.report?.kept || was.has(norm(m.path))) && !failedNow.has(norm(m.path))) || (rs[norm(m.utoc)]?.status === 'mappings' && !nowWaits.has(norm(m.utoc)))).map(m => norm(m.utoc)); if (!gone.length) return rs; const n = { ...rs }; gone.forEach(k => delete n[k]); return n })
         setMods(list)
         setScanProblems(problems)
         setUncertain(new Map(verdicts.filter(v => v.kind === 'unknown').map(v => [norm(v.path), v.reason])))
@@ -549,7 +550,7 @@ export function VfxUpdaterPanel() {
     if (fresh.length) { setAdded(a => [...a, ...fresh]); setMods(m => [...(m ?? []), ...fresh]) }
     const keys = [...want.keys()]
     seeded.current = true
-    userPick(keys, true)
+    userPick(keys.filter(k => !waitsRef.current.has(k)), true) // a waiting one is shown, never ticked
     if (h.start && keys.length) autoRun.current = [...new Set([...(autoRun.current ?? []), ...keys])] // these, not whatever else is ticked
   })
 
@@ -596,6 +597,7 @@ export function VfxUpdaterPanel() {
       const r = await invoke<Usmap>('vfx_check_usmap_update', { force })
       setUsmapInfo(r)
       if (r.localPath && !r.skipped) setUsmap(r.localPath)
+      if (r.updated) { setReload(n => n + 1); void verdictsChanged() } // the same path can hold new mappings
       addLog(r.message, r.updated || r.upToDate ? 'success' : 'warning')
     } catch (e) { addLog(`USMAP fetch failed: ${e}`, 'warning') } finally { setChecking(false) }
   }
@@ -608,6 +610,7 @@ export function VfxUpdaterPanel() {
     const current = await invoke<Record<string, unknown>>('vfx_get_settings').catch(() => ({}))
     await invoke('vfx_save_settings', { settings: { ...current, usmapPath: p } }).catch(() => {}) // keeps the auto-update bookkeeping
     setUsmap(p) // after the save: the checks it starts read the saved USMAP
+    setReload(n => n + 1); void verdictsChanged() // the same path, or a first one, can hold new mappings too
   }
 
   // any mod by its .utoc, ticked: one in the list is just ticked, any other joins it under Chosen files
@@ -620,7 +623,7 @@ export function VfxUpdaterPanel() {
     const fresh = [...new Map(paths.filter(u => !listed.has(norm(u))).map(u => [norm(u), chosenMod(u)])).values()]
     if (fresh.length) { setAdded(a => [...a, ...fresh]); setMods(m => [...(m ?? []), ...fresh]) }
     setQ('')
-    userPick(paths.map(norm), true)
+    userPick(paths.map(norm).filter(k => !waitsRef.current.has(k)), true)
   }
 
   const elsewhere = busy || !held || held.token === myToken.current ? null : held
@@ -820,7 +823,7 @@ export function VfxUpdaterPanel() {
     const keys = ms.map(m => norm(m.utoc))
     return { id, title, mods: ms, count, keys, all: keys.length > 0 && keys.every(k => picked.has(k)), none: !keys.some(k => picked.has(k)) }
   }
-  const groupId = (m: Mod) => (updatedNow(m) ? 'updated' : updatingNow(m) ? 'updating' : waits.has(norm(m.utoc)) ? 'waiting' : failedNow(m) ? 'failed'
+  const groupId = (m: Mod) => (updatingNow(m) ? 'updating' : waits.has(norm(m.utoc)) ? 'waiting' : updatedNow(m) ? 'updated' : failedNow(m) ? 'failed'
     : addedKeys.has(norm(m.utoc)) ? 'added' : needsOf(m) || runs[norm(m.utoc)]?.status === 'cancelled' ? 'needs' : 'all')
   groupOf.current = new Map(shown.map(m => [norm(m.utoc), groupId(m)]))
   const inGroup = (id: string) => shown.filter(m => groupOf.current.get(norm(m.utoc)) === id)
