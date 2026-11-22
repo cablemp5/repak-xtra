@@ -2034,6 +2034,7 @@ function App() {
       // repakxtra: what the details cache already holds comes back in one call, the rest four at a time, so a big
       // library's first read keeps the disk and the other commands free
       const cached = await invoke<Record<string, unknown>>('get_cached_mod_details', { modPaths: pathsToFetch }).catch(() => ({} as Record<string, unknown>))
+      if (!newest()) return // repakxtra
       const results: PromiseSettledResult<unknown>[] = pathsToFetch.map(p => (p in cached ? { status: 'fulfilled' as const, value: cached[p] } : undefined)) as PromiseSettledResult<unknown>[]
       completedCount = Object.keys(cached).length
       setModLoadingProgress(Math.round((completedCount / totalCount) * 100))
@@ -2264,7 +2265,7 @@ function App() {
       const trashId = crypto.randomUUID() // repakxtra
       if (!(await runOp('delete this mod', () => invoke('delete_mod', { path: modPath, trashId }), { modes: false }))) return false // repakxtra: game open or file in use asks
       // repakxtra: close the row's gap when deletion succeeds, without waiting for the library rescan.
-      shownList.current = null // repakxtra
+      shownList.current = newestListing.current = null // repakxtra: a listing still out may have read this row before the change
       setMods(current => current.filter(mod => mod.path !== modPath))
       setSelectedMods(current => { const next = new Set(current); next.delete(modPath); return next })
       setStatus('Mod deleted')
@@ -2306,7 +2307,7 @@ function App() {
       // delayed safety refresh, and the watcher. The fallback reload runs only when no watcher event comes.
       const newPath = modPath.replace(/\.[^.\\/]+$/, newState ? '.pak' : '.bak_repak')
       const moved = (m: ModRecord): ModRecord => (m.path === modPath ? { ...m, path: newPath, enabled: Boolean(newState) } : m)
-      shownList.current = null // repakxtra
+      shownList.current = newestListing.current = null // repakxtra: a listing still out may have read this row before the change
       setMods(prev => prev.map(moved))
       if (modDetailsRef.current[modPath]) {
         const { [modPath]: d, ...rest } = modDetailsRef.current
