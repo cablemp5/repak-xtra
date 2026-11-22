@@ -361,7 +361,8 @@ pub async fn xtra_ko_mod(usmap_path: String, mod_path: String, colors_only: Opti
     }
     let paks = paks(&state)?;
     // inside this build's folder: xtra_ko_file reads only from there, and an older build's copy goes with it
-    let base = build_dir(&paks, &usmap_path, "").join("mod");
+    // the editor's read has its own folder: a preview reading its files at the same time keeps them
+    let base = build_dir(&paks, &usmap_path, "").join(if colors_only == Some(true) { "mod-open" } else { "mod" });
     let _ = std::fs::remove_dir_all(&base);
     let (ex, json, png) = (base.join("extract"), base.join("json"), base.join("png"));
     std::fs::create_dir_all(&ex).map_err(|e| e.to_string())?;

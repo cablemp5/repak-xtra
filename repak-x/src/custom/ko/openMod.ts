@@ -5,13 +5,14 @@ import { useSyncExternalStore } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { setView } from '../loadoutStore'
 
-// shortcut: by path for the session, a Replace file that turns a KO mod into another kind still shows the row (opening it then says so)
 const known = new Map<string, boolean>()
+/** The mods folder was read again (an install, Replace file, a rename): every mod is checked again on its next right-click. */
+export const forgetKoMods = () => known.clear()
 /** Whether the mod is a KO prompt mod, or undefined when not read yet. */
 export const knownKoMod = (path: string) => known.get(path)
 export const checkKoMod = (path: string) => invoke<boolean>('xtra_ko_is_mod', { modPath: path }).catch(() => false).then(ko => { known.set(path, ko); return ko })
 
-export type KoOpen = { path: string; name: string }
+export type KoOpen = { path: string; name: string; folder?: string | null }
 let request: KoOpen | null = null
 const subs = new Set<() => void>()
 const subscribe = (f: () => void) => { subs.add(f); return () => { subs.delete(f) } }
@@ -19,8 +20,9 @@ const subscribe = (f: () => void) => { subs.add(f); return () => { subs.delete(f
 /** The mod's file name as the editor's Name field: its Install then finds the mod and offers to replace it. */
 export const koModName = (path: string) => (path.split(/[\\/]/).pop() ?? '').replace(/\..*$/, '').replace(/(_\d+)?_P$/i, '').replace(/_/g, ' ').trim()
 
-export function openInKoEditor(path: string) {
-  request = { path, name: koModName(path) }
+/** `folder`: the mod's Library folder, where the editor's Install puts the new one so it replaces the old one there. */
+export function openInKoEditor(path: string, folder?: string | null) {
+  request = { path, name: koModName(path), folder }
   subs.forEach(f => f())
   setView('ko')
 }

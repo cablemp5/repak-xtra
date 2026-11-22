@@ -42,7 +42,7 @@ const stepText = (p: Progress, hero: string) => p.step === 1 ? `Finding ${hero}'
   : p.step === 2 ? 'Reading its layers and animations' : p.step === 3 ? 'Turning its textures into pictures'
     : p.total ? `Loading textures, ${p.done ?? 0} of ${p.total}` : 'Loading textures'
 
-export type KoEditorProps = Pick<LoadoutProps, 'alert' | 'blocked'> & { onInstall: (path: string) => Promise<void> }
+export type KoEditorProps = Pick<LoadoutProps, 'alert' | 'blocked'> & { onInstall: (path: string, folder?: string | null) => Promise<void> }
 
 export default function KoEditor(p: KoEditorProps) {
   const shown = useView() === 'ko'
@@ -122,26 +122,34 @@ function Editor({ onInstall, alert, blocked, shown }: KoEditorProps & { shown: b
 
   // Library right-click > Open in KO Editor: the mod's widget is read, its hero opens, then its colors go on the game's roles
   const openRequest = useKoOpen()
-  const [fromMod, setFromMod] = useState<{ heroId: string; roles: Role[]; name: string; ownParts: boolean } | null>(null)
-  const [askReplace, setAskReplace] = useState<{ heroId: string; patch: Saved[string]; ownParts: boolean } | null>(null)
+  const [fromMod, setFromMod] = useState<{ heroId: string; roles: Role[]; name: string; ownParts: boolean; folder?: string | null } | null>(null)
+  const [askReplace, setAskReplace] = useState<{ heroId: string; patch: Saved[string]; ownParts: boolean; folder?: string | null } | null>(null)
+  const source = useRef<{ heroId: string; folder?: string | null } | null>(null) // the opened mod's hero and folder: its Install goes there
+  const openRun = useRef(0) // the newest open: an older one still reading drops its result
   useEffect(() => {
     if (!openRequest || !usmap || !heroes) return
     const r = takeKoOpen()
     if (!r) return
+    const run = ++openRun.current
     setOpening({ name: r.name, since: Date.now() }); setAskReplace(null); setFromMod(null)
     invoke<{ hero: string; widgetJson: string; ownParts: boolean } | null>('xtra_ko_mod', { usmapPath: usmap, modPath: r.path, colorsOnly: true })
       .then(async m => {
         if (!m) throw new Error('It is not a KO prompt mod (one KO prompt, maybe with its textures, and nothing else).')
         const h = heroes.find(x => x.id === m.hero)
         if (!h) throw new Error(`Your game has no KO prompt for hero ${m.hero}.`)
-        setFromMod({ heroId: h.id, roles: readWidget(await readAsset(m.widgetJson)).roles, name: r.name, ownParts: m.ownParts })
+        const roles = readWidget(await readAsset(m.widgetJson)).roles
+        if (run !== openRun.current) return
+        setFromMod({ heroId: h.id, roles, name: r.name, ownParts: m.ownParts, folder: r.folder })
         setQuery(''); setHeroId(h.id)
       })
-      .catch(e => { cue('warning'); alert.warning(`Could not open ${r.name}`, e instanceof Error ? e.message : String(e)) })
-      .finally(() => setOpening(null))
+      .catch(e => { if (run === openRun.current) { cue('warning'); alert.warning(`Could not open ${r.name}`, e instanceof Error ? e.message : String(e)) } })
+      .finally(() => { if (run === openRun.current) setOpening(null) })
   }, [openRequest, usmap, heroes]) // eslint-disable-line react-hooks/exhaustive-deps
-  const applyMod = (heroId: string, patch: Saved[string], ownParts: boolean) => {
+  // another hero picked, or the mod's hero failed to load: the open is dropped, never applied later out of nowhere
+  useEffect(() => { if (fromMod && (heroId !== fromMod.heroId || loadError)) setFromMod(null) }, [heroId, loadError]) // eslint-disable-line react-hooks/exhaustive-deps
+  const applyMod = (heroId: string, patch: Saved[string], ownParts: boolean, folder?: string | null) => {
     saveFor(heroId, patch); setAskReplace(null); cue('ready')
+    source.current = { heroId, folder }
     if (ownParts) alert.warning('Its own textures stay out', "The KO Editor sets only the prompt's colors. Textures or materials the mod ships are not in what it installs.")
   }
   useEffect(() => { // its hero is up: the mod's colors on the game's roles, asking first over colors already picked
@@ -149,8 +157,8 @@ function Editor({ onInstall, alert, blocked, shown }: KoEditorProps & { shown: b
     setFromMod(null)
     const patch = { colors: colorsFrom(loaded.scene.w.roles, fromMod.roles), hue: 0, name: fromMod.name }
     const had = saved[fromMod.heroId]
-    if (Object.keys(had?.colors ?? {}).length || had?.hue) setAskReplace({ heroId: fromMod.heroId, patch, ownParts: fromMod.ownParts })
-    else applyMod(fromMod.heroId, patch, fromMod.ownParts)
+    if (Object.keys(had?.colors ?? {}).length || had?.hue) setAskReplace({ heroId: fromMod.heroId, patch, ownParts: fromMod.ownParts, folder: fromMod.folder })
+    else applyMod(fromMod.heroId, patch, fromMod.ownParts, fromMod.folder)
   }, [fromMod, loaded]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // once: loadouts the first KO Editor made keyed their mod by its .utoc, which never matches the Library's name for it
@@ -263,7 +271,7 @@ function Editor({ onInstall, alert, blocked, shown }: KoEditorProps & { shown: b
       // the install replaces a mod of the same file name without asking, so this asks first
       const stem = koStem(name).toLowerCase()
       const installed = replace ? [] : await invoke<{ path: string }[]>('get_pak_files').catch(() => [])
-      if (installed.some(m => (m.path.split(/[\\/]/).pop() ?? '').replace(/\..*$/, '').replace(/(_\d+)?_P$/i, '').toLowerCase() === stem)) { setTaken(name); cue('warning'); return }
+      if (installed.some(m => koStem((m.path.split(/[\\/]/).pop() ?? '').replace(/\..*$/, '').replace(/(_\d+)?_P$/i, '').replace(/_/g, ' ')).toLowerCase() === stem)) { setTaken(name); cue('warning'); return }
       // a game update while the app was open: the prompt is read again before anything is built from it
       setStep('Writing the colors')
       const now = await usmapPath()
@@ -274,7 +282,7 @@ function Editor({ onInstall, alert, blocked, shown }: KoEditorProps & { shown: b
         return
       }
       const path = await buildKo({ usmapPath: usmap, widgetJson: loaded.widgetJson, widgetRel: hero.widget, roles, colors, name, step: setStep })
-      await onInstall(path)
+      await onInstall(path, source.current?.heroId === hero.id ? source.current.folder : undefined)
     } catch (e) {
       cue('warning'); alert.warning('Could not prepare the KO prompt', e instanceof Error ? e.message : String(e))
     } finally { setStep(null) }
@@ -351,7 +359,7 @@ function Editor({ onInstall, alert, blocked, shown }: KoEditorProps & { shown: b
                 </div>
               ) : askReplace && (
                 <ConfirmRow text={`Replace your colors for ${heroes?.find(h => h.id === askReplace.heroId)?.name ?? 'this hero'} with ${askReplace.patch.name}'s?`} yes="Replace"
-                  onNo={() => { setAskReplace(null); cue('close') }} onYes={() => applyMod(askReplace.heroId, askReplace.patch, askReplace.ownParts)} />
+                  onNo={() => { setAskReplace(null); cue('close') }} onYes={() => applyMod(askReplace.heroId, askReplace.patch, askReplace.ownParts, askReplace.folder)} />
               )}
             </div>
           )}

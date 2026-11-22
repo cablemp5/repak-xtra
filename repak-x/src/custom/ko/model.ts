@@ -239,20 +239,21 @@ export function applyRole(a: Asset, role: Role, rgb: [number, number, number]): 
 const toLin = (c: number) => (c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4)
 const toSrgb = (c: number) => (c <= 0.0031308 ? c * 12.92 : 1.055 * c ** (1 / 2.4) - 0.055)
 export const hexOf = (c: Rgba) => '#' + [c.R, c.G, c.B].map(v => Math.round(Math.min(1, Math.max(0, toSrgb(v))) * 255).toString(16).padStart(2, '0')).join('').toUpperCase()
-/** A mod's colors on the game's roles (by role id), only where they differ: each role takes the color its first site
- *  has in the mod's widget. Role ids are the game's colors, so they never match the mod's own roles directly. */
+/** A mod's colors on the game's roles (by role id), only where they differ: each role takes the first color one of its
+ *  sites has changed to in the mod's widget (another tool may recolor only some of a role's layers). Role ids are the game's colors, so they never match the mod's own roles directly. */
 export function colorsFrom(game: Role[], mod: Role[]): Record<string, string> {
   const at = new Map(mod.flatMap(r => r.sites.map(s => [siteKey(s.widget, s.path), s.rgba] as const)))
   return Object.fromEntries(game.flatMap(r => {
-    const c = r.sites.map(s => at.get(siteKey(s.widget, s.path))).find(Boolean)
-    return c && hexOf(c) !== hexOf(r.rgba) ? [[r.id, hexOf(c)]] : []
+    const c = r.sites.map(s => at.get(siteKey(s.widget, s.path))).find(c => c && hexOf(c) !== hexOf(r.rgba))
+    return c ? [[r.id, hexOf(c)]] : []
   }))
 }
 if (import.meta.env.DEV) {
   const site = (widget: string, R: number): ColorSite => ({ exportIndex: 0, path: ['ColorAndOpacity'], widget, prop: 'ColorAndOpacity', rgba: { R, G: 0, B: 0, A: 1 } })
   const role = (id: string, ...sites: ColorSite[]): Role => ({ id, name: id, rgba: sites[0].rgba, sites, widgets: [], parts: [] })
-  const got = colorsFrom([role('a', site('Bar', 0)), role('b', site('Text', 1)), role('c', site('Gone', 0))], [role('x', site('Bar', 1), site('Text', 1))])
-  console.assert(JSON.stringify(got) === '{"a":"#FF0000"}', 'colorsFrom: changed sites only, by the game role id', got)
+  const got = colorsFrom([role('a', site('Bar', 0)), role('b', site('Text', 1)), role('c', site('Gone', 0)), role('d', site('Icon', 0), site('Glow', 0))],
+    [role('x', site('Bar', 1), site('Text', 1)), role('y', site('Icon', 0)), role('z', site('Glow', 1))])
+  console.assert(JSON.stringify(got) === '{"a":"#FF0000","d":"#FF0000"}', 'colorsFrom: changed sites only, by the game role id, any site of a role', got)
 }
 /** `hex` with its hue turned by `deg` (HSL, in the picker's sRGB): greys, white and black stay as they are. */
 export function shiftHue(hex: string, deg: number): string {
