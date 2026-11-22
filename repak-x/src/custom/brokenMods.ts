@@ -176,7 +176,7 @@ export function useBrokenWatch(mods: { path: string; modified_date?: number; fil
       }
       if (live && found) await check()
     }
-    const chain = (first?: Promise<boolean>): Promise<boolean> => !live ? Promise.resolve(false) : (scanStarted(), invoke('xtra_scan_stopped').catch(() => false))
+    const chain = (first?: Promise<boolean>): Promise<boolean> => !live ? Promise.resolve(false) : (planned = false, ticked = [], scanStarted(), invoke('xtra_scan_stopped').catch(() => false))
       .then(() => first ?? check())
       .then(ok => { if (!ok) throw new Error('the first check failed') })
       .then(() => {
@@ -216,7 +216,7 @@ export function useBrokenWatch(mods: { path: string; modified_date?: number; fil
       // the new list's own run follows
       // a run that stopped first (the game, a held scan, an old USMAP) keeps a manual Check's mods for the next one
       .then(finished => {
-        if (finished && !idle) { (ticked.length ? mine : paths).forEach(p => scope.delete(norm(p))); wasForced.forEach(p => forced.delete(norm(p))); if (!ticked.length && !asked) whole = false } // a Refresh asked meanwhile still wants its own
+        if (finished && !idle) { (ticked.length ? mine : paths).forEach(p => scope.delete(norm(p))); wasForced.filter(p => !fresh.has(norm(p))).forEach(p => forced.delete(norm(p))); /* asked again meanwhile: kept for the next run */ if (!ticked.length && !asked) whole = false } // a Refresh asked meanwhile still wants its own
         unfinished = !finished; stoppedScope = finished ? [] : wasForced; if (!finished && live && planned && !ticked.length) asked = true; /* a stopped whole run resumes whole, its forced mods still forced */ scanEnded(finished || !live, finished); void invoke('xtra_scan_release').catch(() => {}); return finished })
     let unfinished = false
     // one run waiting its turn is enough: a focus, a Rescan and the game update notice asking meanwhile all get that one
