@@ -285,9 +285,9 @@ if (import.meta.env.DEV && !('__TAURI_INTERNALS__' in window)) {
         return restored
       }
       // localStorage 'mock.crash' = '1': two crashes in Settings > Crash reports, 'worst': long names, many errors, and mods
-      // the game did not load (xtra_crash_log.rs reads the game's own log)
+      // the game did not load (xtra_crash_log.rs reads the game's own log), 'live': the newest crash just happened
       case 'xtra_recent_crashes': return localStorage.getItem('mock.crash') ? [
-        { id: 'UECC-Windows-MOCK2_0000', time: Math.floor(Date.now() / 1000) - 600, crash_type: 'Access Violation', asset_path: null },
+        { id: 'UECC-Windows-MOCK2_0000', time: Math.floor(Date.now() / 1000) - (localStorage.getItem('mock.crash') === 'live' ? 0 : 600), crash_type: 'Access Violation', asset_path: null },
         { id: 'UECC-Windows-MOCK1_0000', time: Math.floor(Date.now() / 1000) - 3600, crash_type: 'Assertion failed', asset_path: '/Game/Marvel/Characters/1026/1026001/Meshes/SK_1026_1026001' },
         { id: 'UECC-Windows-NOLOG_0000', time: Math.floor(Date.now() / 1000) - 7200, crash_type: 'Access Violation', asset_path: null },
       ] : []
