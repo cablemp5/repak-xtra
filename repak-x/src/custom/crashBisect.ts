@@ -21,7 +21,7 @@ export type Phase = 'baseline' | 'halve' | 'confirm' | 'reproduce'
 /** `start`: the paths that were on at the start (stems match them after a switch). `off`: the suspects off in this test.
  *  `found`: mods that crash the game but are not the only cause, kept off in every later test. `tests`: answers so far.
  *  `prev`: the test before, for Undo last answer. */
-export type Bisect = { start: string[]; candidates: string[]; off: string[]; phase: Phase; tests: number; found?: string[]; ok?: string[]; likely?: string[]; prev?: Bisect }
+export type Bisect = { start: string[]; candidates: string[]; off: string[]; phase: Phase; tests: number; found?: string[]; ok?: string[]; likely?: string[]; at?: number; prev?: Bisect }
 export type Outcome =
   | { kind: 'run'; run: Bisect }
   | { kind: 'found'; culprits: string[] }   // turning these off stopped the crash
@@ -86,7 +86,7 @@ export function next(b: Bisect, crashed: boolean): Outcome {
   const found = b.found ?? []
   const ok = b.ok ?? []
   const run = (phase: Phase, candidates: string[], off: string[], f: string[], k: string[]): Outcome =>
-    ({ kind: 'run', run: { start: b.start, candidates, off, phase, tests: b.tests + 1, found: f, ok: k, likely: b.likely, prev: b } })
+    ({ kind: 'run', run: { start: b.start, candidates, off, phase, tests: b.tests + 1, found: f, ok: k, likely: b.likely, at: b.at, prev: b } })
   // a search among `rest` (`hit`: they were on in the crash just answered): halving, or the last test when one is left.
   // The setup with every other mod proven fine (or found, off) and that one off is the last no-crash test: the proven
   // fine set only grows by a whole no-crash test. So confirm would repeat it: after a crash with it on it is named,
@@ -229,7 +229,7 @@ export const startBisect = serial(async (d: KeepDeps, mods: Mod[], likely?: stri
   const on = suspects(mods).map(m => m.path)
   if (!on.length) { d.alert.warning('No mods are on', 'Turn on the mods you played with when it crashed, then try again.'); return null }
   if (await gameOpen(d)) return null
-  return goTo(d, null, firstTest(on, likely?.filter(p => on.includes(p))))
+  return goTo(d, null, { ...firstTest(on, likely?.filter(p => on.includes(p))), at: Date.now() })
 })
 
 /** One answer: the next test, or the outcome with every mod already back as it was. Null when nothing changed. */
@@ -253,17 +253,18 @@ export const returnTo = serial(async (d: KeepDeps, from: Bisect | null, to: Bise
 
 /** When the last test ended (ms). The game poll can find a test's own crash only after the answer put every mod back. */
 let ended = 0
+let began = 0   // when that test started (ms), 0 for a run saved before this was kept
 type Listed = { id?: string; time: number }
 /** Is this crash (its folder) one a test asked about: while a test runs, or made before the last one ended (told late,
  *  say after the app was minimized)? App keeps its toast quiet then, the test already asked whether it crashed. */
 export async function crashOfTest(folder?: string | null) {
   if (readBisect()) return true
-  const end = ended   // read before the wait: a test ending meanwhile says nothing about this crash
+  const end = ended, begin = began   // read before the wait: a test ending meanwhile says nothing about this crash
   if (!end) return false
   const id = folder?.split(/[\\/]/).pop()
   const c = (await invoke<Listed[]>('xtra_recent_crashes').catch(() => [] as Listed[])).find(x => x.id === id)
   // shortcut: a crash that cannot be looked up stays quiet only in the 2 minutes after a test, when it is most likely its own
-  return c ? c.time * 1000 <= end : Date.now() - end < 120_000
+  return c ? c.time * 1000 <= end && c.time * 1000 + 999 >= begin : Date.now() - end < 120_000   // time: whole seconds
 }
 
 /** Every start mod on again (mods off at the start were never touched). The run stays saved until this works. */
@@ -274,6 +275,7 @@ async function restore(d: KeepDeps, b: Bisect) {
   if (refused) { d.alert.warning('Mods not restored yet', `${refused} The test stays open so you can try again.`); return false }
   save(null)
   ended = Date.now()
+  began = b.at ?? 0
   return true
 }
 
