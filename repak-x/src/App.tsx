@@ -534,6 +534,7 @@ function App() {
   const filteredModsRef = useRef<ModRecord[]>([]) // Keep in sync with filteredMods for selection handler
   const sameMods = useRef<SameMod[]>([]) // repakxtra: this install's mods left out as already installed (xtra_install_same)
   const loadModsSeq = useRef(0) // repakxtra: the newest loadMods call, so a slow older one cannot overwrite it
+  const loadsRunning = useRef(0) // repakxtra: loads still at work: the last one to end clears the loading state
   // repakxtra: the mods folder is listed by one call at a time (custom/oneAtATime.ts). newestListing: the last one asked for.
   // Every caller handles a failed listing itself: the empty catch only keeps one nobody reads yet from being unhandled
   const [listModsOnce] = useState(() => oneAtATime(() => invoke<ModRecord[]>('get_pak_files')))
@@ -1909,6 +1910,7 @@ function App() {
     // repakxtra: several loads can overlap (an install, its loadout, previews and the watcher each reload). Only the newest
     // may set the list: an older scan answering late put the pre-install list back, hiding a mod just installed
     const mine = ++loadModsSeq.current
+    loadsRunning.current++ // repakxtra
     try {
       console.log('Loading mods...')
       setIsModsLoading(true)
@@ -1950,7 +1952,7 @@ function App() {
       alert.error('Could not load mods', String(error)) // repakxtra: a toast, not only the log bar's status line
       return []
     } finally {
-      if (mine === loadModsSeq.current) { // repakxtra: not while a newer load is still at work
+      if (--loadsRunning.current === 0) { // repakxtra: not while another load is still at work
         setIsModsLoading(false)
         setModLoadingProgress(0)
       }
