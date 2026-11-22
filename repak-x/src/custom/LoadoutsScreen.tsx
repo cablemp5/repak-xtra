@@ -10,7 +10,9 @@ import LoadoutPage from './LoadoutPage'
 import NewStrip from './NewStrip'
 import SmartLoadouts from './SmartLoadouts' // repakxtra
 import BuiltinMods from './BuiltinMods'
-import { matchesLoadout } from './homeSearch'
+import { loadoutNames, matchesLoadout } from './homeSearch'
+import { closeMatches } from './smartSearch'
+import { memberName } from './loadoutIdentity'
 import { isTyping } from './hotkeys'
 import { modalOpen } from './dialogFocus'
 import { CardMedia, OnDot } from './loadoutBits'
@@ -222,8 +224,18 @@ function LoadoutsHome(p: LoadoutProps) {
   const isOn = (l: Loadout) => l.on.some(k => enabledKeys.has(displayName(k)))
   const onCount = useMemo(() => loadouts.filter(isOn).length, [loadouts, enabledKeys]) // eslint-disable-line react-hooks/exhaustive-deps
   const filtered = Boolean(q) || show !== 'all' // a narrowed view: groups without a match hide, and cards are not dragged
-  const matching = useMemo(() => loadouts.filter(l => (!q || matchesLoadout(l, q)) && (show === 'all' || isOn(l) === (show === 'enabled'))),
-    [loadouts, q, show, enabledKeys]) // eslint-disable-line react-hooks/exhaustive-deps
+  // Settings > Interface > Search: the phrase as typed, and whether a loadout's mods are searched too (by the names the
+  // Library shows: an installed mod's own name, else the name it was added under)
+  const exact = useUiPref('search-exact'), inside = useUiPref('search-in-loadouts')
+  const customNames = useMemo(() => new Map(p.mods.map(m => [modKey(m.path), (m as { custom_name?: string | null }).custom_name || ''])), [p.mods])
+  const modNames = (l: Loadout) => (inside ? l.on.map(k => customNames.get(displayName(k)) || memberName(k)) : [])
+  const passesShow = (l: Loadout) => show === 'all' || isOn(l) === (show === 'enabled')
+  const direct = useMemo(() => loadouts.filter(l => (!q || matchesLoadout(l, q, { exact, modNames: modNames(l) })) && passesShow(l)),
+    [loadouts, q, show, enabledKeys, exact, inside, p.mods]) // eslint-disable-line react-hooks/exhaustive-deps
+  // nothing matches as typed: close matches (a word one letter off), never below real ones, never with Exact match
+  const close = useMemo(() => (!q || exact || direct.length ? [] : closeMatches(loadouts.filter(passesShow), l => loadoutNames(l, modNames(l)), q)),
+    [q, exact, direct.length, loadouts, show, enabledKeys, inside, p.mods]) // eslint-disable-line react-hooks/exhaustive-deps
+  const matching = close.length ? close : direct
   const [said, setSaid] = useState('') // the result count for screen readers, once typing pauses
   useEffect(() => {
     const t = setTimeout(() => setSaid(!q ? '' : matching.length ? `${plural(matching.length, 'loadout')} found` : 'No loadouts found'), 700)
@@ -643,6 +655,7 @@ function LoadoutsHome(p: LoadoutProps) {
           </div>
         )}
 
+        {close.length > 0 && <p className="lib-close-label lo-close-label" role="status">Close matches for “{q}”</p>}
         {groups.map(([group, list]) => {
           const foldId = groupBy === 'group' ? `group:${groupKey(group)}` : `hero:${group}`
           const isFolded = folded.has(foldId) && drag.dragId === null && !q // a drag or a search opens every group (the saved folding stays)

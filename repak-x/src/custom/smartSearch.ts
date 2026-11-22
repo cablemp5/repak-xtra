@@ -1,0 +1,71 @@
+// repakxtra: the Library's and the Loadouts screen's search, one matcher for both. Each typed word must be in the
+// name (any case, any order, accents and punctuation ignored, "blackpanther" finds "Black Panther"). Exact match
+// (Settings > Interface > Search) wants the typed phrase in order instead. Only when nothing matches directly do close
+// matches count: one word of five letters or more may be one letter off (or two letters swapped), every other word must
+// match as typed. Short words never guess.
+
+/** Lowercase, no accents, punctuation as spaces, one space between words. Pure. */
+export const normText = (s: string) => s.normalize('NFKD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim()
+
+/** Whether `name` matches `query` as typed: every word (in any order), or with `exact` the phrase in order. A blank
+ *  query matches everything. Pure. */
+export function directMatch(name: string, query: string, exact = false): boolean {
+  const q = normText(query)
+  if (!q) return true
+  const h = normText(name)
+  if (exact) return h.includes(q)
+  const compact = h.replace(/ /g, '')
+  return q.split(' ').every(t => h.includes(t) || compact.includes(t))
+}
+
+/** Edit distance with an adjacent swap counting as one (optimal string alignment), stopping past `max`. Pure. */
+function distance(a: string, b: string, max = 1): number {
+  if (Math.abs(a.length - b.length) > max) return max + 1
+  const d: number[][] = Array.from({ length: a.length + 1 }, (_, i) => [i, ...Array(b.length).fill(0)])
+  for (let j = 1; j <= b.length; j++) d[0][j] = j
+  for (let i = 1; i <= a.length; i++) {
+    for (let j = 1; j <= b.length; j++) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1
+      d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + cost)
+      if (i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1]) d[i][j] = Math.min(d[i][j], d[i - 2][j - 2] + 1)
+    }
+  }
+  return d[a.length][b.length]
+}
+
+/** The shortest word that may be one letter off. */
+const MIN_FUZZY = 5
+
+/** 1 when one word of `query` needed a one-letter fix to match `name`, or null when it is not a close match (a short
+ *  word that does not match as typed, a word two letters off, two words to fix, or nothing to fix). Pure. */
+export function closeMatch(name: string, query: string): number | null {
+  const q = normText(query)
+  if (!q) return null
+  const h = normText(name), compact = h.replace(/ /g, ''), words = h.split(' ')
+  let fixes = 0
+  for (const t of q.split(' ')) {
+    if (h.includes(t) || compact.includes(t)) continue
+    if (t.length < MIN_FUZZY || !words.some(w => distance(t, w) <= 1)) return null
+    if (++fixes > 1) return null // one guess at most: the other words must match as typed
+  }
+  return fixes || null
+}
+
+/** Close matches among `items`, fewest fixes first, then by name, at most `limit`. Pure. */
+export function closeMatches<T>(items: T[], names: (item: T) => string[], query: string, limit = 20): T[] {
+  const scored = items.map(item => ({ item, name: names(item)[0] ?? '', fixes: Math.min(...names(item).map(n => closeMatch(n, query) ?? Infinity)) }))
+  return scored.filter(s => s.fixes !== Infinity).sort((a, b) => a.fixes - b.fixes || a.name.localeCompare(b.name)).slice(0, limit).map(s => s.item)
+}
+
+if (import.meta.env.DEV) {
+  const bp = 'Black Panther \u2014 Purple VFX', spidey = 'Purple Spider-Man'
+  console.assert(directMatch(bp, 'purple panther') && !directMatch(spidey, 'purple panther'), 'every word, any order')
+  console.assert(directMatch(bp, 'blackpanther purple'), 'words typed together find the name written apart')
+  console.assert(!directMatch(bp, 'purpel panther') && closeMatch(bp, 'purpel panther') === 1, 'a swapped pair is one fix, only as a close match')
+  console.assert(closeMatch(spidey, 'purpel panther') === null, 'every other word must still match')
+  console.assert(closeMatch('Hulk VFX', 'vxf') === null && closeMatch('Thor', 'thro') === null, 'short words never guess')
+  console.assert(directMatch(bp, 'purple  vfx', true) && !directMatch('VFX Purple', 'purple vfx', true), 'exact: the phrase in order, extra spaces ignored')
+  console.assert(directMatch('Café Mods', 'cafe') && directMatch('Spider-Man', 'spider man'), 'accents and punctuation ignored')
+  console.assert(directMatch(bp, '   ') && closeMatch(bp, ' ') === null, 'a blank query matches everything and guesses nothing')
+  console.assert(closeMatches([spidey, bp, 'Purple Pnather Mod'], n => [n], 'purpel panther').join() === bp, 'only close matches, ranked')
+}

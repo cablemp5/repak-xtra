@@ -1,13 +1,20 @@
-// repakxtra: Search on Home. A loadout matches when its name or its collection holds the typed text, in any case.
-// LoadoutsScreen filters with it before grouping, so collections and hero groups keep their order and folding.
+// repakxtra: Search on Home. A loadout matches when its name, its collection, or (Search inside loadouts, Settings >
+// Interface > Search) one of its mods matches the search, as one name each: words split across a loadout's name and a
+// mod's never match together. The matcher is the Library's (smartSearch.ts). LoadoutsScreen filters with it before
+// grouping, so collections and hero groups keep their order and folding.
 import { OTHER, OTHER_LABEL, groupKey } from './loadoutStore'
+import { directMatch } from './smartSearch'
 
-/** Pure: whether this loadout shows for `query` (blank shows every one). A loadout in no collection matches Unsorted. */
-export function matchesLoadout(l: { name: string; label: string }, query: string) {
-  const q = query.trim().toLowerCase()
-  if (!q) return true
+/** The names a loadout is searched by: its own, its collection's (Unsorted for none), and its mods' when given. Pure. */
+export function loadoutNames(l: { name: string; label: string }, modNames: string[] = []) {
   const collection = !groupKey(l.label) || groupKey(l.label) === groupKey(OTHER) ? OTHER_LABEL : l.label
-  return l.name.toLowerCase().includes(q) || collection.toLowerCase().includes(q)
+  return [l.name, collection, ...modNames]
+}
+
+/** Pure: whether this loadout shows for `query` (blank shows every one). */
+export function matchesLoadout(l: { name: string; label: string }, query: string, opts: { exact?: boolean; modNames?: string[] } = {}) {
+  if (!query.trim()) return true
+  return loadoutNames(l, opts.modNames).some(n => directMatch(n, query, opts.exact))
 }
 
 if (import.meta.env.DEV) {
@@ -17,4 +24,8 @@ if (import.meta.env.DEV) {
   console.assert(matchesLoadout(l, 'panther'), 'search: the collection name matches too')
   console.assert(!matchesLoadout(l, 'hulk'), 'search: no match')
   console.assert(matchesLoadout({ name: 'Hats', label: OTHER }, 'unsorted'), 'search: a loadout in no collection matches Unsorted')
+  const mods = ['Black Panther \u2014 Purple VFX', 'Hulk Hat']
+  console.assert(matchesLoadout(l, 'purple panther', { modNames: mods }) && !matchesLoadout(l, 'purple panther'), 'search inside: one of its mods matches, off: only its own names')
+  console.assert(!matchesLoadout(l, 'claw hulk', { modNames: mods }), 'words split across the loadout and a mod never match together')
+  console.assert(matchesLoadout(l, 'purple vfx', { exact: true, modNames: mods }) && !matchesLoadout(l, 'vfx purple', { exact: true, modNames: mods }), 'exact match inside loadouts too')
 }

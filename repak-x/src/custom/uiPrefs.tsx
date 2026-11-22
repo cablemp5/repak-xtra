@@ -5,7 +5,7 @@ import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { getCurrentWebview } from '@tauri-apps/api/webview'
 import { currentMonitor } from '@tauri-apps/api/window'
 import { invoke } from '@tauri-apps/api/core'
-import { Bell, ChevronDown, Download, Droplets, EyeOff, Keyboard, Music, PanelTop, Tags, Trash2, TriangleAlert, Volume2, ZoomIn } from 'lucide-react'
+import { Bell, ChevronDown, Download, Droplets, EyeOff, Keyboard, Music, PanelTop, Search, Tags, Trash2, TriangleAlert, Volume2, ZoomIn } from 'lucide-react'
 import type { useAlert } from '../components/AlertHandler'
 import { MotionGlobalConfig } from 'framer-motion'
 import Checkbox from '../components/ui/Checkbox'
@@ -14,7 +14,7 @@ import { savedItem } from './storageCarryOver'
 
 // `on`: shown until switched off (the rest start hidden). Stored as '1' or '0' once changed.
 // `group`: the Settings section it is drawn in (Header buttons, On each mod), or its own place elsewhere.
-const PREFS: { key: string; label: string; on?: boolean; group?: 'header' | 'mod' | 'warn' }[] = [
+const PREFS: { key: string; label: string; on?: boolean; group?: 'header' | 'mod' | 'warn' | 'search' }[] = [
   { key: 'ko-tab', label: 'KO Editor tab (Shift+K)', on: true, group: 'header' },
   { key: 'sounds-tab', label: 'Sounds tab (Shift+U)', on: true, group: 'header' },
   { key: 'vfx-updater', label: 'Mod Updater (Shift+M)', on: true, group: 'header' },
@@ -33,6 +33,9 @@ const PREFS: { key: string; label: string; on?: boolean; group?: 'header' | 'mod
   { key: 'new-strip', label: 'New this week on the Loadouts screen' }, // off by default (NewStripPref)
   { key: 'builtins', label: 'Built-in mods on the Loadouts screen and in the Library', on: true }, // shown by default (BuiltinsPref)
   { key: 'auto-update', label: 'Install updates automatically', on: true }, // AutoUpdatePref, read by App's start-up check
+  // Settings > Interface > Search (SearchSection), read by the Library's and the Loadouts screen's search (smartSearch.ts)
+  { key: 'search-exact', label: 'Exact match', group: 'search' },
+  { key: 'search-in-loadouts', label: 'Search inside loadouts', on: true, group: 'search' },
 ]
 
 // 100% draws the app at the webview's 120% (what was the old 125% step, a little smaller); the rest scale from there.
@@ -390,6 +393,30 @@ export function ModPrefs() {
         <p className="setting-subtext">Tags on mods, the tag filter, the tags button, and Assign Tag. Off keeps your tags, just out of sight.</p>
       </div>
     </>
+  )
+}
+
+/** Settings > Interface > Search: how the Library's and the Loadouts screen's search bars match (smartSearch.ts). */
+export function SearchSection() {
+  useAll()
+  return (
+    <div className="setting-section">
+      <h3 className="setting-icon-label"><Search size={18} aria-hidden="true" />Search</h3>
+      <div className="setting-group">
+        <div className="setting-item">
+          <Checkbox checked={isOn('search-exact')} onChange={(checked: boolean) => update(storageKey('search-exact'), checked ? '1' : '0')}>
+            <span>Exact match</span>
+          </Checkbox>
+          <p className="setting-subtext">The Library and Loadouts searches find the words in the order typed, with no close matches for typos.</p>
+        </div>
+        <div className="setting-item">
+          <Checkbox checked={isOn('search-in-loadouts')} onChange={(checked: boolean) => update(storageKey('search-in-loadouts'), checked ? '1' : '0')}>
+            <span>Search inside loadouts</span>
+          </Checkbox>
+          <p className="setting-subtext">A loadout also shows when one of its mods matches. Off: only its name and collection do.</p>
+        </div>
+      </div>
+    </div>
   )
 }
 
