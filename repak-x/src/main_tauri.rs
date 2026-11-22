@@ -6,6 +6,7 @@
 mod asset_explorer;
 mod xtra_classify; // repakxtra: extra mod types, Project Galacta check
 mod xtra_dupes; // repakxtra: same-content installs and Check Conflicts' Duplicates
+mod xtra_activity; // repakxtra: what changed before a crash (installs, on and off, updates)
 mod xtra_ops; // repakxtra: game open, file in use, and name taken, one dialog each
 mod xtra_made; // repakxtra: installed mods keep when they were made (the Needs VFX update check)
 mod xtra_vfx_check; // repakxtra: Check for VFX update (built for this game version or an older one)
@@ -3235,6 +3236,7 @@ async fn install_mods(
                     .emit("install_log", format!("[FAIL] {}: {}", name, err))
                     .ok();
             }
+            xtra_activity::record("install", &succeeded, &failed.iter().map(|f| f.0.clone()).collect::<Vec<_>>(), ""); // repakxtra: What changed?
             window_for_logs
                 .emit(
                     "install_log",
@@ -3468,6 +3470,7 @@ async fn delete_mod(
     }
     xtra_trash::release_if_empty(&trash);
     log::info!("Deleted mod files: {:?}", doomed);
+    xtra_activity::record("delete", &[path], &[], ""); // repakxtra: What changed?
     Ok(())
 }
 
@@ -5024,6 +5027,7 @@ async fn toggle_mod(
         }
     }
 
+    xtra_activity::record(if is_enabled { "disable" } else { "enable" }, &[mod_path], &[], ""); // repakxtra: What changed?
     Ok(!is_enabled)
 }
 
@@ -5429,7 +5433,7 @@ async fn check_game_running(state: State<'_, Arc<Mutex<AppState>>>) -> Result<bo
     if WAS.swap(running, std::sync::atomic::Ordering::Relaxed) != running {
         let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_secs());
         let mods = state.lock().unwrap().game_path.clone();
-        std::thread::spawn(move || if running { xtra_crash::remember_on(&mods, now) } else { xtra_crash::remember_end(now) });
+        std::thread::spawn(move || if running { xtra_activity::note_versions(&mods); xtra_crash::remember_on(&mods, now) } else { xtra_crash::remember_end(now) });
     }
     if running {
         crate::xtra_previews::stop_kept(false); // repakxtra: a game started outside the app (Steam) gets the kept preview helpers' memory too
@@ -8833,6 +8837,8 @@ fn main() {
             xtra_role::xtra_role_claim_start, xtra_role::xtra_role_ready, // repakxtra: Claim role
             xtra_broken::xtra_broken_mods, // repakxtra: broken mods
             xtra_broken::xtra_vfx_no_update, // repakxtra: Nothing to update stops the Needs VFX update flag
+            xtra_activity::xtra_activity_record, // repakxtra: What changed?
+            xtra_activity::xtra_crash_timeline,
             xtra_broken::xtra_vfx_outcome, // repakxtra: the Mod Updater's Failed or Waiting outcome, kept
             xtra_broken::xtra_vfx_outcomes,
             xtra_broken::xtra_scan_forget, // repakxtra: the Mod Updater's Scan checks the ticked mods fresh

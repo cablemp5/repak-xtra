@@ -2,7 +2,7 @@
 // file it crashed loading, and which installed mods replace that file and were on when it crashed (saved as the game
 // started), or are on now for a crash from before that was saved. Open
 // crash reports opens the folder the game writes them to, one UECC folder per crash. Each row also shows what the game's
-// own log says about it (CrashLog.tsx).
+// own log says about it (CrashLog.tsx), and What changed? before it (CrashChanges.tsx).
 import { useEffect, useState } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { FileWarning, FolderOpen, ListChecks } from 'lucide-react'
@@ -13,6 +13,7 @@ import { type RecentCrash, recentCrashes, reportSource } from './setupReport'
 import { OPEN_BISECT } from './crashBisect'
 import { APP_NAME } from './edition'
 import CrashLog from './CrashLog'
+import CrashChanges from './CrashChanges'
 
 const when = (secs: number) => new Date(secs * 1000).toLocaleString(undefined, { year: 'numeric', month: 'numeric', day: 'numeric', hour: 'numeric', minute: '2-digit', second: '2-digit' })
 
@@ -62,6 +63,7 @@ export default function CrashReports() {
                         </span>
                       )}
                       {c.id && <CrashLog id={c.id} time={c.time} alert={alert} modPaths={modPaths} />}
+                      {c.id && <CrashChanges id={c.id} />}
                     </div>
                   </li>
                 ))}

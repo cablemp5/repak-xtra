@@ -9,6 +9,7 @@ import { plural } from './modName'
 import { sourceOf } from './nexusSource'
 import { type Verdict, verdictLabel } from './brokenMods'
 import { type Tiered, tierLines } from './crashTiers'
+import { crashTimeline, timelineLines } from './crashTimeline'
 
 type Mod = { path: string; enabled?: boolean; modified_date?: number }
 type Details = { category?: string | null; character_name?: string | null }
@@ -36,6 +37,7 @@ export type ReportInput = {
   stack?: string[]; thread?: string // the top frames, below the summary
   dumpLines?: string[] // the assets in the crash dump, below the stack: the summary above must fit Discord's cut
   recent?: string[] // the newest five crashes, one line each
+  changes?: string[] // what changed before the newest crash (crashTimeline.ts), the same rows as its What changed?
 }
 
 const pad = (n: number) => String(n).padStart(2, '0')
@@ -87,6 +89,7 @@ export function buildReport(r: ReportInput) {
     ...(r.stack?.length ? [`Crash stack, top ${r.stack.length}${r.thread ? ` (${r.thread})` : ''}:`, ...r.stack.map(l => `  ${l}`), ''] : []),
     ...(r.dumpLines?.length ? ['Assets in the crash dump (in memory then, not always the cause), held by:', ...r.dumpLines.map(l => `  ${l}`), ''] : []),
     ...(r.recent?.length ? ['Crash reports (newest first, mods matched against what is installed now):', ...r.recent.map(l => `  ${l}`), ''] : []),
+    ...(r.changes?.length ? ['Changes before the newest crash (newest first, what changed, not what caused it):', ...r.changes.map(l => `  ${l}`), ''] : []),
     r.on.length ? 'Mods that are on (name | type | hero | file date | notes):' : 'No mods are on.',
     ...r.on.flatMap(m => [
       [m.name, m.type, m.hero || '-', m.date, ...(m.notes?.length ? [m.notes.join(', ')] : []), ...(m.extra ? [m.extra] : [])].join(' | '),
@@ -124,7 +127,7 @@ export async function gatherReport(onStage?: (stage: ReportStage) => void): Prom
     settled(invoke<{ file_path: string; mod_paths: string[]; files?: string[] }[]>('check_mod_clashes', { quiet: true })),
     settled(invoke<Crash | null>('xtra_newest_crash')),
     settled(invoke<{ version?: string | null }>('preview_kit_status')),
-    settled(invoke<{ time: number; crash_type?: Opt; asset_path?: Opt }[]>('xtra_recent_crashes')),
+    settled(invoke<{ id?: string; time: number; crash_type?: Opt; asset_path?: Opt }[]>('xtra_recent_crashes')),
   ])
   // the loader has its line above, so it is not counted or listed as a mod too
   const mods = src.mods.filter(m => !isOwnLoader(m.path))
@@ -201,6 +204,9 @@ export async function gatherReport(onStage?: (stage: ReportStage) => void): Prom
     const by = c.onAt === 'crash' ? 'replaced by, on at the time,' : 'replaced by, on now,'
     return !c.asset ? head : `${head}: ${!held ? 'not checked' : held.length ? `${by} ${held.join(', ')}` : `no mod ${on} replaces it`}`
   })
+  // the newest crash by its report's id, as its What changed? shows it
+  const newestId = (recent ?? [])[0]?.id
+  const changes = newestId ? timelineLines(await crashTimeline(newestId)) : undefined
   const gpuInfo = [crash?.gpu_driver, crash?.rhi].filter(Boolean).join(', ')
   const system = [crash?.cpu, crash?.gpu && `${crash.gpu}${gpuInfo ? ` (${gpuInfo})` : ''}`, crash?.ram_gb != null && `${crash.ram_gb} GB`, crash?.os]
     .filter(Boolean).join(', ')
@@ -225,6 +231,7 @@ export async function gatherReport(onStage?: (stage: ReportStage) => void): Prom
     thread: crash?.thread || undefined,
     dumpLines: inDump,
     recent: recentLines,
+    changes,
   })
 }
 
@@ -274,6 +281,8 @@ if (import.meta.env.DEV) {
     on: [{ name: '~mods/A.pak', type: 'Mesh', hero: 'Black Panther', date: '2026-10-01' }], off: 3, conflicts: '0 groups', crash: 'none found' })
   const listed = buildReport({ version: '1.0.0', launcher: 'Steam', bypass: 'installed', galacta: 'not installed', kit: 'v3', on: [], off: 0, conflicts: '0 groups', crash: 'x',
     recent: ['2026-10-30 00:59, crashed loading MI_1026001_Eyes: no installed mod replaces it'] })
+  const changed = buildReport({ version: '1.0.0', launcher: 'Steam', bypass: 'installed', galacta: 'not installed', on: [], off: 0, conflicts: '0 groups', crash: 'x', changes: ['Nov 21, 9:40 PM  Installed Purple VFX'] })
+  console.assert(changed.includes('Changes before the newest crash (newest first, what changed, not what caused it):\n  Nov 21, 9:40 PM  Installed Purple VFX'), 'the crash timeline in the report', changed)
   console.assert(listed.includes('\nPreview kit: v3\n') && listed.includes('Crash reports (newest first') && listed.includes('\n  2026-10-30 00:59, crashed loading MI_1026001_Eyes'), 'kit version and crash list', listed)
   console.assert(text.indexOf('Newest crash') < text.indexOf('~mods/A.pak | Mesh | Black Panther | 2026-10-01'), 'summary before the mod list', text)
   const flagged = buildReport({ version: '1.0.0', launcher: 'Steam', bypass: 'installed', galacta: 'not installed', conflicts: '0 groups',

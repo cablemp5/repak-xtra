@@ -72,6 +72,11 @@ fn on_at(all: Vec<Session>, time: u64) -> Option<Vec<String>> {
         .map(|s| s.on)
 }
 
+/// Every saved game session's start and end (xtra_activity.rs: what changed before a crash).
+pub(crate) fn session_times() -> Vec<(u64, Option<u64>)> {
+    read_sessions().iter().map(|s| (s.start, s.end)).collect()
+}
+
 /// setupReport.ts: the mods that were on in the game session a crash at `time` (Unix seconds) happened in, as keys
 /// (on_key). None when it matches no saved session (a crash from before they were kept, or one while the app was closed).
 #[tauri::command]

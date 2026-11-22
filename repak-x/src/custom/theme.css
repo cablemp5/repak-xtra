@@ -2477,6 +2477,13 @@ html[data-motion="off"] .lp-saved { animation: none !important; opacity: 1 !impo
 .crl-warn { margin: 0; grid-template-columns: 14px 1fr; }
 .crl-warn > svg { margin-top: 3px; }
 .crl-actions { display: flex; gap: 8px; }
+/* A crash's What changed? (CrashChanges.tsx): the log's timeline with a date and time column, the launch a square mark,
+   a partial or failed change in the attention yellow */
+.crc-events li { grid-template-columns: 15ch 12px 1fr; }
+.crc-events::before { left: calc(15ch + 8px + 6px - 0.5px); }
+.crl-dot[data-kind="problem"] { background: #f5d342; }
+.crl-dot[data-kind="launch"] { border-radius: 2px; background: var(--text-secondary); }
+.crc-all { align-self: flex-start; }   /* Show all: at the start of the line, as the other folds */
 .crl-more { margin: 2px 0 0; font-size: 12px; color: var(--text-secondary); }
 .crl-body :is(li, p, span):not(.crl-crash, .crl-crash *) { font-weight: 400; }   /* settings rows bold their text, these are plain lines */
 .su-trust-btn:is(.crl-toggle, .crl-names-btn) svg.lucide:first-child { color: currentColor; }   /* a caret, not Setup's green shield */
