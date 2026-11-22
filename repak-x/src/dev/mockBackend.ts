@@ -456,7 +456,7 @@ if (import.meta.env.DEV && !('__TAURI_INTERNALS__' in window)) {
         }
         if (mock.__mockSame) setTimeout(() => emit('xtra_install_same', [{ name: 'Dropped mod', path: data.mods[0].path }]), 200)
         if (slow()) [20, 45, 70, 90, 100].forEach((p, i) => setTimeout(() => emit('install_progress', p), slow() * 0.3 * (i + 1)))
-        setTimeout(() => emit('install_complete', null), 300 + slow() * 1.6)
+        setTimeout(() => emit('install_complete', { failed: [], done: [], all_failed: false, request: args?.request }), 300 + slow() * 1.6) // the install's own id, as main_tauri.rs sends it
         return null
       // repakxtra: Duplicates (xtra_dupes.rs) and the shared dialogs' refusals (xtra_ops.rs):
       // window.__mockDupes = true lists two sets, __mockLocked = part of a path makes its toggle refused as in use,

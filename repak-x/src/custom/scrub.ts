@@ -8,8 +8,8 @@
 // a path character: not ): Program Files (x86) is one folder, and not ': a name may hold one (O'Brien, D'Ávila,
 // Players' Mods). A quoted path then runs past its closing quote to the line's last separator: too much goes rather than
 // part of a name staying
-// A ] closes a bracketed path ([File:...]) unless a separator follows (Jane [work]\Mods)
-const PC = String.raw`(?:[^\r\n|"<>\]]|\](?=[\\/]))`
+// A ] closes a bracketed path ([File:...]) unless a separator still follows on the line ([Games] Stuff\Mods)
+const PC = String.raw`(?:[^\r\n|"<>\]]|\](?=[^\r\n|"<>\]]*[\\/]))`
 const NEXT_DRIVE = String.raw`(?![A-Za-z]:[\\/])`
 export const scrub = (text: string) => text
   // the // of https:// follows a colon, so it is not a network path
@@ -66,6 +66,7 @@ if (import.meta.env.DEV) {
   console.assert(!/Ávila|Jane|Players/.test(scrub(named)), 'accented names and apostrophe folders never stay', scrub(named))
   console.assert(scrub('D:\\Downloads\\Jane [work]\\Mods\\Example.pak') === 'Example.pak', 'a bracket inside a folder name', scrub('D:\\Downloads\\Jane [work]\\Mods\\Example.pak'))
   console.assert(scrub("uid='12345' x") === "uid=<hidden> x" && scrub('{\\"uid\\":\\"12345\\"}') === '{\\"uid\\":<hidden>}', 'quoted and escaped uid values', scrub('{\\"uid\\":\\"12345\\"}'))
+  console.assert(scrub('Installing D:\\[Games] Stuff\\Jane Doe\\a.pak') === 'Installing a.pak', 'a bracketed folder name with words after it', scrub('Installing D:\\[Games] Stuff\\Jane Doe\\a.pak'))
   console.assert(scrub('PlayerUid=1 uuid=2 AccountGUID: 3') === 'PlayerUid=<hidden> uuid=<hidden> AccountGUID: <hidden>', 'camelCase uids and uuids', scrub('PlayerUid=1 uuid=2 AccountGUID: 3'))
   console.assert(scrub('uid=77 player_id: 88 player_uid=9 fluid: 3 liquid=4') === 'uid=<hidden> player_id: <hidden> player_uid=<hidden> fluid: 3 liquid=4', 'uid keys only', scrub('uid=77 player_id: 88 player_uid=9 fluid: 3 liquid=4'))
   console.assert(scrub(keyed) === 'accountId=<hidden> username=<hidden> accessToken=<hidden> author: Someone', 'keyed ids, quoted names, camelCase tokens', scrub(keyed))

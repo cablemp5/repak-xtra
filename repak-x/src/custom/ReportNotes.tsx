@@ -1,6 +1,6 @@
 // repakxtra: optional notes for Copy setup report (Settings > Help & Community): a fold under the Setup report row with
 // two short fields. Copying stays one click: CopySetupReport reads what is typed here, in Settings or in Setup, and the
-// notes go at the top of the report. Kept for this session only.
+// notes follow What to check next in the report. Kept for this session only.
 import { useState } from 'react'
 import { ChevronRight } from 'lucide-react'
 
@@ -29,7 +29,7 @@ export default function ReportNotes() {
               <span className="rpn-label">What happened instead?</span>
               <textarea rows={2} maxLength={400} value={notes.instead} onChange={set('instead')} placeholder="The default skin showed, or the game crashed at the menu" />
             </label>
-            <p className="setting-subtext">Copy setup report puts these at the top. Folder paths are taken out.</p>
+            <p className="setting-subtext">Copy setup report adds these after What to check next. Folder paths are taken out.</p>
           </div>
         </div>
       </div>
