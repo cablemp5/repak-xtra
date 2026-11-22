@@ -109,7 +109,7 @@ const entry = (m: { path: string; modified_date?: number; file_size?: number }) 
 export function useBrokenWatch(mods: { path: string; modified_date?: number; file_size?: number }[]) {
   const key = mods.map(entry).sort().join('\n')
   useEffect(() => {
-    if (!key) { seen = new Set(); return } // the last mod went: putting it back counts as new
+    if (!key) { if (seen) seen = new Set(); return } // the last mod went: putting it back counts as new (not the empty list before the first)
     let live = true
     // what this change added or changed waits in `scope` (a second install within the wait below adds to it)
     if (seen) mods.filter(m => !seen!.has(entry(m)) && !isModLoader(m.path)).forEach(m => scope.add(norm(m.path)))
@@ -137,7 +137,7 @@ export function useBrokenWatch(mods: { path: string; modified_date?: number; fil
     // never the Mod Updater's own updates for this game (xtra_stamp.rs): they were checked as they were made. Nor the
     // original it renamed beside one (a new path, so no record): it is off and kept, the update is what loads
     let scanPaths = paths, list = paths
-    let ticked: string[] = [], mine: string[] = [], wasForced: string[] = [], idle = false
+    let ticked: string[] = [], mine: string[] = [], wasForced: string[] = [], idle = false, planned = false
     // the four scans (vfx: the VFX and Blueprint ones, meshes: the mesh one), each followed by the badges when it found something.
     // A scan skips a mod it already checked as this file in this game, so a list can be scanned twice cheaply
     // `at`: the progress step its first scan is (scanProgress.ts; the four scans and the deep pass are five steps in a row),
@@ -187,6 +187,7 @@ export function useBrokenWatch(mods: { path: string; modified_date?: number; fil
         ticked = asked ? [] : wasForced.length ? [...new Set([...wasForced, ...mine])] : whole ? [] : mine
         // nothing left to scan (a run before this one, such as a Refresh list, already read the install it was queued for)
         idle = !ticked.length && !whole && !asked
+        planned = true
         if (live && !idle) { asked = false; if (!ticked.length) whole = true } // until it finishes
         list = idle ? [] : ticked.length ? ticked : paths
         scanPaths = list.filter(p => forced.has(norm(p)) || !(made.get(norm(p))?.current || made.get(updateBeside(norm(p)))?.current))
@@ -199,7 +200,7 @@ export function useBrokenWatch(mods: { path: string; modified_date?: number; fil
         weights = [Math.max(1, Math.round(scanned / 20)), ...passes.flatMap(([v, m]) => Array(5).fill(Math.max(1, v.length, m.length))), Math.max(1, Math.round(scanned / 10))]
         scanPlan(weights, scanned)
         const forget = paths.filter(p => fresh.has(norm(p)))
-        if (live) { forced = new Set(); fresh = new Set() } // a run the library outdated leaves them for the next one
+        if (live) fresh = new Set() // a run the library outdated leaves them for the next one. `forced` stays until a run finishes with them
         return live && forget.length ? invoke('xtra_scan_forget', { modPaths: forget }).catch(e => console.warn('[brokenMods] could not clear earlier checks', e)) : undefined
       })
       .then(() => (live ? invoke('vfx_check_usmap_update', { force: false }).catch(() => null) : null))
@@ -215,8 +216,8 @@ export function useBrokenWatch(mods: { path: string; modified_date?: number; fil
       // the new list's own run follows
       // a run that stopped first (the game, a held scan, an old USMAP) keeps a manual Check's mods for the next one
       .then(finished => {
-        if (finished && !idle) { (ticked.length ? mine : paths).forEach(p => scope.delete(norm(p))); if (!ticked.length && !asked) whole = false } // a Refresh asked meanwhile still wants its own
-        unfinished = !finished; stoppedScope = finished ? [] : wasForced; if (!finished && live && !ticked.length) asked = true; /* a stopped whole run resumes whole, its forced mods still forced */ scanEnded(finished || !live, finished); void invoke('xtra_scan_release').catch(() => {}); return finished })
+        if (finished && !idle) { (ticked.length ? mine : paths).forEach(p => scope.delete(norm(p))); wasForced.forEach(p => forced.delete(norm(p))); if (!ticked.length && !asked) whole = false } // a Refresh asked meanwhile still wants its own
+        unfinished = !finished; stoppedScope = finished ? [] : wasForced; if (!finished && live && planned && !ticked.length) asked = true; /* a stopped whole run resumes whole, its forced mods still forced */ scanEnded(finished || !live, finished); void invoke('xtra_scan_release').catch(() => {}); return finished })
     let unfinished = false
     // one run waiting its turn is enough: a focus, a Rescan and the game update notice asking meanwhile all get that one
     let waiting: Promise<boolean> | null = null
@@ -227,7 +228,7 @@ export function useBrokenWatch(mods: { path: string; modified_date?: number; fil
     // their badges in the Library and on loadouts right away. The chain starts from it
     // After an install or a removal only what changed is scanned (a scan would skip the rest, but the header counted and
     // named every mod), unless a whole run is due. Nothing waiting: the quick check alone
-    const t = setTimeout(() => { if (whole || forced.size || paths.some(p => scope.has(norm(p)))) void full(check()); else void check() }, 1500)
+    const t = setTimeout(() => { if (whole || paths.some(p => forced.has(norm(p)) || scope.has(norm(p)))) void full(check()); else void check() }, 1500)
     // only a run that stopped with mods left goes on when the window is back (the game, an update or a check took
     // over: xtra_vfx.rs background_may_run). Nothing changed, nothing runs. A game update is gameUpdate.ts's to start
     let lastResume = 0
