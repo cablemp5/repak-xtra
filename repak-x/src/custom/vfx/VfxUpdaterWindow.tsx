@@ -359,6 +359,8 @@ export function VfxUpdaterPanel() {
   const [paks, setPaks] = useState<string | null>(null)
   const [build, setBuild] = useState<GameBuild | null>(null)
   const [usmap, setUsmap] = useState<string | null>(null)
+  const usmapRef = useRef(usmap)
+  usmapRef.current = usmap
   const [usmapInfo, setUsmapInfo] = useState<Usmap | null>(null)
   const [usmapOk, setUsmapOk] = useState<boolean | null>(null)
   const [checking, setChecking] = useState(true)
@@ -501,7 +503,8 @@ export function VfxUpdaterPanel() {
         const n = new Map(verdicts.filter(v => needsUpdater(v.path, v)).map(v => [norm(v.path), v.reason]))
         const utocs = new Map(list.map(m => [norm(m.path), norm(m.utoc)]))
         setStale(new Map(verdicts.filter(v => v.kind === 'vfx' && v.staleNiagara && utocs.has(norm(v.path))).map(v => [utocs.get(norm(v.path))!, v.staleNiagara!])))
-        const nowWaits = new Map(verdicts.filter(v => v.kind === 'vfx' && v.usmapWait && utocs.has(norm(v.path))).map(v => [utocs.get(norm(v.path))!, v.usmapWait!]))
+        // a May crash or Safety unknown mod waits too when an update found it needs mappings (its badge stays)
+        const nowWaits = new Map(verdicts.filter(v => v.kind !== 'broken' && v.usmapWait && utocs.has(norm(v.path))).map(v => [utocs.get(norm(v.path))!, v.usmapWait!]))
         // mods the new mappings let through move to Needs an update, ticked like the rest there
         if (seeded.current) pick(list.filter(m => waitsRef.current.has(norm(m.utoc)) && !nowWaits.has(norm(m.utoc)) && n.has(norm(m.path))).map(m => norm(m.utoc)), true)
         setWaits(nowWaits)
@@ -715,7 +718,7 @@ export function VfxUpdaterPanel() {
       const r = await fixVfxMod({
         // Retry in Best effort: that mod alone, this once
         policy: policy ?? repairPolicy,
-        modPath: mod.utoc, usmapPath: usmap, gamePaksPath: paks, turnOffOriginal: originals !== 'keep', trashOriginal: originals === 'trash', keepName, filter,
+        modPath: mod.utoc, usmapPath: usmapRef.current ?? usmap, gamePaksPath: paks, // new mappings mid-run: the next mod reads them turnOffOriginal: originals !== 'keep', trashOriginal: originals === 'trash', keepName, filter,
         safeOff: safeOff && needs.has(norm(mod.path)), // a flagged mod a run proves crashes the game: a failed run leaves every mod as it was
         keepEncrypted, decryptOnly: needs.get(norm(mod.path))?.startsWith(ENCRYPTED),
         log: addLog, cancelled: () => cancel.current,

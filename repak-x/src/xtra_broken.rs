@@ -1186,24 +1186,21 @@ pub async fn xtra_broken_mods(mod_paths: Vec<String>, state: State<'_, Arc<Mutex
         verdicts.retain_mut(|v| {
             if v.kind != "vfx" { return true; }
             let utoc = Path::new(&v.path).with_extension("utoc");
-            match outcomes.get(&checked_key(&utoc)).filter(|o| outcome_holds(o, file_stamp(&utoc), game_updated, &usmap_now)) {
-                Some(o) if o.status == "failed" => false,
-                Some(o) if o.status == "waiting" && v.usmap_wait == 0 => {
+            !outcomes.get(&checked_key(&utoc)).is_some_and(|o| o.status == "failed" && outcome_holds(o, file_stamp(&utoc), game_updated, &usmap_now))
+        });
+        // a waiting one: its verdict waits (a May crash or Safety unknown keeps its badge, the Mod Updater keeps it out of
+        // Update), and one with no verdict of its own (updated from All mods, or Add .utoc) gets a Waiting one
+        for p in &mod_paths {
+            let utoc = Path::new(p).with_extension("utoc");
+            if !outcomes.get(&checked_key(&utoc)).is_some_and(|o| o.status == "waiting" && outcome_holds(o, file_stamp(&utoc), game_updated, &usmap_now)) { continue; }
+            if let Some(v) = verdicts.iter_mut().find(|v| v.path == *p) {
+                if v.kind != "broken" && v.usmap_wait == 0 {
                     v.usmap_wait = 1;
                     // its "can be updated now" note no longer holds
                     if let Some(at) = v.reason.find(" No patch newer than the saved USMAP") { v.reason.truncate(at); }
                     v.reason += " An update found it needs the game's new mappings (USMAP) before it can be rebuilt whole.";
-                    true
                 }
-                _ => true,
-            }
-        });
-        // a waiting one with no verdict of its own (updated from All mods, or Add .utoc): it waits all the same
-        for p in &mod_paths {
-            let utoc = Path::new(p).with_extension("utoc");
-            // any verdict of its own says more (Broken and May crash stay), the Library keeps one per mod
-            if verdicts.iter().any(|v| v.path == *p) { continue; }
-            if outcomes.get(&checked_key(&utoc)).is_some_and(|o| o.status == "waiting" && outcome_holds(o, file_stamp(&utoc), game_updated, &usmap_now)) {
+            } else {
                 verdicts.push(Verdict { path: p.clone(), kind: "vfx", reason: "An update found it needs the game's new mappings (USMAP) before it can be rebuilt whole.".into(), stale_niagara: 0, usmap_wait: 1, off_only: false });
             }
         }
