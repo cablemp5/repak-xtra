@@ -216,7 +216,7 @@ export function useBrokenWatch(mods: { path: string; modified_date?: number; fil
       // a run that stopped first (the game, a held scan, an old USMAP) keeps a manual Check's mods for the next one
       .then(finished => {
         if (finished && !idle) { (ticked.length ? mine : paths).forEach(p => scope.delete(norm(p))); if (!ticked.length && !asked) whole = false } // a Refresh asked meanwhile still wants its own
-        unfinished = !finished; stoppedScope = finished || !ticked.length ? [] : wasForced; /* a stopped whole run resumes whole */ scanEnded(finished || !live, finished); void invoke('xtra_scan_release').catch(() => {}); return finished })
+        unfinished = !finished; stoppedScope = finished ? [] : wasForced; if (!finished && live && !ticked.length) asked = true; /* a stopped whole run resumes whole, its forced mods still forced */ scanEnded(finished || !live, finished); void invoke('xtra_scan_release').catch(() => {}); return finished })
     let unfinished = false
     // one run waiting its turn is enough: a focus, a Rescan and the game update notice asking meanwhile all get that one
     let waiting: Promise<boolean> | null = null
