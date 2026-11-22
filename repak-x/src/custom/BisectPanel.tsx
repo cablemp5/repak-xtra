@@ -196,6 +196,8 @@ function Test({ run, resumed, busy, deps, loader, answer, undo, stop }: {
     return () => { live = false }
   }, [resumeTry])
   useEffect(() => {
+    // a new attempt starts unanswered: a poll of the last one that ended after it was replaced cannot open the answers
+    if (attempt) setPlayed(false)
     let live = true
     let seen = false
     let closed = false
