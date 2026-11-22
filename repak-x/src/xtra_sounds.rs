@@ -1,6 +1,7 @@
 //! repakxtra: the Sounds tab (custom/SoundsScreen.tsx). Each slot (data/sound_slots.json: hit and kill sounds,
-//! killstreaks, healing, the kill feed, alerts, the match, the announcer) names the Wwise Sound objects it replaces in
-//! the game's banks (bnk_ui_battle, and bnk_vo_system in every voice language). The page decodes a dropped file to
+//! killstreaks, healing, the kill feed, alerts, the match, the announcer, each hero's ult line) names the Wwise Sound
+//! objects it replaces in the game's banks (bnk_ui_battle, and bnk_vo_system or the hero's default bnk_vo_<hero>001 in
+//! every voice language). The page decodes a dropped file to
 //! 48 kHz 16-bit WAV and saves it here per slot (app dir sounds\<slot>.wav). Make mod writes each as a Wwise PCM .wem
 //! (xtra_wem.rs), puts it in a copy of the game's bank and packs a new mod in the app's own folder, which the page
 //! hands to the install card (named, put in a loadout, and copied to ~mods there, like the KO Editor's).
@@ -387,7 +388,7 @@ mod tests {
     #[test]
     fn slot_table_is_whole() {
         let s = slots();
-        assert_eq!(s.len(), 38);
+        assert_eq!(s.len(), 149);
         assert!(s.iter().all(|s| !s.sounds.is_empty() && !s.banks.is_empty()));
     }
 }

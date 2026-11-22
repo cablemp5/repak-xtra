@@ -27,6 +27,14 @@
   {
    "id": "announcer",
    "name": "Announcer"
+  },
+  {
+   "id": "ult-team",
+   "name": "Ult lines: your team"
+  },
+  {
+   "id": "ult-enemy",
+   "name": "Ult lines: enemies"
   }
  ],
  "slots": [
@@ -498,6 +506,1474 @@
    ],
    "sounds": [
     46166121
+   ]
+  },
+  {
+   "id": "ult-1046-team",
+   "group": "ult-team",
+   "name": "Adam Warlock",
+   "banks": [
+    "wwiseaudio/english(us)/bnk_vo_1046001.bnk",
+    "wwiseaudio/japanese(jp)/bnk_vo_1046001.bnk",
+    "wwiseaudio/chinese(cn)/bnk_vo_1046001.bnk"
+   ],
+   "sounds": [
+    537912494
+   ]
+  },
+  {
+   "id": "ult-1056-team",
+   "group": "ult-team",
+   "name": "Angela",
+   "banks": [
+    "wwiseaudio/english(us)/bnk_vo_1056001.bnk",
+    "wwiseaudio/japanese(jp)/bnk_vo_1056001.bnk",
+    "wwiseaudio/chinese(cn)/bnk_vo_1056001.bnk"
+   ],
+   "sounds": [
+    511242645
+   ]
+  },
+  {
+   "id": "ult-1061-team",
+   "group": "ult-team",
+   "name": "Black Cat",
+   "banks": [
+    "wwiseaudio/english(us)/bnk_vo_1061001.bnk",
+    "wwiseaudio/japanese(jp)/bnk_vo_1061001.bnk",
+    "wwiseaudio/chinese(cn)/bnk_vo_1061001.bnk"
+   ],
+   "sounds": [
+    626195112
+   ]
+  },
+  {
+   "id": "ult-1026-team",
+   "group": "ult-team",
+   "name": "Black Panther",
+   "banks": [
+    "wwiseaudio/english(us)/bnk_vo_1026001.bnk",
+    "wwiseaudio/japanese(jp)/bnk_vo_1026001.bnk",
+    "wwiseaudio/chinese(cn)/bnk_vo_1026001.bnk"
+   ],
+   "sounds": [
+    316573015
+   ]
+  },
+  {
+   "id": "ult-1033-team",
+   "group": "ult-team",
+   "name": "Black Widow",
+   "banks": [
+    "wwiseaudio/english(us)/bnk_vo_1033001.bnk",
+    "wwiseaudio/japanese(jp)/bnk_vo_1033001.bnk",
+    "wwiseaudio/chinese(cn)/bnk_vo_1033001.bnk"
+   ],
+   "sounds": [
+    235843406,
+    906525371
+   ]
+  },
+  {
+   "id": "ult-1044-team",
+   "group": "ult-team",
+   "name": "Blade",
+   "banks": [
+    "wwiseaudio/english(us)/bnk_vo_1044001.bnk",
+    "wwiseaudio/japanese(jp)/bnk_vo_1044001.bnk",
+    "wwiseaudio/chinese(cn)/bnk_vo_1044001.bnk"
+   ],
+   "sounds": [
+    511691,
+    477869009
+   ]
+  },
+  {
+   "id": "ult-1011-banner-team",
+   "group": "ult-team",
+   "name": "Bruce Banner",
+   "banks": [
+    "wwiseaudio/english(us)/bnk_vo_1011001.bnk",
+    "wwiseaudio/japanese(jp)/bnk_vo_1011001.bnk",
+    "wwiseaudio/chinese(cn)/bnk_vo_1011001.bnk"
+   ],
+   "sounds": [
+    861154910
+   ]
+  },
+  {
+   "id": "ult-1022-team",
+   "group": "ult-team",
+   "name": "Captain America",
+   "banks": [
+    "wwiseaudio/english(us)/bnk_vo_1022001.bnk",
+    "wwiseaudio/japanese(jp)/bnk_vo_1022001.bnk",
+    "wwiseaudio/chinese(cn)/bnk_vo_1022001.bnk"
+   ],
+   "sounds": [
+    873318653
+   ]
+  },
+  {
+   "id": "ult-1025-team",
+   "group": "ult-team",
+   "name": "Cloak and Dagger",
+   "banks": [
+    "wwiseaudio/english(us)/bnk_vo_1025001.bnk",
+    "wwiseaudio/japanese(jp)/bnk_vo_1025001.bnk",
+    "wwiseaudio/chinese(cn)/bnk_vo_1025001.bnk"
+   ],
+   "sounds": [
+    546155992,
+    836140027
+   ]
+  },
+  {
+   "id": "ult-1063-team",
+   "group": "ult-team",
+   "name": "Cyclops",
+   "banks": [
+    "wwiseaudio/english(us)/bnk_vo_1063001.bnk",
+    "wwiseaudio/japanese(jp)/bnk_vo_1063001.bnk",
+    "wwiseaudio/chinese(cn)/bnk_vo_1063001.bnk"
+   ],
+   "sounds": [
+    36838865
+   ]
+  },
+  {
+   "id": "ult-1055-team",
+   "group": "ult-team",
+   "name": "Daredevil",
+   "banks": [
+    "wwiseaudio/english(us)/bnk_vo_1055001.bnk",
+    "wwiseaudio/japanese(jp)/bnk_vo_1055001.bnk",
+    "wwiseaudio/chinese(cn)/bnk_vo_1055001.bnk"
+   ],
+   "sounds": [
+    502687404
+   ]
+  },
+  {
+   "id": "ult-1057-team",
+   "group": "ult-team",
+   "name": "Deadpool",
+   "banks": [
+    "wwiseaudio/english(us)/bnk_vo_1057001.bnk",
+    "wwiseaudio/japanese(jp)/bnk_vo_1057001.bnk",
+    "wwiseaudio/chinese(cn)/bnk_vo_1057001.bnk"
+   ],
+   "sounds": [
+    585691099,
+    356314026,
+    330469355,
+    65862189
+   ]
+  },
+  {
+   "id": "ult-1062-team",
+   "group": "ult-team",
+   "name": "Devil Dino",
+   "banks": [
+    "wwiseaudio/english(us)/bnk_vo_1062001.bnk",
+    "wwiseaudio/japanese(jp)/bnk_vo_1062001.bnk",
+    "wwiseaudio/chinese(cn)/bnk_vo_1062001.bnk"
+   ],
+   "sounds": [
+    855945573
+   ]
+  },
+  {
+   "id": "ult-1018-team",
+   "group": "ult-team",
+   "name": "Doctor Strange",
+   "banks": [
+    "wwiseaudio/english(us)/bnk_vo_1018001.bnk",
+    "wwiseaudio/japanese(jp)/bnk_vo_1018001.bnk",
+    "wwiseaudio/chinese(cn)/bnk_vo_1018001.bnk"
+   ],
+   "sounds": [
+    128150708
+   ]
+  },
+  {
+   "id": "ult-1059-team",
+   "group": "ult-team",
+   "name": "Elsa Bloodstone",
+   "banks": [
+    "wwiseaudio/english(us)/bnk_vo_1059001.bnk",
+    "wwiseaudio/japanese(jp)/bnk_vo_1059001.bnk",
+    "wwiseaudio/chinese(cn)/bnk_vo_1059001.bnk"
+   ],
+   "sounds": [
+    168449676
+   ]
+  },
+  {
+   "id": "ult-1053-team",
+   "group": "ult-team",
+   "name": "Emma Frost",
+   "banks": [
+    "wwiseaudio/english(us)/bnk_vo_1053001.bnk",
+    "wwiseaudio/japanese(jp)/bnk_vo_1053001.bnk",
+    "wwiseaudio/chinese(cn)/bnk_vo_1053001.bnk"
+   ],
+   "sounds": [
+    64928544
+   ]
+  },
+  {
+   "id": "ult-1058-team",
+   "group": "ult-team",
+   "name": "Gambit",
+   "banks": [
+    "wwiseaudio/english(us)/bnk_vo_1058001.bnk",
+    "wwiseaudio/japanese(jp)/bnk_vo_1058001.bnk",
+    "wwiseaudio/chinese(cn)/bnk_vo_1058001.bnk"
+   ],
+   "sounds": [
+    596866128
+   ]
+  },
+  {
+   "id": "ult-1067-team",
+   "group": "ult-team",
+   "name": "Gorr The God Butcher",
+   "banks": [
+    "wwiseaudio/english(us)/bnk_vo_1067001.bnk",
+    "wwiseaudio/japanese(jp)/bnk_vo_1067001.bnk",
+    "wwiseaudio/chinese(cn)/bnk_vo_1067001.bnk"
+   ],
+   "sounds": [
+    213253061
+   ]
+  },
+  {
+   "id": "ult-1027-team",
+   "group": "ult-team",
+   "name": "Groot",
+   "banks": [
+    "wwiseaudio/english(us)/bnk_vo_1027001.bnk",
+    "wwiseaudio/japanese(jp)/bnk_vo_1027001.bnk",
+    "wwiseaudio/chinese(cn)/bnk_vo_1027001.bnk"
+   ],
+   "sounds": [
+    191671226
+   ]
+  },
+  {
+   "id": "ult-1021-team",
+   "group": "ult-team",
+   "name": "Hawkeye",
+   "banks": [
+    "wwiseaudio/english(us)/bnk_vo_1021001.bnk",
+    "wwiseaudio/japanese(jp)/bnk_vo_1021001.bnk",
+    "wwiseaudio/chinese(cn)/bnk_vo_1021001.bnk"
+   ],
+   "sounds": [
+    1026773571
+   ]
+  },
+  {
+   "id": "ult-1024-team",
+   "group": "ult-team",
+   "name": "Hela",
+   "banks": [
+    "wwiseaudio/english(us)/bnk_vo_1024001.bnk",
+    "wwiseaudio/japanese(jp)/bnk_vo_1024001.bnk",
+    "wwiseaudio/chinese(cn)/bnk_vo_1024001.bnk"
+   ],
+   "sounds": [
+    110206667
+   ]
+  },
+  {
+   "id": "ult-1068-team",
+   "group": "ult-team",
+   "name": "Hive",
+   "banks": [
+    "wwiseaudio/english(us)/bnk_vo_1068001.bnk",
+    "wwiseaudio/japanese(jp)/bnk_vo_1068001.bnk",
+    "wwiseaudio/chinese(cn)/bnk_vo_1068001.bnk"
+   ],
+   "sounds": [
+    152529957,
+    1049989407
+   ]
+  },
+  {
+   "id": "ult-1011-hero-hulk-team",
+   "group": "ult-team",
+   "name": "Hulk",
+   "banks": [
+    "wwiseaudio/english(us)/bnk_vo_1011001.bnk",
+    "wwiseaudio/japanese(jp)/bnk_vo_1011001.bnk",
+    "wwiseaudio/chinese(cn)/bnk_vo_1011001.bnk"
+   ],
+   "sounds": [
+    728711483
+   ]
+  },
+  {
+   "id": "ult-1017-team",
+   "group": "ult-team",
+   "name": "Human Torch",
+   "banks": [
+    "wwiseaudio/english(us)/bnk_vo_1017001.bnk",
+    "wwiseaudio/japanese(jp)/bnk_vo_1017001.bnk",
+    "wwiseaudio/chinese(cn)/bnk_vo_1017001.bnk"
+   ],
+   "sounds": [
+    733314997
+   ]
+  },
+  {
+   "id": "ult-1050-team",
+   "group": "ult-team",
+   "name": "Invisible Woman",
+   "banks": [
+    "wwiseaudio/english(us)/bnk_vo_1050001.bnk",
+    "wwiseaudio/japanese(jp)/bnk_vo_1050001.bnk",
+    "wwiseaudio/chinese(cn)/bnk_vo_1050001.bnk"
+   ],
+   "sounds": [
+    608139705
+   ]
+  },
+  {
+   "id": "ult-1052-team",
+   "group": "ult-team",
+   "name": "Iron Fist",
+   "banks": [
+    "wwiseaudio/english(us)/bnk_vo_1052001.bnk",
+    "wwiseaudio/japanese(jp)/bnk_vo_1052001.bnk",
+    "wwiseaudio/chinese(cn)/bnk_vo_1052001.bnk"
+   ],
+   "sounds": [
+    837966594
+   ]
+  },
+  {
+   "id": "ult-1034-team",
+   "group": "ult-team",
+   "name": "Iron Man",
+   "banks": [
+    "wwiseaudio/english(us)/bnk_vo_1034001.bnk",
+    "wwiseaudio/japanese(jp)/bnk_vo_1034001.bnk",
+    "wwiseaudio/chinese(cn)/bnk_vo_1034001.bnk"
+   ],
+   "sounds": [
+    278917114
+   ]
+  },
+  {
+   "id": "ult-1047-team",
+   "group": "ult-team",
+   "name": "Jeff the Landshark",
+   "banks": [
+    "wwiseaudio/english(us)/bnk_vo_1047001.bnk",
+    "wwiseaudio/japanese(jp)/bnk_vo_1047001.bnk",
+    "wwiseaudio/chinese(cn)/bnk_vo_1047001.bnk"
+   ],
+   "sounds": [
+    220758181,
+    69467290
+   ]
+  },
+  {
+   "id": "ult-1064-team",
+   "group": "ult-team",
+   "name": "Jubilee",
+   "banks": [
+    "wwiseaudio/english(us)/bnk_vo_1064001.bnk",
+    "wwiseaudio/japanese(jp)/bnk_vo_1064001.bnk",
+    "wwiseaudio/chinese(cn)/bnk_vo_1064001.bnk"
+   ],
+   "sounds": [
+    668116428,
+    1036658763
+   ]
+  },
+  {
+   "id": "ult-1016-team",
+   "group": "ult-team",
+   "name": "Loki",
+   "banks": [
+    "wwiseaudio/english(us)/bnk_vo_1016001.bnk",
+    "wwiseaudio/japanese(jp)/bnk_vo_1016001.bnk",
+    "wwiseaudio/chinese(cn)/bnk_vo_1016001.bnk"
+   ],
+   "sounds": [
+    916995217
+   ]
+  },
+  {
+   "id": "ult-1031-team",
+   "group": "ult-team",
+   "name": "Luna Snow",
+   "banks": [
+    "wwiseaudio/english(us)/bnk_vo_1031001.bnk",
+    "wwiseaudio/japanese(jp)/bnk_vo_1031001.bnk",
+    "wwiseaudio/chinese(cn)/bnk_vo_1031001.bnk"
+   ],
+   "sounds": [
+    426138351
+   ]
+  },
+  {
+   "id": "ult-1029-team",
+   "group": "ult-team",
+   "name": "Magik",
+   "banks": [
+    "wwiseaudio/english(us)/bnk_vo_1029001.bnk",
+    "wwiseaudio/japanese(jp)/bnk_vo_1029001.bnk",
+    "wwiseaudio/chinese(cn)/bnk_vo_1029001.bnk"
+   ],
+   "sounds": [
+    173083655
+   ]
+  },
+  {
+   "id": "ult-1037-team",
+   "group": "ult-team",
+   "name": "Magneto",
+   "banks": [
+    "wwiseaudio/english(us)/bnk_vo_1037001.bnk",
+    "wwiseaudio/japanese(jp)/bnk_vo_1037001.bnk",
+    "wwiseaudio/chinese(cn)/bnk_vo_1037001.bnk"
+   ],
+   "sounds": [
+    635381668
+   ]
+  },
+  {
+   "id": "ult-1020-team",
+   "group": "ult-team",
+   "name": "Mantis",
+   "banks": [
+    "wwiseaudio/english(us)/bnk_vo_1020001.bnk",
+    "wwiseaudio/japanese(jp)/bnk_vo_1020001.bnk",
+    "wwiseaudio/chinese(cn)/bnk_vo_1020001.bnk"
+   ],
+   "sounds": [
+    797291088
+   ]
+  },
+  {
+   "id": "ult-1040-team",
+   "group": "ult-team",
+   "name": "Mister Fantastic",
+   "banks": [
+    "wwiseaudio/english(us)/bnk_vo_1040001.bnk",
+    "wwiseaudio/japanese(jp)/bnk_vo_1040001.bnk",
+    "wwiseaudio/chinese(cn)/bnk_vo_1040001.bnk"
+   ],
+   "sounds": [
+    985565183
+   ]
+  },
+  {
+   "id": "ult-1011-monster-hulk-both",
+   "group": "ult-team",
+   "name": "Monster Hulk, both sides",
+   "banks": [
+    "wwiseaudio/english(us)/bnk_vo_1011001.bnk",
+    "wwiseaudio/japanese(jp)/bnk_vo_1011001.bnk",
+    "wwiseaudio/chinese(cn)/bnk_vo_1011001.bnk"
+   ],
+   "sounds": [
+    84452986,
+    622488374,
+    783000307,
+    88730981,
+    261078031,
+    301780530
+   ]
+  },
+  {
+   "id": "ult-1030-team",
+   "group": "ult-team",
+   "name": "Moon Knight",
+   "banks": [
+    "wwiseaudio/english(us)/bnk_vo_1030001.bnk",
+    "wwiseaudio/japanese(jp)/bnk_vo_1030001.bnk",
+    "wwiseaudio/chinese(cn)/bnk_vo_1030001.bnk"
+   ],
+   "sounds": [
+    728989919
+   ]
+  },
+  {
+   "id": "ult-1042-team",
+   "group": "ult-team",
+   "name": "Peni Parker",
+   "banks": [
+    "wwiseaudio/english(us)/bnk_vo_1042001.bnk",
+    "wwiseaudio/japanese(jp)/bnk_vo_1042001.bnk",
+    "wwiseaudio/chinese(cn)/bnk_vo_1042001.bnk"
+   ],
+   "sounds": [
+    164661836
+   ]
+  },
+  {
+   "id": "ult-1054-team",
+   "group": "ult-team",
+   "name": "Phoenix",
+   "banks": [
+    "wwiseaudio/english(us)/bnk_vo_1054001.bnk",
+    "wwiseaudio/japanese(jp)/bnk_vo_1054001.bnk",
+    "wwiseaudio/chinese(cn)/bnk_vo_1054001.bnk"
+   ],
+   "sounds": [
+    595691313
+   ]
+  },
+  {
+   "id": "ult-1048-team",
+   "group": "ult-team",
+   "name": "Psylocke",
+   "banks": [
+    "wwiseaudio/english(us)/bnk_vo_1048001.bnk",
+    "wwiseaudio/japanese(jp)/bnk_vo_1048001.bnk",
+    "wwiseaudio/chinese(cn)/bnk_vo_1048001.bnk"
+   ],
+   "sounds": [
+    466206180
+   ]
+  },
+  {
+   "id": "ult-1023-team",
+   "group": "ult-team",
+   "name": "Rocket Raccoon",
+   "banks": [
+    "wwiseaudio/english(us)/bnk_vo_1023001.bnk",
+    "wwiseaudio/japanese(jp)/bnk_vo_1023001.bnk",
+    "wwiseaudio/chinese(cn)/bnk_vo_1023001.bnk"
+   ],
+   "sounds": [
+    72452803
+   ]
+  },
+  {
+   "id": "ult-1065-team",
+   "group": "ult-team",
+   "name": "Rogue",
+   "banks": [
+    "wwiseaudio/english(us)/bnk_vo_1065001.bnk",
+    "wwiseaudio/japanese(jp)/bnk_vo_1065001.bnk",
+    "wwiseaudio/chinese(cn)/bnk_vo_1065001.bnk"
+   ],
+   "sounds": [
+    922603107
+   ]
+  },
+  {
+   "id": "ult-1038-team",
+   "group": "ult-team",
+   "name": "Scarlet Witch",
+   "banks": [
+    "wwiseaudio/english(us)/bnk_vo_1038001.bnk",
+    "wwiseaudio/japanese(jp)/bnk_vo_1038001.bnk",
+    "wwiseaudio/chinese(cn)/bnk_vo_1038001.bnk"
+   ],
+   "sounds": [
+    116705019
+   ]
+  },
+  {
+   "id": "ult-1036-team",
+   "group": "ult-team",
+   "name": "Spider-Man",
+   "banks": [
+    "wwiseaudio/english(us)/bnk_vo_1036001.bnk",
+    "wwiseaudio/japanese(jp)/bnk_vo_1036001.bnk",
+    "wwiseaudio/chinese(cn)/bnk_vo_1036001.bnk"
+   ],
+   "sounds": [
+    1031219787
+   ]
+  },
+  {
+   "id": "ult-1032-team",
+   "group": "ult-team",
+   "name": "Squirrel Girl",
+   "banks": [
+    "wwiseaudio/english(us)/bnk_vo_1032001.bnk",
+    "wwiseaudio/japanese(jp)/bnk_vo_1032001.bnk",
+    "wwiseaudio/chinese(cn)/bnk_vo_1032001.bnk"
+   ],
+   "sounds": [
+    942944795
+   ]
+  },
+  {
+   "id": "ult-1043-team",
+   "group": "ult-team",
+   "name": "Star-Lord",
+   "banks": [
+    "wwiseaudio/english(us)/bnk_vo_1043001.bnk",
+    "wwiseaudio/japanese(jp)/bnk_vo_1043001.bnk",
+    "wwiseaudio/chinese(cn)/bnk_vo_1043001.bnk"
+   ],
+   "sounds": [
+    422702776,
+    413563145
+   ]
+  },
+  {
+   "id": "ult-1015-team",
+   "group": "ult-team",
+   "name": "Storm",
+   "banks": [
+    "wwiseaudio/english(us)/bnk_vo_1015001.bnk",
+    "wwiseaudio/japanese(jp)/bnk_vo_1015001.bnk",
+    "wwiseaudio/chinese(cn)/bnk_vo_1015001.bnk"
+   ],
+   "sounds": [
+    1055048413
+   ]
+  },
+  {
+   "id": "ult-1066-team",
+   "group": "ult-team",
+   "name": "The Hood",
+   "banks": [
+    "wwiseaudio/english(us)/bnk_vo_1066001.bnk",
+    "wwiseaudio/japanese(jp)/bnk_vo_1066001.bnk",
+    "wwiseaudio/chinese(cn)/bnk_vo_1066001.bnk"
+   ],
+   "sounds": [
+    934297614
+   ]
+  },
+  {
+   "id": "ult-1014-team",
+   "group": "ult-team",
+   "name": "The Punisher",
+   "banks": [
+    "wwiseaudio/english(us)/bnk_vo_1014001.bnk",
+    "wwiseaudio/japanese(jp)/bnk_vo_1014001.bnk",
+    "wwiseaudio/chinese(cn)/bnk_vo_1014001.bnk"
+   ],
+   "sounds": [
+    278769063
+   ]
+  },
+  {
+   "id": "ult-1051-team",
+   "group": "ult-team",
+   "name": "The Thing",
+   "banks": [
+    "wwiseaudio/english(us)/bnk_vo_1051001.bnk",
+    "wwiseaudio/japanese(jp)/bnk_vo_1051001.bnk",
+    "wwiseaudio/chinese(cn)/bnk_vo_1051001.bnk"
+   ],
+   "sounds": [
+    113406691
+   ]
+  },
+  {
+   "id": "ult-1039-team",
+   "group": "ult-team",
+   "name": "Thor",
+   "banks": [
+    "wwiseaudio/english(us)/bnk_vo_1039001.bnk",
+    "wwiseaudio/japanese(jp)/bnk_vo_1039001.bnk",
+    "wwiseaudio/chinese(cn)/bnk_vo_1039001.bnk"
+   ],
+   "sounds": [
+    213005930,
+    36392899
+   ]
+  },
+  {
+   "id": "ult-1028-team",
+   "group": "ult-team",
+   "name": "Ultron",
+   "banks": [
+    "wwiseaudio/english(us)/bnk_vo_1028001.bnk",
+    "wwiseaudio/japanese(jp)/bnk_vo_1028001.bnk",
+    "wwiseaudio/chinese(cn)/bnk_vo_1028001.bnk"
+   ],
+   "sounds": [
+    789581223
+   ]
+  },
+  {
+   "id": "ult-1035-team",
+   "group": "ult-team",
+   "name": "Venom",
+   "banks": [
+    "wwiseaudio/english(us)/bnk_vo_1035001.bnk",
+    "wwiseaudio/japanese(jp)/bnk_vo_1035001.bnk",
+    "wwiseaudio/chinese(cn)/bnk_vo_1035001.bnk"
+   ],
+   "sounds": [
+    722935303
+   ]
+  },
+  {
+   "id": "ult-1060-team",
+   "group": "ult-team",
+   "name": "White Fox",
+   "banks": [
+    "wwiseaudio/english(us)/bnk_vo_1060001.bnk",
+    "wwiseaudio/japanese(jp)/bnk_vo_1060001.bnk",
+    "wwiseaudio/chinese(cn)/bnk_vo_1060001.bnk"
+   ],
+   "sounds": [
+    991090494
+   ]
+  },
+  {
+   "id": "ult-1041-team",
+   "group": "ult-team",
+   "name": "Winter Soldier",
+   "banks": [
+    "wwiseaudio/english(us)/bnk_vo_1041001.bnk",
+    "wwiseaudio/japanese(jp)/bnk_vo_1041001.bnk",
+    "wwiseaudio/chinese(cn)/bnk_vo_1041001.bnk"
+   ],
+   "sounds": [
+    46021204
+   ]
+  },
+  {
+   "id": "ult-1049-team",
+   "group": "ult-team",
+   "name": "Wolverine",
+   "banks": [
+    "wwiseaudio/english(us)/bnk_vo_1049001.bnk",
+    "wwiseaudio/japanese(jp)/bnk_vo_1049001.bnk",
+    "wwiseaudio/chinese(cn)/bnk_vo_1049001.bnk"
+   ],
+   "sounds": [
+    36385956
+   ]
+  },
+  {
+   "id": "ult-1046-enemy",
+   "group": "ult-enemy",
+   "name": "Adam Warlock",
+   "banks": [
+    "wwiseaudio/english(us)/bnk_vo_1046001.bnk",
+    "wwiseaudio/japanese(jp)/bnk_vo_1046001.bnk",
+    "wwiseaudio/chinese(cn)/bnk_vo_1046001.bnk"
+   ],
+   "sounds": [
+    941603284
+   ]
+  },
+  {
+   "id": "ult-1056-enemy",
+   "group": "ult-enemy",
+   "name": "Angela",
+   "banks": [
+    "wwiseaudio/english(us)/bnk_vo_1056001.bnk",
+    "wwiseaudio/japanese(jp)/bnk_vo_1056001.bnk",
+    "wwiseaudio/chinese(cn)/bnk_vo_1056001.bnk"
+   ],
+   "sounds": [
+    97452968
+   ]
+  },
+  {
+   "id": "ult-1061-enemy",
+   "group": "ult-enemy",
+   "name": "Black Cat",
+   "banks": [
+    "wwiseaudio/english(us)/bnk_vo_1061001.bnk",
+    "wwiseaudio/japanese(jp)/bnk_vo_1061001.bnk",
+    "wwiseaudio/chinese(cn)/bnk_vo_1061001.bnk"
+   ],
+   "sounds": [
+    201397913
+   ]
+  },
+  {
+   "id": "ult-1026-enemy",
+   "group": "ult-enemy",
+   "name": "Black Panther",
+   "banks": [
+    "wwiseaudio/english(us)/bnk_vo_1026001.bnk",
+    "wwiseaudio/japanese(jp)/bnk_vo_1026001.bnk",
+    "wwiseaudio/chinese(cn)/bnk_vo_1026001.bnk"
+   ],
+   "sounds": [
+    437532094
+   ]
+  },
+  {
+   "id": "ult-1033-enemy",
+   "group": "ult-enemy",
+   "name": "Black Widow",
+   "banks": [
+    "wwiseaudio/english(us)/bnk_vo_1033001.bnk",
+    "wwiseaudio/japanese(jp)/bnk_vo_1033001.bnk",
+    "wwiseaudio/chinese(cn)/bnk_vo_1033001.bnk"
+   ],
+   "sounds": [
+    702883921,
+    194575599
+   ]
+  },
+  {
+   "id": "ult-1044-enemy",
+   "group": "ult-enemy",
+   "name": "Blade",
+   "banks": [
+    "wwiseaudio/english(us)/bnk_vo_1044001.bnk",
+    "wwiseaudio/japanese(jp)/bnk_vo_1044001.bnk",
+    "wwiseaudio/chinese(cn)/bnk_vo_1044001.bnk"
+   ],
+   "sounds": [
+    142187331,
+    510339230
+   ]
+  },
+  {
+   "id": "ult-1011-banner-enemy",
+   "group": "ult-enemy",
+   "name": "Bruce Banner",
+   "banks": [
+    "wwiseaudio/english(us)/bnk_vo_1011001.bnk",
+    "wwiseaudio/japanese(jp)/bnk_vo_1011001.bnk",
+    "wwiseaudio/chinese(cn)/bnk_vo_1011001.bnk"
+   ],
+   "sounds": [
+    417262184
+   ]
+  },
+  {
+   "id": "ult-1022-enemy",
+   "group": "ult-enemy",
+   "name": "Captain America",
+   "banks": [
+    "wwiseaudio/english(us)/bnk_vo_1022001.bnk",
+    "wwiseaudio/japanese(jp)/bnk_vo_1022001.bnk",
+    "wwiseaudio/chinese(cn)/bnk_vo_1022001.bnk"
+   ],
+   "sounds": [
+    852695002
+   ]
+  },
+  {
+   "id": "ult-1025-enemy",
+   "group": "ult-enemy",
+   "name": "Cloak and Dagger",
+   "banks": [
+    "wwiseaudio/english(us)/bnk_vo_1025001.bnk",
+    "wwiseaudio/japanese(jp)/bnk_vo_1025001.bnk",
+    "wwiseaudio/chinese(cn)/bnk_vo_1025001.bnk"
+   ],
+   "sounds": [
+    437097804,
+    948295763
+   ]
+  },
+  {
+   "id": "ult-1063-enemy",
+   "group": "ult-enemy",
+   "name": "Cyclops",
+   "banks": [
+    "wwiseaudio/english(us)/bnk_vo_1063001.bnk",
+    "wwiseaudio/japanese(jp)/bnk_vo_1063001.bnk",
+    "wwiseaudio/chinese(cn)/bnk_vo_1063001.bnk"
+   ],
+   "sounds": [
+    915845908
+   ]
+  },
+  {
+   "id": "ult-1055-enemy",
+   "group": "ult-enemy",
+   "name": "Daredevil",
+   "banks": [
+    "wwiseaudio/english(us)/bnk_vo_1055001.bnk",
+    "wwiseaudio/japanese(jp)/bnk_vo_1055001.bnk",
+    "wwiseaudio/chinese(cn)/bnk_vo_1055001.bnk"
+   ],
+   "sounds": [
+    801324332
+   ]
+  },
+  {
+   "id": "ult-1057-enemy",
+   "group": "ult-enemy",
+   "name": "Deadpool",
+   "banks": [
+    "wwiseaudio/english(us)/bnk_vo_1057001.bnk",
+    "wwiseaudio/japanese(jp)/bnk_vo_1057001.bnk",
+    "wwiseaudio/chinese(cn)/bnk_vo_1057001.bnk"
+   ],
+   "sounds": [
+    69478028,
+    159879033,
+    769588228,
+    737484166
+   ]
+  },
+  {
+   "id": "ult-1062-enemy",
+   "group": "ult-enemy",
+   "name": "Devil Dino",
+   "banks": [
+    "wwiseaudio/english(us)/bnk_vo_1062001.bnk",
+    "wwiseaudio/japanese(jp)/bnk_vo_1062001.bnk",
+    "wwiseaudio/chinese(cn)/bnk_vo_1062001.bnk"
+   ],
+   "sounds": [
+    955985047
+   ]
+  },
+  {
+   "id": "ult-1018-enemy",
+   "group": "ult-enemy",
+   "name": "Doctor Strange",
+   "banks": [
+    "wwiseaudio/english(us)/bnk_vo_1018001.bnk",
+    "wwiseaudio/japanese(jp)/bnk_vo_1018001.bnk",
+    "wwiseaudio/chinese(cn)/bnk_vo_1018001.bnk"
+   ],
+   "sounds": [
+    747125854
+   ]
+  },
+  {
+   "id": "ult-1059-enemy",
+   "group": "ult-enemy",
+   "name": "Elsa Bloodstone",
+   "banks": [
+    "wwiseaudio/english(us)/bnk_vo_1059001.bnk",
+    "wwiseaudio/japanese(jp)/bnk_vo_1059001.bnk",
+    "wwiseaudio/chinese(cn)/bnk_vo_1059001.bnk"
+   ],
+   "sounds": [
+    1063431384
+   ]
+  },
+  {
+   "id": "ult-1053-enemy",
+   "group": "ult-enemy",
+   "name": "Emma Frost",
+   "banks": [
+    "wwiseaudio/english(us)/bnk_vo_1053001.bnk",
+    "wwiseaudio/japanese(jp)/bnk_vo_1053001.bnk",
+    "wwiseaudio/chinese(cn)/bnk_vo_1053001.bnk"
+   ],
+   "sounds": [
+    845910230
+   ]
+  },
+  {
+   "id": "ult-1058-enemy",
+   "group": "ult-enemy",
+   "name": "Gambit",
+   "banks": [
+    "wwiseaudio/english(us)/bnk_vo_1058001.bnk",
+    "wwiseaudio/japanese(jp)/bnk_vo_1058001.bnk",
+    "wwiseaudio/chinese(cn)/bnk_vo_1058001.bnk"
+   ],
+   "sounds": [
+    457335962
+   ]
+  },
+  {
+   "id": "ult-1067-enemy",
+   "group": "ult-enemy",
+   "name": "Gorr The God Butcher",
+   "banks": [
+    "wwiseaudio/english(us)/bnk_vo_1067001.bnk",
+    "wwiseaudio/japanese(jp)/bnk_vo_1067001.bnk",
+    "wwiseaudio/chinese(cn)/bnk_vo_1067001.bnk"
+   ],
+   "sounds": [
+    785438000
+   ]
+  },
+  {
+   "id": "ult-1027-enemy",
+   "group": "ult-enemy",
+   "name": "Groot",
+   "banks": [
+    "wwiseaudio/english(us)/bnk_vo_1027001.bnk",
+    "wwiseaudio/japanese(jp)/bnk_vo_1027001.bnk",
+    "wwiseaudio/chinese(cn)/bnk_vo_1027001.bnk"
+   ],
+   "sounds": [
+    1046812652
+   ]
+  },
+  {
+   "id": "ult-1021-enemy",
+   "group": "ult-enemy",
+   "name": "Hawkeye",
+   "banks": [
+    "wwiseaudio/english(us)/bnk_vo_1021001.bnk",
+    "wwiseaudio/japanese(jp)/bnk_vo_1021001.bnk",
+    "wwiseaudio/chinese(cn)/bnk_vo_1021001.bnk"
+   ],
+   "sounds": [
+    374232434
+   ]
+  },
+  {
+   "id": "ult-1024-enemy",
+   "group": "ult-enemy",
+   "name": "Hela",
+   "banks": [
+    "wwiseaudio/english(us)/bnk_vo_1024001.bnk",
+    "wwiseaudio/japanese(jp)/bnk_vo_1024001.bnk",
+    "wwiseaudio/chinese(cn)/bnk_vo_1024001.bnk"
+   ],
+   "sounds": [
+    1057824675
+   ]
+  },
+  {
+   "id": "ult-1068-enemy",
+   "group": "ult-enemy",
+   "name": "Hive",
+   "banks": [
+    "wwiseaudio/english(us)/bnk_vo_1068001.bnk",
+    "wwiseaudio/japanese(jp)/bnk_vo_1068001.bnk",
+    "wwiseaudio/chinese(cn)/bnk_vo_1068001.bnk"
+   ],
+   "sounds": [
+    22989157,
+    327279442
+   ]
+  },
+  {
+   "id": "ult-1011-hero-hulk-enemy",
+   "group": "ult-enemy",
+   "name": "Hulk",
+   "banks": [
+    "wwiseaudio/english(us)/bnk_vo_1011001.bnk",
+    "wwiseaudio/japanese(jp)/bnk_vo_1011001.bnk",
+    "wwiseaudio/chinese(cn)/bnk_vo_1011001.bnk"
+   ],
+   "sounds": [
+    262624260
+   ]
+  },
+  {
+   "id": "ult-1017-enemy",
+   "group": "ult-enemy",
+   "name": "Human Torch",
+   "banks": [
+    "wwiseaudio/english(us)/bnk_vo_1017001.bnk",
+    "wwiseaudio/japanese(jp)/bnk_vo_1017001.bnk",
+    "wwiseaudio/chinese(cn)/bnk_vo_1017001.bnk"
+   ],
+   "sounds": [
+    182597274
+   ]
+  },
+  {
+   "id": "ult-1050-enemy",
+   "group": "ult-enemy",
+   "name": "Invisible Woman",
+   "banks": [
+    "wwiseaudio/english(us)/bnk_vo_1050001.bnk",
+    "wwiseaudio/japanese(jp)/bnk_vo_1050001.bnk",
+    "wwiseaudio/chinese(cn)/bnk_vo_1050001.bnk"
+   ],
+   "sounds": [
+    728357252
+   ]
+  },
+  {
+   "id": "ult-1052-enemy",
+   "group": "ult-enemy",
+   "name": "Iron Fist",
+   "banks": [
+    "wwiseaudio/english(us)/bnk_vo_1052001.bnk",
+    "wwiseaudio/japanese(jp)/bnk_vo_1052001.bnk",
+    "wwiseaudio/chinese(cn)/bnk_vo_1052001.bnk"
+   ],
+   "sounds": [
+    535033973
+   ]
+  },
+  {
+   "id": "ult-1034-enemy",
+   "group": "ult-enemy",
+   "name": "Iron Man",
+   "banks": [
+    "wwiseaudio/english(us)/bnk_vo_1034001.bnk",
+    "wwiseaudio/japanese(jp)/bnk_vo_1034001.bnk",
+    "wwiseaudio/chinese(cn)/bnk_vo_1034001.bnk"
+   ],
+   "sounds": [
+    236397279
+   ]
+  },
+  {
+   "id": "ult-1047-enemy",
+   "group": "ult-enemy",
+   "name": "Jeff the Landshark",
+   "banks": [
+    "wwiseaudio/english(us)/bnk_vo_1047001.bnk",
+    "wwiseaudio/japanese(jp)/bnk_vo_1047001.bnk",
+    "wwiseaudio/chinese(cn)/bnk_vo_1047001.bnk"
+   ],
+   "sounds": [
+    140790,
+    93612022
+   ]
+  },
+  {
+   "id": "ult-1064-enemy",
+   "group": "ult-enemy",
+   "name": "Jubilee",
+   "banks": [
+    "wwiseaudio/english(us)/bnk_vo_1064001.bnk",
+    "wwiseaudio/japanese(jp)/bnk_vo_1064001.bnk",
+    "wwiseaudio/chinese(cn)/bnk_vo_1064001.bnk"
+   ],
+   "sounds": [
+    138536597
+   ]
+  },
+  {
+   "id": "ult-1016-enemy",
+   "group": "ult-enemy",
+   "name": "Loki",
+   "banks": [
+    "wwiseaudio/english(us)/bnk_vo_1016001.bnk",
+    "wwiseaudio/japanese(jp)/bnk_vo_1016001.bnk",
+    "wwiseaudio/chinese(cn)/bnk_vo_1016001.bnk"
+   ],
+   "sounds": [
+    590295921
+   ]
+  },
+  {
+   "id": "ult-1031-enemy",
+   "group": "ult-enemy",
+   "name": "Luna Snow",
+   "banks": [
+    "wwiseaudio/english(us)/bnk_vo_1031001.bnk",
+    "wwiseaudio/japanese(jp)/bnk_vo_1031001.bnk",
+    "wwiseaudio/chinese(cn)/bnk_vo_1031001.bnk"
+   ],
+   "sounds": [
+    929176718
+   ]
+  },
+  {
+   "id": "ult-1029-enemy",
+   "group": "ult-enemy",
+   "name": "Magik",
+   "banks": [
+    "wwiseaudio/english(us)/bnk_vo_1029001.bnk",
+    "wwiseaudio/japanese(jp)/bnk_vo_1029001.bnk",
+    "wwiseaudio/chinese(cn)/bnk_vo_1029001.bnk"
+   ],
+   "sounds": [
+    544816991
+   ]
+  },
+  {
+   "id": "ult-1037-enemy",
+   "group": "ult-enemy",
+   "name": "Magneto",
+   "banks": [
+    "wwiseaudio/english(us)/bnk_vo_1037001.bnk",
+    "wwiseaudio/japanese(jp)/bnk_vo_1037001.bnk",
+    "wwiseaudio/chinese(cn)/bnk_vo_1037001.bnk"
+   ],
+   "sounds": [
+    330389567
+   ]
+  },
+  {
+   "id": "ult-1020-enemy",
+   "group": "ult-enemy",
+   "name": "Mantis",
+   "banks": [
+    "wwiseaudio/english(us)/bnk_vo_1020001.bnk",
+    "wwiseaudio/japanese(jp)/bnk_vo_1020001.bnk",
+    "wwiseaudio/chinese(cn)/bnk_vo_1020001.bnk"
+   ],
+   "sounds": [
+    891588961
+   ]
+  },
+  {
+   "id": "ult-1040-enemy",
+   "group": "ult-enemy",
+   "name": "Mister Fantastic",
+   "banks": [
+    "wwiseaudio/english(us)/bnk_vo_1040001.bnk",
+    "wwiseaudio/japanese(jp)/bnk_vo_1040001.bnk",
+    "wwiseaudio/chinese(cn)/bnk_vo_1040001.bnk"
+   ],
+   "sounds": [
+    366979892
+   ]
+  },
+  {
+   "id": "ult-1030-enemy",
+   "group": "ult-enemy",
+   "name": "Moon Knight",
+   "banks": [
+    "wwiseaudio/english(us)/bnk_vo_1030001.bnk",
+    "wwiseaudio/japanese(jp)/bnk_vo_1030001.bnk",
+    "wwiseaudio/chinese(cn)/bnk_vo_1030001.bnk"
+   ],
+   "sounds": [
+    761112587
+   ]
+  },
+  {
+   "id": "ult-1042-enemy",
+   "group": "ult-enemy",
+   "name": "Peni Parker",
+   "banks": [
+    "wwiseaudio/english(us)/bnk_vo_1042001.bnk",
+    "wwiseaudio/japanese(jp)/bnk_vo_1042001.bnk",
+    "wwiseaudio/chinese(cn)/bnk_vo_1042001.bnk"
+   ],
+   "sounds": [
+    468967895
+   ]
+  },
+  {
+   "id": "ult-1054-enemy",
+   "group": "ult-enemy",
+   "name": "Phoenix",
+   "banks": [
+    "wwiseaudio/english(us)/bnk_vo_1054001.bnk",
+    "wwiseaudio/japanese(jp)/bnk_vo_1054001.bnk",
+    "wwiseaudio/chinese(cn)/bnk_vo_1054001.bnk"
+   ],
+   "sounds": [
+    608907261
+   ]
+  },
+  {
+   "id": "ult-1048-enemy",
+   "group": "ult-enemy",
+   "name": "Psylocke",
+   "banks": [
+    "wwiseaudio/english(us)/bnk_vo_1048001.bnk",
+    "wwiseaudio/japanese(jp)/bnk_vo_1048001.bnk",
+    "wwiseaudio/chinese(cn)/bnk_vo_1048001.bnk"
+   ],
+   "sounds": [
+    691781770
+   ]
+  },
+  {
+   "id": "ult-1023-enemy",
+   "group": "ult-enemy",
+   "name": "Rocket Raccoon",
+   "banks": [
+    "wwiseaudio/english(us)/bnk_vo_1023001.bnk",
+    "wwiseaudio/japanese(jp)/bnk_vo_1023001.bnk",
+    "wwiseaudio/chinese(cn)/bnk_vo_1023001.bnk"
+   ],
+   "sounds": [
+    30897910
+   ]
+  },
+  {
+   "id": "ult-1065-enemy",
+   "group": "ult-enemy",
+   "name": "Rogue",
+   "banks": [
+    "wwiseaudio/english(us)/bnk_vo_1065001.bnk",
+    "wwiseaudio/japanese(jp)/bnk_vo_1065001.bnk",
+    "wwiseaudio/chinese(cn)/bnk_vo_1065001.bnk"
+   ],
+   "sounds": [
+    829262561
+   ]
+  },
+  {
+   "id": "ult-1038-enemy",
+   "group": "ult-enemy",
+   "name": "Scarlet Witch",
+   "banks": [
+    "wwiseaudio/english(us)/bnk_vo_1038001.bnk",
+    "wwiseaudio/japanese(jp)/bnk_vo_1038001.bnk",
+    "wwiseaudio/chinese(cn)/bnk_vo_1038001.bnk"
+   ],
+   "sounds": [
+    749571449
+   ]
+  },
+  {
+   "id": "ult-1036-enemy",
+   "group": "ult-enemy",
+   "name": "Spider-Man",
+   "banks": [
+    "wwiseaudio/english(us)/bnk_vo_1036001.bnk",
+    "wwiseaudio/japanese(jp)/bnk_vo_1036001.bnk",
+    "wwiseaudio/chinese(cn)/bnk_vo_1036001.bnk"
+   ],
+   "sounds": [
+    596608901
+   ]
+  },
+  {
+   "id": "ult-1032-enemy",
+   "group": "ult-enemy",
+   "name": "Squirrel Girl",
+   "banks": [
+    "wwiseaudio/english(us)/bnk_vo_1032001.bnk",
+    "wwiseaudio/japanese(jp)/bnk_vo_1032001.bnk",
+    "wwiseaudio/chinese(cn)/bnk_vo_1032001.bnk"
+   ],
+   "sounds": [
+    805700176
+   ]
+  },
+  {
+   "id": "ult-1043-enemy",
+   "group": "ult-enemy",
+   "name": "Star-Lord",
+   "banks": [
+    "wwiseaudio/english(us)/bnk_vo_1043001.bnk",
+    "wwiseaudio/japanese(jp)/bnk_vo_1043001.bnk",
+    "wwiseaudio/chinese(cn)/bnk_vo_1043001.bnk"
+   ],
+   "sounds": [
+    692498239
+   ]
+  },
+  {
+   "id": "ult-1015-enemy",
+   "group": "ult-enemy",
+   "name": "Storm",
+   "banks": [
+    "wwiseaudio/english(us)/bnk_vo_1015001.bnk",
+    "wwiseaudio/japanese(jp)/bnk_vo_1015001.bnk",
+    "wwiseaudio/chinese(cn)/bnk_vo_1015001.bnk"
+   ],
+   "sounds": [
+    424930862
+   ]
+  },
+  {
+   "id": "ult-1066-enemy",
+   "group": "ult-enemy",
+   "name": "The Hood",
+   "banks": [
+    "wwiseaudio/english(us)/bnk_vo_1066001.bnk",
+    "wwiseaudio/japanese(jp)/bnk_vo_1066001.bnk",
+    "wwiseaudio/chinese(cn)/bnk_vo_1066001.bnk"
+   ],
+   "sounds": [
+    236709151
+   ]
+  },
+  {
+   "id": "ult-1014-enemy",
+   "group": "ult-enemy",
+   "name": "The Punisher",
+   "banks": [
+    "wwiseaudio/english(us)/bnk_vo_1014001.bnk",
+    "wwiseaudio/japanese(jp)/bnk_vo_1014001.bnk",
+    "wwiseaudio/chinese(cn)/bnk_vo_1014001.bnk"
+   ],
+   "sounds": [
+    872615622
+   ]
+  },
+  {
+   "id": "ult-1051-enemy",
+   "group": "ult-enemy",
+   "name": "The Thing",
+   "banks": [
+    "wwiseaudio/english(us)/bnk_vo_1051001.bnk",
+    "wwiseaudio/japanese(jp)/bnk_vo_1051001.bnk",
+    "wwiseaudio/chinese(cn)/bnk_vo_1051001.bnk"
+   ],
+   "sounds": [
+    715523387
+   ]
+  },
+  {
+   "id": "ult-1039-enemy",
+   "group": "ult-enemy",
+   "name": "Thor",
+   "banks": [
+    "wwiseaudio/english(us)/bnk_vo_1039001.bnk",
+    "wwiseaudio/japanese(jp)/bnk_vo_1039001.bnk",
+    "wwiseaudio/chinese(cn)/bnk_vo_1039001.bnk"
+   ],
+   "sounds": [
+    411635782,
+    757452599
+   ]
+  },
+  {
+   "id": "ult-1028-enemy",
+   "group": "ult-enemy",
+   "name": "Ultron",
+   "banks": [
+    "wwiseaudio/english(us)/bnk_vo_1028001.bnk",
+    "wwiseaudio/japanese(jp)/bnk_vo_1028001.bnk",
+    "wwiseaudio/chinese(cn)/bnk_vo_1028001.bnk"
+   ],
+   "sounds": [
+    268187576
+   ]
+  },
+  {
+   "id": "ult-1035-enemy",
+   "group": "ult-enemy",
+   "name": "Venom",
+   "banks": [
+    "wwiseaudio/english(us)/bnk_vo_1035001.bnk",
+    "wwiseaudio/japanese(jp)/bnk_vo_1035001.bnk",
+    "wwiseaudio/chinese(cn)/bnk_vo_1035001.bnk"
+   ],
+   "sounds": [
+    661926000
+   ]
+  },
+  {
+   "id": "ult-1060-enemy",
+   "group": "ult-enemy",
+   "name": "White Fox",
+   "banks": [
+    "wwiseaudio/english(us)/bnk_vo_1060001.bnk",
+    "wwiseaudio/japanese(jp)/bnk_vo_1060001.bnk",
+    "wwiseaudio/chinese(cn)/bnk_vo_1060001.bnk"
+   ],
+   "sounds": [
+    922179591
+   ]
+  },
+  {
+   "id": "ult-1041-enemy",
+   "group": "ult-enemy",
+   "name": "Winter Soldier",
+   "banks": [
+    "wwiseaudio/english(us)/bnk_vo_1041001.bnk",
+    "wwiseaudio/japanese(jp)/bnk_vo_1041001.bnk",
+    "wwiseaudio/chinese(cn)/bnk_vo_1041001.bnk"
+   ],
+   "sounds": [
+    1071943036
+   ]
+  },
+  {
+   "id": "ult-1049-enemy",
+   "group": "ult-enemy",
+   "name": "Wolverine",
+   "banks": [
+    "wwiseaudio/english(us)/bnk_vo_1049001.bnk",
+    "wwiseaudio/japanese(jp)/bnk_vo_1049001.bnk",
+    "wwiseaudio/chinese(cn)/bnk_vo_1049001.bnk"
+   ],
+   "sounds": [
+    1021318079
    ]
   }
  ]

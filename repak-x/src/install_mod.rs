@@ -51,6 +51,10 @@ pub struct InstallableMod {
     /// Windows does. The install from the Library sets it; updating a mod replaces on purpose and does not
     #[serde(default)]
     pub keep_both: bool,
+    /// repakxtra: the path that was dropped (an archive or folder for a mod unpacked from it), which the install card's
+    /// row carries: a single-pak archive's row is named after the archive, the mod after its pak
+    #[serde(skip)]
+    pub source: PathBuf,
 }
 
 impl Default for InstallableMod {
@@ -68,6 +72,7 @@ impl Default for InstallableMod {
             compression: "Oodle".to_string(),
             reader: None,
             mod_path: Default::default(),
+            source: Default::default(),
             total_files: 0,
             iostore: false,
             is_archived: false,

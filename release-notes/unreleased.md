@@ -1,3 +1,8 @@
 - Added a Sounds tab that replaces hit, kill, killstreak, healing, kill feed, alert, match, and announcer sounds with your own .wav, .mp3, or .ogg files or 14 built-in sounds, and makes them into a mod you install from the install card
 - Added the game's own log to Settings > Crash reports: where and as which hero it crashed, the last 10 seconds of game events, the errors near the end, which mods the game loaded, and Copy log and Save log with your user name, account ids, and login tokens taken out
 - Fixed the game crashing on a headshot or bodyshot hit when a Sounds tab mod replaced those sounds
+- Added each hero's ult voice line to the Sounds tab, as their team hears it and as enemies hear it
+- Fixed the header's scan reading every mod after an install instead of only the new ones
+- Fixed a name typed on the install card being ignored for a .zip, .rar, or .7z holding one mod
+- Fixed mods already installed being left out of a loadout made by the install
+- Fixed app updates failing when repakxtra was started from a PowerShell 7 window
