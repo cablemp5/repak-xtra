@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
-const MAX_EVENTS: usize = 2000;
+const MAX_EVENTS: usize = 5000; // every mod a loadout switch turns on or off is its own event
 const MAX_NAMES: usize = 50;
 
 /// One finished operation. `ok`: the mods it changed, `failed`: the ones it tried and could not (a partial batch has
@@ -112,10 +112,14 @@ fn write_now() {
 pub(crate) fn flush() {
     use std::sync::atomic::Ordering::SeqCst;
     for _ in 0..20 {
-        if !SAVING.load(SeqCst) { break; }
+        // only as the one writer: never beside the background one on the same temp file
+        if !SAVING.swap(true, SeqCst) {
+            if DIRTY.swap(false, SeqCst) { write_now(); }
+            SAVING.store(false, SeqCst);
+            return;
+        }
         std::thread::sleep(std::time::Duration::from_millis(50));
     }
-    if DIRTY.swap(false, SeqCst) && !SAVING.load(SeqCst) { write_now(); }
 }
 
 /// Drops events past MAX_EVENTS, moving `since` to the newest one let go: a span before it is no longer covered.
@@ -129,19 +133,12 @@ fn push_into(s: &mut Store, e: Event) {
     }
 }
 
-/// A loadout switch's own on and off events (each toggle records one) fold into it: between its start `from` and `to`,
-/// of its mods (`names`, every mod it switched or tried, never capped). A big Collection switch then takes one slot.
-fn fold_switches(s: &mut Store, from: u64, to: u64, names: &[String]) {
-    if from == 0 { return; }
-    s.events.retain(|e| !((e.kind == "enable" || e.kind == "disable") && e.t >= from && e.t <= to && e.ok.iter().all(|n| names.contains(n))));
-}
-
 /// A text with folders taken out (a path keeps only its last part) and no user name.
 fn plain(text: &str) -> String {
     if text.is_empty() { return String::new(); }
-    // a network path (\\server\share\...) goes whole, server and share too, and a drive path keeps only its last part
+    // a network path (\\server\share\...) goes whole to the end of the line, spaces too, and a drive path keeps only its last part
     static DIRS: std::sync::OnceLock<Option<(regex_lite::Regex, regex_lite::Regex)>> = std::sync::OnceLock::new();
-    let no_dirs = DIRS.get_or_init(|| Some((regex_lite::Regex::new(r"[\\/]{2}[^\\/\s]+(?:[\\/][^\\/\s]*)*").ok()?, regex_lite::Regex::new(r"[A-Za-z]:[\\/](?:[^\\/\r\n]*[\\/])*").ok()?))).as_ref()
+    let no_dirs = DIRS.get_or_init(|| Some((regex_lite::Regex::new(r"[\\/]{2}[^\\/\r\n]+(?:[\\/][^\r\n]*)?").ok()?, regex_lite::Regex::new(r"[A-Za-z]:[\\/](?:[^\\/\r\n]*[\\/])*").ok()?))).as_ref()
         .map_or_else(|| text.to_string(), |(unc, drive)| drive.replace_all(&unc.replace_all(text, ""), "").into_owned());
     crate::xtra_crash::redact(&no_dirs, &crate::xtra_crash::user_names())
 }
@@ -170,11 +167,11 @@ pub(crate) fn record(kind: &str, ok: &[String], failed: &[String], detail: &str)
 
 fn record_from(kind: &str, ok: &[String], failed: &[String], detail: &str, from: u64) {
     if ok.is_empty() && failed.is_empty() && detail.is_empty() { return; }
+    // a batch's outcome is known when it ends: placed then. Its own on and off events stay (each confirmed as it happened),
+    // so a crash during a loadout switch shows the switches made before it, and the timeline folds them into the batch
     let t = now();
-    // a loadout switch is placed at its start: a crash during it still shows the switch that began before it
-    let e = event(if kind == "loadout" && from > 0 { from } else { t }, kind, ok, failed, detail, from);
-    let names: Vec<String> = ok.iter().chain(failed).map(|p| mod_name(p)).collect();
-    if with_store(|s| { if kind == "loadout" { fold_switches(s, from, t, &names); } push_into(s, e) }).is_some() { save_soon(); }
+    let e = event(t, kind, ok, failed, detail, from.min(t));
+    if with_store(|s| push_into(s, e)).is_some() { save_soon(); }
 }
 
 /// The frontend's operations (a loadout switch, a Mod Updater result): only kinds it may send. `started`: when its batch
@@ -191,7 +188,9 @@ pub fn xtra_activity_record(kind: String, ok: Vec<String>, failed: Vec<String>, 
 pub(crate) fn note_versions(mods_dir: &Path, start: u64) {
     let app = crate::xtra_update::version().to_string();
     let game = crate::xtra_broken::paks_dir(mods_dir).and_then(|p| crate::xtra_vfx::game_cl(&p)).map(|c| c.to_string()).unwrap_or_default();
-    let t = start.saturating_sub(1);
+    // just before the launch that saw it, unless the app opened again during that game (then now: it may have updated meanwhile)
+    let at = now();
+    let t = if at.saturating_sub(start) > 60 { at } else { start.saturating_sub(1) };
     let changed = with_store(|s| {
         // the first start only learns them: an update is a change from a version seen before
         let mut changed = false;
@@ -291,15 +290,6 @@ mod tests {
     }
 
     #[test]
-    fn a_loadout_switch_folds_its_own_toggles() {
-        let mut s = Store { since: 1, ..Default::default() };
-        let t = |t: u64, kind: &str, n: &str| Event { t, kind: kind.into(), ok: vec![n.into()], n_ok: 1, ..Default::default() };
-        for e in [t(5, "enable", "Other"), t(10, "enable", "A"), t(11, "disable", "B"), t(12, "enable", "Mine")] { push_into(&mut s, e); }
-        fold_switches(&mut s, 10, 13, &["A".into(), "B".into()]);
-        assert_eq!(s.events.iter().map(|e| e.ok[0].as_str()).collect::<Vec<_>>(), vec!["Other", "Mine"], "only its own mods in its own window, never another toggle");
-    }
-
-    #[test]
     fn a_crash_after_the_session_was_seen_ending_is_not_full() {
         assert_eq!(timeline_of(205, &[(50, Some(60)), (100, Some(200))], 10, &[]).coverage, "full", "the crash folder lands as the game closes");
         assert_eq!(timeline_of(300, &[(50, Some(60)), (100, Some(200))], 10, &[]).coverage, "partial", "100 s after it ended: maybe an unseen relaunch");
@@ -307,7 +297,7 @@ mod tests {
 
     #[test]
     fn names_carry_no_folder_or_priority() {
-        assert_eq!(plain(r"Mine \\server\share\Alice\Draft on"), "Mine  on", "a network path goes whole");
+        assert_eq!(plain(r"Mine \\server\Private Share\Draft"), "Mine ", "a network path goes whole, spaces too");
         assert_eq!(plain(r"\\server\PrivateShare"), "", "a share root too");
         assert_eq!(mod_name(r"C:\Games\Paks\~mods\Purple VFX_9999999_P.pak"), "Purple VFX");
         assert_eq!(mod_name("D:/x/Cool_P.bak_repak"), "Cool");

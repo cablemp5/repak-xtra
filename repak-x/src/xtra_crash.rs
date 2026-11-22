@@ -47,8 +47,11 @@ pub(crate) fn remember_on(mods_dir: &std::path::Path, start: u64) {
         .map(|e| on_key(e.path()))
         .collect();
     let mut all = read_sessions();
-    // the same game process seen again (the app reopened during it): one launch
-    if all.iter().any(|s| s.start.abs_diff(start) <= 2) { return; }
+    // the same game process seen again (the app reopened during it, or one poll missed it): one launch, running again
+    if let Some(s) = all.iter_mut().find(|s| s.start.abs_diff(start) <= 2) {
+        if s.end.take().is_some() { let _ = std::fs::write(sessions_store(), serde_json::to_vec(&all).unwrap_or_default()); }
+        return;
+    }
     all.push(Session { start, end: None, on });
     all.sort_by_key(|s| s.start);
     let skip = all.len().saturating_sub(10);
