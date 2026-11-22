@@ -8,7 +8,7 @@
 export const normText = (s: string) => s.normalize('NFKD').replace(/\p{M}/gu, '').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim()
 
 /** Exact match's own spelling: case and spaces only, the phrase's punctuation counts. Pure. */
-const exactText = (s: string) => s.toLowerCase().replace(/\s+/g, ' ').trim()
+const exactText = (s: string) => s.toLowerCase().replace(/[\s_]+/g, ' ').trim() // a file name's underscores are its spaces
 
 /** Whether `name` matches `query` as typed: every word (in any order), or with `exact` the phrase in order, ignoring
  *  only case and extra spaces. A blank query matches everything, one of punctuation alone is matched as typed. Pure. */
@@ -46,7 +46,11 @@ const MIN_FUZZY = 5
 /** 1 when one word of `query` needed a one-letter fix to match `name`, or null when it is not a close match (a short
  *  word that does not match as typed, a word two letters off, two words to fix, or nothing to fix). Pure. */
 export function closeMatch(name: string, query: string): number | null {
-  const q = normText(query)
+  return closeNorm(name, normText(query))
+}
+
+/** closeMatch for a query normalized once (closeMatches runs it for every name). */
+function closeNorm(name: string, q: string): number | null {
   if (!q) return null
   const h = normText(name), words = h.split(' ')
   let fixes = 0
@@ -61,7 +65,8 @@ export function closeMatch(name: string, query: string): number | null {
 /** Close matches among `items`, at most `limit`: the ones whose first name matched (a loadout's own) before the ones
  *  matched by a later one (a mod inside it), then by name. Pure. */
 export function closeMatches<T>(items: T[], names: (item: T) => string[], query: string, limit = 20): T[] {
-  const scored = items.map(item => { const all = names(item); return { item, name: all[0] ?? '', at: all.findIndex(n => closeMatch(n, query) !== null) } })
+  const q = normText(query)
+  const scored = items.map(item => { const all = names(item); return { item, name: all[0] ?? '', at: all.findIndex(n => closeNorm(n, q) !== null) } })
   return scored.filter(s => s.at >= 0).sort((a, b) => Math.min(a.at, 1) - Math.min(b.at, 1) || a.name.localeCompare(b.name)).slice(0, limit).map(s => s.item)
 }
 
@@ -76,6 +81,7 @@ if (import.meta.env.DEV) {
   console.assert(directMatch(bp, 'purple  vfx', true) && !directMatch('VFX Purple', 'purple vfx', true), 'exact: the phrase in order, extra spaces ignored')
   console.assert(directMatch('Café Mods', 'cafe') && directMatch('Spider-Man', 'spider man'), 'accents and punctuation ignored')
   console.assert(!directMatch('Spider Man', 'spider-man', true) && directMatch('Spider-Man', 'SPIDER-man', true), 'exact: only case and spaces are ignored')
+  console.assert(directMatch('Black_Panther_Purple_VFX_9999999_P', 'purple vfx', true), "exact: a file name's underscores are spaces")
   console.assert(directMatch('A - B', '-') && !directMatch('AB', '-'), 'a query of punctuation alone matches as typed')
   console.assert(directMatch(bp, '   ') && closeMatch(bp, ' ') === null, 'a blank query matches everything and guesses nothing')
   console.assert(closeMatches([spidey, bp, 'Purple Pnather Mod'], n => [n], 'purpel panther').join() === bp, 'only close matches, ranked')

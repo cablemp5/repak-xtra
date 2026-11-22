@@ -238,7 +238,7 @@ function LoadoutsHome(p: LoadoutProps) {
   const matching = close.length ? close : direct
   const [said, setSaid] = useState('') // the result count for screen readers, once typing pauses
   useEffect(() => {
-    const t = setTimeout(() => setSaid(!q ? '' : matching.length ? `${plural(matching.length, 'loadout')} found` : 'No loadouts found'), 700)
+    const t = setTimeout(() => setSaid(!q ? '' : close.length ? `No exact matches, ${close.length} close ${close.length === 1 ? 'match' : 'matches'}` : matching.length ? `${plural(matching.length, 'loadout')} found` : 'No loadouts found'), 700)
     return () => clearTimeout(t)
   }, [q, matching.length])
   const scrollBefore = useRef(0) // where the cards were before a search, for when it is cleared

@@ -2995,13 +2995,11 @@ function App() {
   [filteredMods, builtinRows, selectedCharacters, selectedCategories, filterTag, selectedFolderId, searchQuery, exactSearch, modState, isEncrypted, brokenVersion])
   // repakxtra: nothing matches the search as typed, with every other filter on: the close matches (a word one letter off),
   // labeled as such, never below real matches. Exact match never guesses
-  // every filter but the search: what close matches pick from, and what On / Off / Problems count while nothing matches
-  // as typed (so a typo never resets Problems or Encrypted to All)
-  const unsearched = useMemo(() => (searchQuery.trim() ? mods.filter(m => keepMod(m, false) && inFolder(m)) : folderMods), [searchQuery, mods, keepMod, inFolder, folderMods])
+  // from every filter but the search, read only when nothing matches. Never the built-in rows: they keep their own
+  // switch, out of reach of the arrow keys and Delete
   const closeMods = useMemo(() => (!searchQuery.trim() || exactSearch || libraryMods.length ? []
-    : closeMatches([...(selectedCharacters.size || selectedCategories.size || filterTag || selectedFolderId !== 'all' ? [] : builtinRows as ModRecord[]), ...unsearched]
-      .filter(matchesState(modState, isEncrypted)), m => [libraryName(m)], searchQuery)),
-  [searchQuery, exactSearch, libraryMods.length, unsearched, builtinRows, selectedCharacters, selectedCategories, filterTag, selectedFolderId, modState, isEncrypted, brokenVersion])
+    : closeMatches(mods.filter(m => keepMod(m, false) && inFolder(m) && matchesState(modState, isEncrypted)(m)), m => [libraryName(m)], searchQuery)),
+  [searchQuery, exactSearch, libraryMods.length, mods, keepMod, inFolder, modState, isEncrypted, brokenVersion])
   const shownMods = closeMods.length ? closeMods : libraryMods
   const navMods = closeMods.length ? closeMods : filteredMods // the arrow keys walk the rows shown (close matches too)
 
@@ -4116,7 +4114,7 @@ function App() {
                     <button type="button" className="btn-ghost lib-show-all" onClick={showAll}
                       title="Every mod again: all folders, no hero, type, or tag filter, no search. Checked mods stay checked">Show all</button>
                   )}
-                  <ModStateFilter value={modState} onChange={setModState} mods={folderMods.length || !searchQuery.trim() ? folderMods : unsearched} encrypted={isEncrypted} />
+                  <ModStateFilter value={modState} onChange={setModState} mods={folderMods} encrypted={isEncrypted} searching={Boolean(searchQuery.trim())} />
                 </div>
                 <div className="header-actions" data-tour="header-actions">
                   {/* repakxtra: no Asset Explorer button and no dividers here: it opens from Tools, a mod's menu, and its details */}
