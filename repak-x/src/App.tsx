@@ -94,8 +94,8 @@ import { canUpdateVfx, checkVfxModInPlace, updateVfxModInPlace } from './custom/
 import { checkKoMod, forgetKoMods, knownKoMod, openInKoEditor } from './custom/ko/openMod' // repakxtra: Open in KO Editor in the right-click menu
 import { PREF_TOGGLED, type PrefToggled, fewerPopups, liteOn, newDefaultsOnce, prefOn, setPref } from './custom/uiPrefs' // repakxtra
 import { reportSource } from './custom/setupReport' // repakxtra: Copy setup report reads the live list
-import { finishInstallLoadout, sameRow, type SameMod } from './custom/installLoadout'
 import { oneAtATime } from './custom/oneAtATime' // repakxtra
+import { finishInstallLoadout, sameRow, type SameMod } from './custom/installLoadout'
 import SetupButton from './custom/SetupPanel'
 import { REPAKXTRA_VERSION, latestRelease, versionTag } from './custom/version'
 import { installedReleaseNotes } from './custom/releaseNotes'
@@ -391,6 +391,8 @@ function App() {
   const [foundGamePath, setFoundGamePath] = useState<string | null>(null) // repakxtra: Auto-detect's find, asked before it replaces a saved folder
   useEffect(() => setModsRoot(gamePath), [gamePath]) // repakxtra: loadout member keys are relative to the mods folder
   const [mods, setMods] = useState<ModRecord[]>([])
+  const modsRef = useRef(mods) // repakxtra: the list on screen, for the install flow's last step
+  modsRef.current = mods
   const [folders, setFolders] = useState<FolderRecord[]>([])
   const [loading, setLoading] = useState(false)
   const [status, setStatus] = useState('')
@@ -532,10 +534,11 @@ function App() {
   const filteredModsRef = useRef<ModRecord[]>([]) // Keep in sync with filteredMods for selection handler
   const sameMods = useRef<SameMod[]>([]) // repakxtra: this install's mods left out as already installed (xtra_install_same)
   const loadModsSeq = useRef(0) // repakxtra: the newest loadMods call, so a slow older one cannot overwrite it
-  // repakxtra: the mods folder is listed by one call at a time (custom/oneAtATime.ts). newestListing: the last one asked for
+  // repakxtra: the mods folder is listed by one call at a time (custom/oneAtATime.ts). newestListing: the last one asked for.
+  // Every caller handles a failed listing itself: the empty catch only keeps one nobody reads yet from being unhandled
   const [listModsOnce] = useState(() => oneAtATime(() => invoke<ModRecord[]>('get_pak_files')))
   const newestListing = useRef<Promise<ModRecord[]> | null>(null)
-  const listMods = () => (newestListing.current = listModsOnce())
+  const listMods = () => { const listing = listModsOnce(); listing.catch(() => {}); return (newestListing.current = listing) }
   // repakxtra: an install's one listing after it finished, by the install's id. install_complete's reload and the install
   // flow's own step each used to walk the folder. `again`: tags were added since, and the list carries each mod's tags
   const installListing = useRef<{ request: string; listed: Promise<ModRecord[]> } | null>(null)
@@ -1915,6 +1918,7 @@ function App() {
       console.log('Loaded mods:', modList)
       if (mine !== loadModsSeq.current) return modList as ModRecord[] // a newer load is on its way, with the newer list
       syncLoadoutKeys(modList) // repakxtra: loadout members follow moved mods and old saves migrate, before the list shows
+      modsRef.current = modList // repakxtra: at once, the render that follows sets the same
       setMods(modList)
       requestAnimationFrame(hideSplash) // repakxtra: after the list paints
       setStatus(`Loading details for ${plural(modList.length, 'mod')}...`)
@@ -1950,7 +1954,12 @@ function App() {
   }
 
   // Preload details for all mods using the new Mod Detection API
-  const preloadModDetails = async (modList: ModRecord[]) => {
+  // repakxtra: one details pass at a time. Two side by side read 8 paks at once and each new pak twice, and the older
+  // could finish last and put back details of mods the newer list no longer has (the folder watcher now runs while a
+  // launch reads details). The newer pass waits its turn
+  const detailsPass = useRef<Promise<void>>(Promise.resolve())
+  const preloadModDetails = (modList: ModRecord[]) => (detailsPass.current = detailsPass.current.then(() => readModDetails(modList), () => readModDetails(modList)))
+  const readModDetails = async (modList: ModRecord[]) => {
     if (!Array.isArray(modList) || modList.length === 0) {
       setAvailableCharacters([])
       setAvailableCategories([])
@@ -3425,8 +3434,8 @@ function App() {
 
             for (const tag of mod.selectedTags) {
               try {
+                tagged = true // repakxtra: before the call, which adds the tag in memory even when saving it fails
                 await invoke('add_custom_tag', { modPath: fullPath, tag })
-                tagged = true // repakxtra
               } catch (e) {
                 console.error(`Failed to add tag ${tag} to ${fullPath}:`, e)
                 tagsFailed++
@@ -3446,7 +3455,9 @@ function App() {
         await recordSources(fresh) // repakxtra: Nexus source from the archive name
 
         // Reload in background so alert shows success immediately
-        if (newestListing.current === listed) void showMods(listed) // repakxtra: still the newest listing: shown without another walk
+        // repakxtra: no second walk while that listing is still the newest asked for and still the list on screen (a
+        // mod switched meanwhile changes its row at once and lists later)
+        if (newestListing.current === listed && modsRef.current === await listed.catch(() => null)) void showMods(listed)
         else loadMods()
         loadFolders()
         loadTags()

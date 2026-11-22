@@ -13,12 +13,22 @@ fn file() -> PathBuf {
 
 /// A change to the code that works out details (REPAKXTRA_DETAILS_LOGIC, a fingerprint of it from build_xtra.rs) or a
 /// character data update can change what details say, so either one starts the cache over. Not the exe's date: that
-/// started it over on every app update, and between a dev and a stable copy sharing it. Taken once at launch: entries
-/// computed after a character data update while the app runs are saved under the launch's stamp, so the next launch
-/// (which sees the newer file) starts over instead of trusting them.
+/// started it over on every app update, and between a dev and a stable copy sharing it. Taken once at launch, and a
+/// save after the character data changed gets a stamp of its own (`save_stamp`).
 fn stamp() -> String {
     static STAMP: std::sync::OnceLock<String> = std::sync::OnceLock::new();
-    STAMP.get_or_init(|| stamp_of(env!("REPAKXTRA_DETAILS_LOGIC"), std::fs::read(crate::character_data::character_data_path()).ok().as_deref())).clone()
+    STAMP.get_or_init(stamp_now).clone()
+}
+
+fn stamp_now() -> String {
+    stamp_of(env!("REPAKXTRA_DETAILS_LOGIC"), std::fs::read(crate::character_data::character_data_path()).ok().as_deref())
+}
+
+/// Pure: the stamp a save writes. Once the character data changed while the app runs, the cache holds entries from
+/// before and after it, so that save gets a stamp no launch has and the next launch starts over, also when the file is
+/// put back to its old bytes by then.
+fn save_stamp(launch: &str, now: &str) -> String {
+    if launch == now { launch.to_string() } else { format!("{launch}>{now}") }
 }
 
 /// Pure. The character data by its bytes, not its change time: the daily check used to save the same list again, and
@@ -75,7 +85,7 @@ pub fn save<T: Serialize>(entries: &HashMap<PathBuf, T>) {
     let path = file();
     let tmp = path.with_extension("json.tmp");
     // a path JSON cannot hold (not UTF-8) fails every time: not retried. A disk error is, at the next save.
-    let Ok(bytes) = serde_json::to_vec(&Saved { stamp: stamp(), entries }) else { return };
+    let Ok(bytes) = serde_json::to_vec(&Saved { stamp: save_stamp(&stamp(), &stamp_now()), entries }) else { return };
     if std::fs::write(&tmp, bytes).and_then(|_| std::fs::rename(&tmp, &path)).is_err() {
         mark_dirty();
     }
@@ -101,6 +111,10 @@ mod tests {
         assert_ne!(a, stamp_of("1", Some(b"[1,2]")), "new character data starts over");
         assert_ne!(a, stamp_of("2", Some(b"[1]")), "new details logic starts over");
         assert_ne!(a, stamp_of("1", None));
+        let b = stamp_of("1", Some(b"[1,2]"));
+        assert_eq!(save_stamp(&a, &a), a, "character data as at launch: the next launch keeps the cache");
+        let mixed = save_stamp(&a, &b);
+        assert!(mixed != a && mixed != b, "changed while running: no launch has this stamp, whichever bytes it finds");
     }
 
     #[test]
