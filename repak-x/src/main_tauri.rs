@@ -2963,7 +2963,10 @@ async fn install_mods(
         );
     }
 
-    let mut installable_mods = map_paths_to_mods(&unique_paths);
+    // repakxtra: one path at a time, so each mod knows the path its install card row carries
+    let mut installable_mods: Vec<_> = unique_paths.iter().flat_map(|p| {
+        map_paths_to_mods(std::slice::from_ref(p)).into_iter().map(move |m| crate::install_mod::InstallableMod { source: p.clone(), ..m })
+    }).collect();
 
     // Filter out mods the user disabled in the frontend (multi-PAK selection)
     // Build a set of enabled mod_names; only keep installable_mods that match
@@ -3063,6 +3066,12 @@ async fn install_mods(
                 let m_path = PathBuf::from(&m.path);
                 m_path == installable.mod_path
             })
+        })
+        // repakxtra: a single-pak archive's row (named after the archive): the only row its archive has. Without it the
+        // name typed on the card, the folder and the switches were dropped
+        .or_else(|| {
+            let mut rows = mods.iter().filter(|m| m.enabled && PathBuf::from(&m.path) == installable.source);
+            rows.next().filter(|_| rows.next().is_none())
         });
 
         if let Some(mod_to_install) = matched {

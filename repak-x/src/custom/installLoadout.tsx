@@ -113,6 +113,17 @@ export const installedKey = (m: { customName?: string; mod_name?: string }) =>
   nameKey(`${normalizeModBaseName(m.customName || m.mod_name || 'Unnamed_Mod')}.pak`)
 
 type Installed = { path?: string; customName?: string; mod_name?: string; loadouts?: string[] }
+
+/** A mod the install left out as already installed (xtra_install_same): the name it came as, the copy in the Library,
+ *  and the path that was dropped. */
+export type SameMod = { name: string; path: string; source?: string }
+const samePath = (a = '', b = '') => a.replace(/\\/g, '/').toLowerCase() === b.replace(/\\/g, '/').toLowerCase()
+/** The left-out mod an install card row stands for: by the name it came as (the one typed, or its own), or, for the
+ *  only row of its dropped path (a single-pak archive's row is named after the archive, the mod after its pak), by that
+ *  path. Pure. */
+export const sameRow = (same: SameMod[], rows: Installed[], row: Installed) =>
+  same.find(s => s.name === (row.customName || row.mod_name || ''))
+  ?? (rows.filter(r => samePath(r.path, row.path)).length === 1 ? same.find(s => samePath(s.source, row.path)) : undefined)
 type Landed = { keys: string[]; loadouts?: string[] }
 
 /** One spelling per name for matching: the backend keeps a name as typed ("mesh+matSwap", spaces) where
@@ -149,11 +160,12 @@ export const joinsByLoadout = (installed: Landed[], onDisk: Set<string>) => {
 export const startingLoadouts = () => { const id = openLoadoutId(); return id && readLoadouts().some(l => l.id === id) ? [id] : [] }
 
 /** After a successful install: add the mods now on disk to the loadouts picked for them, make the new loadout, then
- *  queue its previews. */
-export async function finishInstallLoadout(installed: Installed[], alert: ReturnType<typeof useAlert>) {
+ *  queue its previews. `kept`: the mods the install left out as already installed, by their copy in the Library, which
+ *  join the same loadouts. */
+export async function finishInstallLoadout(installed: Installed[], alert: ReturnType<typeof useAlert>, kept: { path: string; loadouts?: string[] }[] = []) {
   const job = pending
   pending = null
-  const joining = installed.filter(m => m.loadouts?.length)
+  const joining = [...installed, ...kept].filter(m => m.loadouts?.length)
   if (!job && joining.length === 0) return
   const [all, paks, had] = await Promise.all([
     invoke<Mod[]>('get_pak_files').catch(() => [] as Mod[]),
@@ -163,7 +175,8 @@ export async function finishInstallLoadout(installed: Installed[], alert: Return
   before = null
   const here = new Set(all.map(m => modKey(m.path)))
   const fresh = had ? [...here].filter(k => !had.has(k)) : [] // files the install added, whatever their names
-  const landed = installed.map((m, i) => ({ keys: resolveLanded(landedKeys(m, paks[i]), here, installed.length === 1 ? fresh : []), loadouts: m.loadouts }))
+  const landed = [...installed.map((m, i) => ({ keys: resolveLanded(landedKeys(m, paks[i]), here, installed.length === 1 ? fresh : []), loadouts: m.loadouts })),
+    ...kept.map(m => ({ keys: [modKey(m.path)].filter(k => here.has(k)), loadouts: m.loadouts }))]
   const found = (l: Landed) => l.keys.length > 0
   if (joining.length) {
     const joins = joinsByLoadout(landed, here)
@@ -184,7 +197,7 @@ export async function finishInstallLoadout(installed: Installed[], alert: Return
   const onDisk = all.filter(m => wanted.has(modKey(m.path)))
   const keys = [...new Set(onDisk.map(m => modKey(m.path)))]
   if (keys.length === 0) {
-    alert.warning('Loadout not created', `None of the ${plural(installed.length, 'installed mod')} were found in the mods folder.`)
+    alert.warning('Loadout not created', `None of the ${plural(landed.length, 'installed mod')} were found in the mods folder.`)
     return
   }
   const id = crypto.randomUUID()
@@ -215,4 +228,8 @@ if (import.meta.env.DEV) {
   const three = ['A_9999999_P', 'B_9999999_P', 'C_9999999_P']
   const kept = [landedKeys({ mod_name: 'A_9999999_P' }, three), landedKeys({ mod_name: 'B_9999999_P' }, three)].flat()
   console.assert(!kept.includes('C') && resolveLanded(kept, new Set(['|A', '|B', '|C']), []).join() === '|A,|B', 'a mod left out of an archive stays out of the loadout')
+  // already installed: a renamed row by its typed name, a single-pak archive's row by its path, never a multi-pak archive's other rows
+  const same: SameMod[] = [{ name: 'Mine', path: 'm/Mine_9999999_P.pak', source: 'D:/x.pak' }, { name: 'Inner_P', path: 'm/Inner_P.pak', source: 'D:\\dl\\One.zip' }, { name: 'A', path: 'm/A.pak', source: 'D:/two.zip' }]
+  const rows = [{ path: 'D:/x.pak', mod_name: 'x', customName: 'Mine' }, { path: 'D:/dl/one.zip', mod_name: 'One' }, { path: 'D:/two.zip', mod_name: 'A' }, { path: 'D:/two.zip', mod_name: 'B' }]
+  console.assert(rows.map(r => sameRow(same, rows, r)?.path ?? '-').join() === 'm/Mine_9999999_P.pak,m/Inner_P.pak,m/A.pak,-', 'rows left out as already installed', rows.map(r => sameRow(same, rows, r)?.path))
 }

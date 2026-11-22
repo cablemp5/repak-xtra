@@ -376,8 +376,8 @@ mod tests {
 }
 
 /// The install from the Library: mods already installed (same content, any name or folder) are taken out before
-/// anything is written, and the window hears which (`xtra_install_same`: the name it came as, and the installed mod's
-/// path). `sources` lines up with the mods left, for `record_installed`.
+/// anything is written, and the window hears which (`xtra_install_same`: the name it came as, the installed mod's
+/// path, and the path that was dropped). `sources` lines up with the mods left, for `record_installed`.
 pub struct LeftOut {
     pub same: usize,
     sources: Vec<Option<Source>>,
@@ -394,7 +394,7 @@ pub fn leave_out_installed(root: &Path, mods: &mut Vec<crate::install_mod::Insta
         let c = check(root, m);
         match c.same {
             Some(p) => {
-                same.push(serde_json::json!({ "name": m.mod_name, "path": p }));
+                same.push(serde_json::json!({ "name": m.mod_name, "path": p, "source": m.source }));
                 false
             }
             None => {

@@ -92,7 +92,7 @@ import { blockedReason, showKeptOff } from './custom/safeOff' // repakxtra: mods
 import { canUpdateVfx, checkVfxModInPlace, updateVfxModInPlace } from './custom/vfx/quick' // repakxtra: Update VFX in the right-click menu
 import { PREF_TOGGLED, type PrefToggled, fewerPopups, liteOn, newDefaultsOnce, prefOn, setPref } from './custom/uiPrefs' // repakxtra
 import { reportSource } from './custom/setupReport' // repakxtra: Copy setup report reads the live list
-import { finishInstallLoadout } from './custom/installLoadout'
+import { finishInstallLoadout, sameRow, type SameMod } from './custom/installLoadout'
 import SetupButton from './custom/SetupPanel'
 import { REPAKXTRA_VERSION, latestRelease, versionTag } from './custom/version'
 import { installedReleaseNotes } from './custom/releaseNotes'
@@ -277,6 +277,7 @@ type InstallModPayload = ModRecord & {
   customName?: string
   selectedTags?: string[]
   hybrid?: boolean
+  loadouts?: string[] // repakxtra: the loadouts the install card adds it to
 }
 
 type AppSettings = {
@@ -523,7 +524,7 @@ function App() {
   setModsBlocked(undoBlocked) // repakxtra: the same guard for Setup's Ban risk and Why isn't it working? (refs keep it live)
   const lastSelectedModIndex = useRef<number | null>(null) // For Shift+click range selection
   const filteredModsRef = useRef<ModRecord[]>([]) // Keep in sync with filteredMods for selection handler
-  const sameNames = useRef<string[]>([]) // repakxtra: this install's mods left out as already installed (xtra_install_same)
+  const sameMods = useRef<SameMod[]>([]) // repakxtra: this install's mods left out as already installed (xtra_install_same)
   const loadModsSeq = useRef(0) // repakxtra: the newest loadMods call, so a slow older one cannot overwrite it
   const clashScopeModPath = useRef<string | null>(null) // null = global clashes, path = single-mod scope
   const safeRefreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -1487,7 +1488,7 @@ function App() {
       setIsModsLoading(true)
     })
 
-    // repakxtra: an install from the Library that was already installed (xtra_dupes.rs): nothing changed, Show it selects it
+    // repakxtra: an install from the Library that was already installed (xtra_dupes.rs): the copy there stays, Show it selects it
     const unlistenSame = listen('xtra_install_same', (event: any) => stableShowSame(event.payload))
     const unlistenComplete = listen('install_complete', () => {
       uiLog.success('Install', 'Installation complete')
@@ -2751,9 +2752,9 @@ function App() {
   const stableRenameMod = useStableCallback(handleRenameMod)
   // repakxtra: "Already installed" (A1): one neutral toast for the batch, Show it opens the Library on those mods
   const list = (xs: string[]) => (xs.length < 3 ? xs.join(' and ') : `${xs.slice(0, -1).join(', ')}, and ${xs[xs.length - 1]}`)
-  const stableShowSame = useStableCallback((items: { name: string; path: string }[]) => {
+  const stableShowSame = useStableCallback((items: SameMod[]) => {
     if (!items?.length) return
-    sameNames.current.push(...items.map(i => i.name))
+    sameMods.current.push(...items)
     const names = items.map(i => nameKey(i.path))
     const one = items.length === 1
     const show = async () => {
@@ -2767,7 +2768,7 @@ function App() {
       requestAnimationFrame(() => focusRow(found[0].path))
     }
     alert.info(one ? 'Already installed' : `${items.length} mods already installed`,
-      one ? `${names[0]} is in your Library. Nothing changed.` : `Nothing changed for ${list(items.length > 3 ? [...names.slice(0, 3), `${items.length - 3} more`] : names)}.`,
+      one ? `Kept your copy of ${names[0]}.` : `Kept your copies of ${list(items.length > 3 ? [...names.slice(0, 3), `${items.length - 3} more`] : names)}.`,
       { action: { label: one ? 'Show it' : 'Show them', onClick: () => void show() } })
   })
   const stableClearRenaming = useStableCallback(() => setRenamingModPath(null))
@@ -3194,8 +3195,9 @@ function App() {
     invoke('discord_set_installing').catch(console.warn)
 
     const modCount = modsWithSettings.length
-    sameNames.current = [] // repakxtra
-    const isNew = (m: InstallModPayload) => !sameNames.current.includes(m.customName || m.mod_name || '') // repakxtra: not left out as already installed
+    sameMods.current = [] // repakxtra
+    const sameOf = (m: InstallModPayload) => sameRow(sameMods.current, modsWithSettings, m) // repakxtra: left out as already installed
+    const isNew = (m: InstallModPayload) => !sameOf(m)
 
     // Start progress bar (indeterminate until backend sends progress events)
     setIsModsLoading(true)
@@ -3312,7 +3314,9 @@ function App() {
         }
 
         const fresh = modsWithSettings.filter(isNew) // repakxtra: a mod left out as already installed has no new file to save or source
-        if (fresh.length) await finishInstallLoadout(fresh, alert) // repakxtra: Save as a loadout
+        // repakxtra: Save as a loadout, the copies already installed included
+        const kept = modsWithSettings.flatMap(m => { const s = sameOf(m); return s ? [{ path: s.path, loadouts: m.loadouts }] : [] })
+        if (fresh.length || kept.length) await finishInstallLoadout(fresh, alert, kept)
         await recordSources(fresh) // repakxtra: Nexus source from the archive name
 
         // Reload in background so alert shows success immediately
