@@ -24,18 +24,18 @@ export const STEPS = ['Reading the mod', 'Opening its materials', 'Finding its e
 
 export type AssetKind = 'updated' | 'same' | 'added' | 'passed' | 'left' | 'unreadable' | 'failed'
 export type AssetResult = { name: string; path: string; kind: AssetKind; detail: string }
-/** declined: a Best effort candidate the review turned down, so the original stays as it was */
-export type VfxStatus = 'fixed' | 'nothing' | 'failed' | 'cancelled' | 'declined'
+/** mappings: it needs the game's new mappings (USMAP) before it can be rebuilt whole, so it waits, never a failure */
+export type VfxStatus = 'fixed' | 'nothing' | 'failed' | 'cancelled' | 'mappings'
 export const incompleteAssets = (r: Pick<VfxReport, 'counts' | 'assets'>) =>
   r.counts.left + r.counts.ownGame + r.counts.unreadable + r.assets.filter(a => a.kind === 'failed').length
 
-/** The mods whose Needs update flag an installed update clears: the update, partial or reviewed ones too, since nothing
+/** The mods whose Needs update flag an installed update clears: the update, partial ones too, since nothing
  *  the updater could do is left for that game build, and its original when it is off (blocked from going on first, so
  *  turning it on later still warns). An original left on keeps its flag: it can still crash the game. */
 export const repairedPaths = (r: VfxReport): string[] =>
   r.status === 'fixed' && r.placed ? [r.placed.fixed, ...(!r.placed.trashed && /\.bak_repak$/i.test(r.placed.original) ? [r.placed.original] : [])] : []
 /** Assets a candidate keeps unchecked: the mod's own copy of a material or blueprint that could not be rebuilt or read.
- *  Any of them may be the one that crashes the game, so no candidate with them goes in without a review. */
+ *  Any of them may be the one that crashes the game, so no candidate with them goes in, under either policy. */
 export const uncheckedAssets = (r: Pick<VfxReport, 'counts' | 'assets'>) => r.counts.unreadable + r.assets.filter(a => a.kind === 'failed').length
 
 /** A failure another try with the same tools and USMAP would not fix (its pill says Unsupported or ambiguous). Not a
@@ -50,13 +50,12 @@ export const unsupportedFailure = (r: Pick<VfxReport, 'status' | 'error'>) =>
 export const repeatableFailure = (r: Pick<VfxReport, 'status' | 'error'>) =>
   r.status === 'failed' && /^Stopped on an unexpected problem|layout could not be checked/i.test(r.error ?? '')
 
-export const repairOutcome = (r: VfxReport) => {
-  if (r.status !== 'fixed') return 'Unsupported or ambiguous'
-  if (incompleteAssets(r)) return 'Partially updated'
-  // only a candidate someone accepted (Use candidate or Approve all) was reviewed: with review off it is just Updated
-  if (r.reviewed && (r.counts.updated || r.warnings.length || r.counts.same || r.counts.added)) return 'Updated after review'
-  return 'Updated'
-}
+export const repairOutcome = (r: VfxReport) => (r.status === 'mappings' ? 'Waiting for mappings' : r.status !== 'fixed' ? 'Failed' : incompleteAssets(r) ? 'Partially updated' : 'Updated')
+
+/** What a Failed row offers: Retry in Best effort for a rejection only Strict makes, Try again for a problem another try
+ *  may pass, else a newer copy of the mod (its page, when one is known). */
+export const failedNext = (r: Pick<VfxReport, 'status' | 'error' | 'strictOnly'>): 'best' | 'again' | 'page' =>
+  r.strictOnly ? 'best' : unsupportedFailure(r) ? 'page' : 'again'
 
 export type Placed = { fixed: string; source: string; original: string; turnedOff: boolean; replaced: boolean; trashed?: boolean; warning?: string | null }
 export type VfxReport = {
@@ -72,8 +71,10 @@ export type VfxReport = {
   turnedOff?: boolean
   /** Decrypted in place, nothing else changed (fixVfxMod: an encrypted mod that needed nothing else) */
   decrypted?: boolean
-  /** Placed after Use candidate or Approve all (Ask me to review candidates on) */
-  reviewed?: boolean
+  /** Failed only because Strict refuses what Best effort would install (warnings, files left out): Retry in Best effort */
+  strictOnly?: boolean
+  /** Safety tried to turn it off and could not: why (it is still on) */
+  offError?: string
   assets: AssetResult[]
   warnings: string[]
   /** left: Niagara files made for an older game build, left out until a USMAP for the game is out (a partial update).
@@ -90,11 +91,9 @@ export type FixOptions = {
   usmapPath: string
   gamePaksPath: string
   /** Pack into this folder and stop there (the benchmark). Without it the fix goes beside the original. */
+  /** Strict installs only what it can prove whole. Best effort installs a candidate unless it keeps unchecked assets
+   *  (uncheckedAssets): then the run fails and the mod stays as it was */
   policy?: 'strict' | 'bestEffort'
-  review?: (report: VfxReport) => Promise<boolean>
-  /** No review (Ask me to review candidates is off): a Best effort candidate goes in unless it keeps unchecked assets
-   *  (uncheckedAssets), and then the run fails and the mod stays as it was */
-  autoAccept?: boolean
   outputDir?: string
   turnOffOriginal?: boolean
   /** The update takes the mod's name and the original becomes <name>_BROKEN (the default). Off: the update is <name>_UPDATED. */
@@ -226,7 +225,7 @@ async function rebuild(o: FixOptions): Promise<VfxReport> {
   let runId: string | undefined // its work folder, removed when the run ends (placed or dropped by then)
   let niagaraEarly: Promise<NiagaraRun> | undefined // the Niagara rebuild started before step 7
   const strict = o.policy !== 'bestEffort'
-  const changePolicy = 'Review the asset report, or choose Best effort in Advanced > Repair policy.'
+  const changePolicy = 'Retry in Best effort installs what could be rebuilt.'
 
   try {
     // ---- 1: extract and sort ----
@@ -262,7 +261,7 @@ async function rebuild(o: FixOptions): Promise<VfxReport> {
     // the USMAP may be older than the game: fine unless the patch rewrote files this update decodes
     const wait = await invoke<UsmapWait | null>('xtra_vfx_usmap_wait', { modPath: from, gamePaks: o.gamePaksPath, usmapPath: o.usmapPath })
     // not a policy refusal: the flagged mod cannot be made safe yet, so it still follows Safety and can turn off
-    if (wait?.changed) { report.error = `Not updated yet. ${usmapWaitText(wait)}`; return report }
+    if (wait?.changed) { report.status = 'mappings'; report.error = `Not updated yet. ${usmapWaitText(wait)}`; return report }
     // the game as it is now: an update that lands mid-run makes this one stale, so placing checks it again
     const buildAt = await invoke<{ updated: number }>('xtra_game_build').then(b => b.updated)
     runId = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
@@ -438,11 +437,13 @@ async function rebuild(o: FixOptions): Promise<VfxReport> {
         return
       }
       if (strict && (missing || report.warnings.length)) {
-        report.error = `Not updated: Strict repair found ${plural(missing, 'incomplete asset')} and ${plural(report.warnings.length, 'warning')}. The mod was not changed. ${changePolicy}`
+        report.strictOnly = !uncheckedAssets(report)
+        report.error = `Not updated: Strict repair found ${[missing && plural(missing, 'incomplete asset'), report.warnings.length && plural(report.warnings.length, 'warning')].filter(Boolean).join(' and ')}. The mod was not changed. ${changePolicy}`
         log(report.error, 'warning')
         return
       }
       if (wait && missing) {
+        report.status = 'mappings'
         report.error = `Not updated yet. With the saved USMAP (game build ${wait.usmap}) ${plural(missing, 'file')} of it could not be rebuilt, so the update would not look the same in the game. It can be updated once the USMAP for game build ${wait.game} is out.`
         log(report.error, 'warning')
         return
@@ -483,20 +484,13 @@ async function rebuild(o: FixOptions): Promise<VfxReport> {
         const failed = await invoke('xtra_encrypt_staged', { utoc }).then(() => null, e => String(e))
         if (failed) { report.error = `Not updated: the update could not be encrypted like the mod (${failed}). The mod was not changed.`; log(report.error, 'warning'); return }
       }
-      if (o.policy === 'bestEffort' && !o.outputDir) {
-        const unchecked = uncheckedAssets(report)
-        if (o.autoAccept && unchecked) {
-          report.error = `Not updated: ${plural(unchecked, 'material or blueprint', 'materials and blueprints')} could not be rebuilt or read, and the game can crash on ${unchecked === 1 ? 'it' : 'them'}. The mod was not changed. Turn on Ask me to review candidates in Advanced to look at it yourself.`
-          log(report.error, 'warning')
-          return // failed: the mod stays as it was
-        }
-        const accepted = o.autoAccept || (o.review ? await o.review({ ...report, status: 'fixed' }) : false)
-        report.reviewed = !o.autoAccept && accepted
-        check()
-        if (!accepted) { report.status = 'declined'; report.error = 'Original kept. The candidate was not installed.'; return }
-        const reviewedBuild = await invoke<{ updated: number }>('xtra_game_build').then(b => b.updated)
-        if (buildAt && reviewedBuild !== buildAt) { report.error = 'Not updated: the game updated during the review. Update it again.'; log(report.error, 'warning'); return }
+      const unchecked = uncheckedAssets(report)
+      if (o.policy === 'bestEffort' && !o.outputDir && unchecked) {
+        report.error = `Not updated: ${plural(unchecked, 'material or blueprint', 'materials and blueprints')} could not be rebuilt or read, and the game can crash on ${unchecked === 1 ? 'it' : 'them'}. The mod was not changed.`
+        log(report.error, 'warning')
+        return // failed: the mod stays as it was
       }
+      check()
       if (o.outputDir) report.output = utoc
       else {
         // turned off earlier because it could crash: the safe update goes in on, as the mod was before
@@ -671,6 +665,7 @@ async function rebuild(o: FixOptions): Promise<VfxReport> {
     // an incomplete rebuild is not placed: one failed or unread asset may be the one that broke, so the mod stays as it was
     const failedN = report.assets.filter(a => a.kind === 'failed').length
     if ((failedN || report.counts.unreadable || report.warnings.length) && strict) {
+      report.strictOnly = !failedN && !report.counts.unreadable
       const why = [failedN && plural(failedN, 'material or blueprint', 'materials and blueprints') + ' could not be rebuilt', report.counts.unreadable && plural(report.counts.unreadable, 'asset') + ' could not be read', report.warnings.length && plural(report.warnings.length, 'warning') + ` require${report.warnings.length === 1 ? 's' : ''} review`].filter(Boolean).join(', and ')
       report.error = `Not updated: ${why}. The mod was not changed. ${report.warnings.length ? changePolicy : 'Check the USMAP in Advanced, then try again.'}`
       log(report.error, 'warning')
@@ -737,12 +732,20 @@ async function rebuild(o: FixOptions): Promise<VfxReport> {
         report.warnings.push(message); log(message, 'warning')
       })
     }
+    // a finished attempt that left the mod as it was, kept until the mod, the game or the mappings change (xtra_broken.rs
+    // Outcome): Failed stops Needs update, Waiting reads Waiting for mappings. Any other result forgets the last one
+    if (!o.outputDir && report.status !== 'cancelled') {
+      const failed = report.status === 'failed'
+      await invoke('xtra_vfx_outcome', failed || report.status === 'mappings'
+        ? { modPath: o.modPath, status: failed ? 'failed' : 'waiting', error: report.error ?? null, next: failed ? failedNext(report) : null }
+        : { modPath: o.modPath, status: null, error: null, next: null }).catch(e => log(`Could not save how the update ended: ${e}`, 'warning'))
+    }
     // A failed or cancelled run is the updater falling short, not news about the mod: it stays exactly as it was, flag and
     // all. Only a run that proved the original crashes the game (every file matches the game, but in the old layout) takes
     // it out, as Safety says: off, never deleted, and its Needs update flag stays so the Library still says why
     if (report.status === 'nothing' && report.counts.relaid > 0 && o.safeOff !== false && !o.outputDir) {
       const out = await retireUnsafe(o.modPath, report.error ?? 'It was made for an older game build and can crash it.')
-        .catch(e => { log(`Could not turn it off: ${e}`, 'warning'); return false as const })
+        .catch(e => { report.offError = String(e); log(`Could not turn it off: ${e}`, 'warning'); return false as const })
       report.turnedOff = Boolean(out)
       if (out) log(`Turned ${stem(o.modPath)} off, so it cannot crash the game. Turn it back on in the Library to use it anyway.`, 'warning')
     }
@@ -760,9 +763,10 @@ if (import.meta.env.DEV) {
   console.assert(uncheckedAssets({ ...sample, counts: { ...sample.counts, left: 2, ownGame: 1 } }) === 0 && uncheckedAssets({ ...sample, counts: { ...sample.counts, unreadable: 1 }, assets: [{ name: 'a', path: 'a', kind: 'failed', detail: '' }] }) === 2, 'left-out Niagara files are safe, unread and unfixed assets are not')
   console.assert(repairOutcome(sample) === 'Updated', 'preserved structural repair')
   console.assert(repairOutcome({ ...sample, counts: { ...sample.counts, ownGame: 1 } }) === 'Partially updated', 'permanent omission is partial')
-  console.assert(repairOutcome({ ...sample, warnings: ['lost parameter'], reviewed: true }) === 'Updated after review', 'an accepted candidate says it was reviewed')
-  console.assert(repairOutcome({ ...sample, warnings: ['lost parameter'] }) === 'Updated', 'with review off it is just Updated')
-  console.assert(repairOutcome({ ...sample, status: 'failed' }) === 'Unsupported or ambiguous', 'failed is never repaired')
+  console.assert(repairOutcome({ ...sample, warnings: ['lost parameter'] }) === 'Updated', 'warnings alone are still Updated')
+  console.assert(repairOutcome({ ...sample, status: 'failed' }) === 'Failed' && repairOutcome({ ...sample, status: 'mappings' }) === 'Waiting for mappings', 'failed is never repaired, waiting never failed')
+  console.assert(failedNext({ status: 'failed', strictOnly: true, error: 'Not updated: Strict' }) === 'best' && failedNext({ status: 'failed', error: 'Stopped on an unexpected problem: x.' }) === 'again'
+    && failedNext({ status: 'failed', error: 'Not updated: none of its materials or blueprints could be rebuilt.' }) === 'page', 'what a Failed row offers')
   console.assert(unsupportedFailure({ status: 'failed', error: 'Not updated: none of its materials or blueprints could be rebuilt. Check the USMAP in Advanced, then try again.' })
     && !unsupportedFailure({ status: 'failed', error: 'Stopped on an unexpected problem: x.' }) && !unsupportedFailure({ status: 'failed', error: 'Not updated yet. Waits.' })
     && !unsupportedFailure({ status: 'failed', error: 'Not updated: x. Check the internet connection, then try again.' }) && !unsupportedFailure({ status: 'cancelled' }) && repeatableFailure({ status: 'failed', error: 'Stopped on an unexpected problem: x.' })

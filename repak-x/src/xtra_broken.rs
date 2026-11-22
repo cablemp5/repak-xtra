@@ -885,6 +885,88 @@ pub fn xtra_vfx_no_update(mod_path: String, anims_told: Option<bool>, state: Sta
     Ok(())
 }
 
+/// The Mod Updater's last finished attempt that left a mod as it was: "failed", or "waiting" when it found the mod needs
+/// the game's new mappings (USMAP) first. It holds while the mod's file, the game build and the saved USMAP stay as they
+/// were, so through restarts the Library's Needs update stays cleared (failed) or reads Waiting for mappings (waiting),
+/// and a new game build, a new copy of the mod or new mappings let the checks judge it again.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Default)]
+pub struct Outcome {
+    pub status: String,
+    #[serde(default)]
+    pub error: String,
+    /// what its Failed row offers: "best" (Retry in Best effort), "again" (Try again) or "page" (a newer copy)
+    #[serde(default)]
+    pub next: String,
+    #[serde(default)]
+    size: u64,
+    #[serde(default)]
+    modified: u64,
+    #[serde(default)]
+    game: u64,
+    #[serde(default)]
+    usmap: String,
+}
+
+fn outcome_store() -> PathBuf {
+    dirs::config_dir().unwrap_or_else(|| PathBuf::from(".")).join("Repak-X").join("repakxtra-vfx-outcomes.json")
+}
+
+fn load_outcomes(store: &Path) -> HashMap<String, Outcome> {
+    std::fs::read_to_string(store).ok().and_then(|t| serde_json::from_str(&t).ok()).unwrap_or_default()
+}
+
+/// The saved USMAP's file name (never its folder): an outcome made with other mappings no longer holds.
+fn usmap_name() -> String {
+    crate::vfx_updater::commands::saved_usmap_path().and_then(|u| Path::new(&u).file_name().map(|n| n.to_string_lossy().into_owned())).unwrap_or_default()
+}
+
+/// Whether `o` still describes the mod: the same file, game build and mappings it was recorded with.
+fn outcome_holds(o: &Outcome, stamp: Option<(u64, u64)>, game: u64, usmap: &str) -> bool {
+    stamp == Some((o.size, o.modified)) && o.game == game && o.usmap == usmap
+}
+
+static OUTCOMES_WRITING: Mutex<()> = Mutex::new(());
+
+/// Records (or with no `status`, forgets) the Mod Updater's outcome for `mod_path` (pipeline.ts, when a run ends).
+#[tauri::command(async)]
+pub fn xtra_vfx_outcome(mod_path: String, status: Option<String>, error: Option<String>, next: Option<String>, state: State<'_, Arc<Mutex<AppState>>>) -> Result<(), String> {
+    let mods_dir = state.lock().unwrap().game_path.clone();
+    let utoc = Path::new(&mod_path).with_extension("utoc");
+    let _one = OUTCOMES_WRITING.lock().unwrap_or_else(|e| e.into_inner());
+    let store = outcome_store();
+    let mut all = load_outcomes(&store);
+    match status {
+        None => { if all.remove(&checked_key(&utoc)).is_none() { return Ok(()); } }
+        Some(status) => {
+            let (size, modified) = file_stamp(&utoc).ok_or_else(|| format!("{} is not there", utoc.display()))?;
+            all.insert(checked_key(&utoc), Outcome { status, error: error.unwrap_or_default(), next: next.unwrap_or_default(), size, modified, game: game_updated(&mods_dir), usmap: usmap_name() });
+        }
+    }
+    // bounded: outcomes that no longer hold go first (a mod updated, removed or made for an older game)
+    if all.len() > 1000 {
+        let (game, usmap) = (game_updated(&mods_dir), usmap_name());
+        all.retain(|k, o| outcome_holds(o, file_stamp(Path::new(k)), game, &usmap));
+    }
+    let tmp = store.with_extension("json.tmp");
+    std::fs::write(&tmp, serde_json::to_string(&all).map_err(|e| e.to_string())?).map_err(|e| e.to_string())?;
+    std::fs::rename(&tmp, &store).map_err(|e| e.to_string())
+}
+
+/// The outcomes of `mod_paths` that still hold, by the path asked for.
+#[tauri::command(async)]
+pub fn xtra_vfx_outcomes(mod_paths: Vec<String>, state: State<'_, Arc<Mutex<AppState>>>) -> HashMap<String, Outcome> {
+    let mods_dir = state.lock().unwrap().game_path.clone();
+    let (all, game, usmap) = (load_outcomes(&outcome_store()), game_updated(&mods_dir), usmap_name());
+    mod_paths
+        .into_iter()
+        .filter_map(|p| {
+            let utoc = Path::new(&p).with_extension("utoc");
+            let o = all.get(&checked_key(&utoc)).filter(|o| outcome_holds(o, file_stamp(&utoc), game, &usmap))?.clone();
+            Some((p, o))
+        })
+        .collect()
+}
+
 /// Drops every record of `utocs` (checked_key, any decoder) from the JSON store at `store`. How many went.
 fn forget_in(store: &Path, utocs: &[String]) -> usize {
     let Some(mut all) = std::fs::read_to_string(store).ok().and_then(|t| serde_json::from_str::<serde_json::Map<String, serde_json::Value>>(&t).ok()) else { return 0 };
@@ -1096,6 +1178,22 @@ pub async fn xtra_broken_mods(mod_paths: Vec<String>, state: State<'_, Arc<Mutex
                 };
             }
         }
+        // the Mod Updater's last attempt, while it holds (Outcome): a failed one no longer needs an update, a waiting one
+        // waits for the mappings whatever the per-file check above found. Broken, May crash and Safety unknown stay
+        let (outcomes, usmap_now) = (load_outcomes(&outcome_store()), usmap_name());
+        verdicts.retain_mut(|v| {
+            if v.kind != "vfx" { return true; }
+            let utoc = Path::new(&v.path).with_extension("utoc");
+            match outcomes.get(&checked_key(&utoc)).filter(|o| outcome_holds(o, file_stamp(&utoc), game_updated, &usmap_now)) {
+                Some(o) if o.status == "failed" => false,
+                Some(o) if o.status == "waiting" && v.usmap_wait == 0 => {
+                    v.usmap_wait = 1;
+                    v.reason += " An update found it needs the game's new mappings (USMAP) before it can be rebuilt whole.";
+                    true
+                }
+                _ => true,
+            }
+        });
         // textures the game cannot read, from the preview kit's texture check (xtra_viewer.rs): Broken, over a weaker verdict
         for (path, reason) in crate::xtra_viewer::texcheck_reasons(&mod_paths) {
             match verdicts.iter_mut().find(|v| v.path == path) {
@@ -1113,6 +1211,16 @@ pub async fn xtra_broken_mods(mod_paths: Vec<String>, state: State<'_, Arc<Mutex
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn an_outcome_holds_until_the_mod_the_game_or_the_mappings_change() {
+        let o = Outcome { status: "failed".into(), size: 10, modified: 20, game: 100, usmap: "a.usmap".into(), ..Default::default() };
+        assert!(outcome_holds(&o, Some((10, 20)), 100, "a.usmap"));
+        assert!(!outcome_holds(&o, Some((11, 20)), 100, "a.usmap"), "a new copy of the mod");
+        assert!(!outcome_holds(&o, Some((10, 20)), 200, "a.usmap"), "a new game build");
+        assert!(!outcome_holds(&o, Some((10, 20)), 100, "b.usmap"), "new mappings");
+        assert!(!outcome_holds(&o, None, 100, "a.usmap"), "the mod is gone");
+    }
 
     #[test]
     fn scan_forget_drops_only_that_mods_records() {

@@ -15,7 +15,7 @@ ${verdict.reason}` : verdict.reason
   if (verdict.kind !== 'vfx') return <span className={cls} title={why}>{verdictLabel(verdict.kind)}</span>
   // waits for the USMAP of this game build: still opens the VFX Updater, which says why. A partial update reads Partly
   // updated (the new USMAP can finish it), any other one Needs update like every mod
-  const label = verdict.usmapWait ? 'Waiting' : made?.partial ? 'Partly updated' : verdictLabel(verdict.kind)
+  const label = verdict.usmapWait ? 'Waiting for mappings' : made?.partial ? 'Partly updated' : verdictLabel(verdict.kind)
   return (
     <button type="button" className={`${cls} is-action${verdict.usmapWait ? ' is-waiting' : ''}`} title={`${verdict.reason} Click to open it in the Mod Updater.`}
       onClick={e => { e.stopPropagation(); void fixInVfxWindow([path], false) }}>

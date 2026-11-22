@@ -22,9 +22,9 @@ export const verdictLabel = (kind: Verdict['kind']) => (kind === 'broken' ? 'Bro
  *  shortcut: by file name, a mod named exactly like Projectiles.pak is skipped too (Add .utoc still takes it). */
 export const skipsUpdater = (path: string) =>
   /[\\/]\.repakxtra-builtin[\\/]/i.test(path) || /^(!project[a-z]+(-repacked)?(_\d+)?(_p)?|project[a-z]+(-repacked)?)$/i.test(path.split(/[\\/]/).pop()!.replace(/\.[^.]+$/, ''))
-/** A mod the Mod Updater could not update (unsupportedFailure in vfx/pipeline.ts), renamed <name>_UNSUPPORTED and
- *  turned off: the Mod Updater lists it under Failed, and nothing counts it as needing an update (Update can still
- *  retry it from there). Pure. */
+/** A mod an older Mod Updater could not update and renamed <name>_UNSUPPORTED (today a failure keeps the mod as it was,
+ *  and xtra_broken.rs keeps the outcome): the Mod Updater lists it under Failed without renaming it, and nothing counts
+ *  it as needing an update (Update can still retry it from there). Pure. */
 const stemOf = (path: string) => path.split(/[\\/]/).pop()!.replace(/\.(pak|bak_repak|utoc|ucas)$/i, '')
 export const isUnsupported = (path: string) => /_unsupported(?=_|$)/i.test(stemOf(path))
 /** The name rename_mod takes (no priority suffix) for this mod: marked _UNSUPPORTED, or with that mark taken off. Pure. */
@@ -203,7 +203,9 @@ export function useBrokenWatch(mods: { path: string; modified_date?: number; fil
         if (live) fresh = new Set() // a run the library outdated leaves them for the next one. `forced` stays until a run finishes with them
         return live && forget.length ? invoke('xtra_scan_forget', { modPaths: forget }).catch(e => console.warn('[brokenMods] could not clear earlier checks', e)) : undefined
       })
-      .then(() => (live ? invoke('vfx_check_usmap_update', { force: false }).catch(() => null) : null))
+      // new mappings change which mods wait for them (Waiting for mappings): the badges are read again
+      .then(() => (live ? invoke<{ updated?: boolean }>('vfx_check_usmap_update', { force: false }).catch(() => null) : null))
+      .then(u => (live && u?.updated ? check() : undefined))
       // every mod for meshes: an update carries the original's meshes as they were, and nothing in the Mod Updater checks them
       // the passes planned above, each through every scan
       .then(() => {
