@@ -25,8 +25,10 @@ export const scrub = (text: string) => text
   .replace(/\b(bearer)\s+[\w.~+/=-]{8,}/gi, '$1 <hidden>')
   .replace(/\beyJ[\w-]{6,}\.[\w-]{6,}\.[\w-]+/g, '<hidden>') // a JWT
   .replace(/\b(authorization)(["']?\s*[=:]\s*)(?:(?:basic|bearer)\s+)?[^\s"'&,;]+/gi, '$1$2<hidden>')
-  // a keyed value: accessToken=, account_id:, username="First Last" (a quoted value goes whole)
-  .replace(/\b(\w*?(?:token|password|passwd|secret|api[-_]?key|account[ _]?id|client[ _]?id|user[ _]?id|user[ _]?name|authorization))(["']?\s*[=:]\s*)("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|[^\s"'&,;]+)/gi, '$1$2<hidden>')
+  // a user name written plainly runs to the end of its field: "Username: First Last"
+  .replace(/\b(user[ _]?name)(\s*[=:]\s*)(?!\\?["'])([^\r\n,;|&"'<>{}]+)/gi, '$1$2<hidden>')
+  // a keyed value: accessToken=, account_id:, username="First Last" (a quoted value goes whole, escaped JSON too)
+  .replace(/\b(\w*?(?:token|password|passwd|secret|api[-_]?key|account[ _]?id|client[ _]?id|user[ _]?id|user[ _]?name|authorization))(\\?["']?\s*[=:]\s*)(\\"(?:[^\\]|\\[^"])*\\"|"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|[^\s"'&,;\\]+)/gi, '$1$2<hidden>')
 
 if (import.meta.env.DEV) {
   console.assert(scrub('C:\\Users\\someone\\Desktop\\x and D:/Games/MarvelRivals/~mods/a.pak') === '%USERPROFILE%\\…\\x and ~mods/a.pak', 'no user name, no drive paths', scrub('C:\\Users\\someone\\Desktop\\x and D:/Games/MarvelRivals/~mods/a.pak'))
@@ -46,6 +48,8 @@ if (import.meta.env.DEV) {
   console.assert(scrub(more) === 'Authorization: <hidden> x-api-key=<hidden> jwt <hidden> github_token=<hidden>', 'headers, dashed keys, JWTs, prefixed tokens', scrub(more))
   const spaced = 'Account ID: 123456789 {"username":"Jane \\"JJ\\" Doe","x":1}'
   console.assert(scrub(spaced) === 'Account ID: <hidden> {"username":<hidden>,"x":1}', 'spaced keys, a quoted value with escaped quotes goes whole', scrub(spaced))
+  const escaped = '{\\"access_token\\":\\"abc123\\",\\"account_id\\":\\"42\\"} Username: Jane Doe, next'
+  console.assert(scrub(escaped) === '{\\"access_token\\":<hidden>,\\"account_id\\":<hidden>} Username: <hidden>, next', 'escaped JSON values, a plain user name to the end of its field', scrub(escaped))
   console.assert(scrub(keyed) === 'accountId=<hidden> username=<hidden> accessToken=<hidden> author: Someone', 'keyed ids, quoted names, camelCase tokens', scrub(keyed))
   console.assert(scrub(ids) ==='mail <email>, steam <account id>, Bearer <hidden>, token=<hidden>&x=1', 'ids and tokens', scrub(ids))
 }

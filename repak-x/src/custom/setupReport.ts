@@ -339,7 +339,7 @@ export function nextSteps(f: Facts): string[] {
     unreadable: 'A signature bypass file is there but could not be read. Open Setup to check it again.',
   }
   if (f.bypass && bypass[f.bypass]) out.push(bypass[f.bypass])
-  if (f.galacta?.installed && f.galacta.up_to_date === false) out.push(`${LOADER_NAME} is older than ${f.galacta.latest}. Open Setup and update it.`)
+  if (f.galacta?.installed && f.galacta.up_to_date === false) out.push(`${LOADER_NAME} is older than ${f.galacta.latest}. Open Setup to update it.`)
   if (f.notLoaded) out.push(`${plural(f.notLoaded, 'mod')} that ${f.notLoaded === 1 ? 'was' : 'were'} on did not load in the game. Check ${f.notLoaded === 1 ? 'it is' : 'they are'} made for this game build.`)
   if (f.suspects.length) out.push(`The newest crash names ${f.crashAsset ?? 'a file'}, and ${holdersAll(f.suspects)} ${f.suspects.length === 1 ? 'replaces' : 'replace'} it. Turn ${f.suspects.length === 1 ? 'it' : 'them'} off and test again.`)
   if (f.broken) out.push(`${plural(f.broken, 'mod')} that ${f.broken === 1 ? 'is' : 'are'} on ${f.broken === 1 ? 'is' : 'are'} broken for this game build. Turn ${f.broken === 1 ? 'it' : 'them'} off or find an update.`)

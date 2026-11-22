@@ -2617,6 +2617,7 @@ function App() {
     } catch (error) {
       setStatus(`Error: ${error}`)
       setSelectedMods(new Set()) // repakxtra: the ones that moved have new paths
+      void loadFolders()
       // repakxtra: one notice: a refusal with no toast of its own is said here, and so is how far a batch got (the
       // backend's toast only names the one that failed)
       if (silentRefusal(error)) alert.error(moved ? `Moved ${moved} of ${plural(selectedFiles.size, 'mod')}` : 'Mods not moved', `${opText(error)} The rest stayed where they were.`)
@@ -3284,7 +3285,7 @@ function App() {
     })
     const installed = (async () => {
         // Create a promise that resolves when install_complete event fires
-        const installCompletePromise = new Promise<{ name: string; source: string }[]>((resolve, reject) => { // repakxtra: what failed in a partial install
+        const installCompletePromise = new Promise<{ name: string; source: string; whole?: boolean }[]>((resolve, reject) => { // repakxtra: what failed in a partial install
           let unlistenComplete: UnlistenFn | null = null
           let unlistenError: UnlistenFn | null = null
           let unlistenRefused: UnlistenFn | null = null // repakxtra
@@ -3341,14 +3342,16 @@ function App() {
         const failedList = await installCompletePromise
         const pathKey = (p: string) => p.replace(/\\/g, '/').toLowerCase()
         // the name without the priority suffix, a Keep both number, or .pak, so a renamed output still finds its row
-        const baseName = (n: string) => n.toLowerCase().replace(/\.pak$/, '').replace(/ \(\d+\)$/, '').replace(/_\d+_p$/, '').trim()
+        // (Keep both writes "Name (2)_9999999_P", so the suffix goes before the number)
+        const baseName = (n: string) => n.toLowerCase().replace(/\.pak$/, '').replace(/_\d+_p$/, '').replace(/_p$/, '').replace(/ \(\d+\)$/, '').replace(/^!/, '').trim()
         const rowName = (m: InstallModPayload) => baseName(m.customName || m.mod_name || nameKey(m.path))
-        const failedRow = (f: { name: string; source: string }) => {
+        const failedRows = (f: { name: string; source: string; whole?: boolean }) => {
           const rows = modsWithSettings.filter(m => isNew(m) && pathKey(m.path) === pathKey(f.source))
-          return rows.length <= 1 ? rows[0] : rows.find(m => rowName(m) === baseName(f.name)) // one archive, several paks
+          // a path that gave no mod fails every row it had, one archive with several paks is told apart by name
+          return f.whole || rows.length <= 1 ? rows : rows.filter(m => rowName(m) === baseName(f.name))
         }
-        const failed = [...new Set(failedList.map(failedRow).filter((m): m is InstallModPayload => Boolean(m)))]
-        const unmatched = failedList.filter(f => !failedRow(f)).map(f => f.name)
+        const failed = [...new Set(failedList.flatMap(failedRows))]
+        const unmatched = failedList.filter(f => !failedRows(f).length).map(f => f.name)
         const failedNames = [...failed.map(m => m.customName || m.mod_name || nameKey(m.path)), ...unmatched]
         return { count: Math.max(0, modsWithSettings.filter(isNew).length - failed.length), failed, failedNames } // repakxtra: without the ones already installed
       })().finally(() => { ended = true; unlistenToastProgress.then(u => u()) })

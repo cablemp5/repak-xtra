@@ -7,6 +7,7 @@ import { Check, ChevronRight, CircleAlert, ClipboardCopy, Download, Package, Tim
 import type { useAlert } from '../components/AlertHandler'
 import { logStatusText, onKey } from './setupReport'
 import { copyText } from './CopySetupReport'
+import { scrub } from './scrub'
 import { useShownBusy } from './shownBusy'
 import { nameKey } from './loadoutStore'
 import { ModName } from './modName'
@@ -51,7 +52,8 @@ export default function CrashLog({ id, time, alert, modPaths }: { id: string; ti
   }, [id])
   if (!s) return null
 
-  const logText = () => invoke<string>('xtra_crash_log_text', { id })
+  // repakxtra: the backend takes out names and ids, scrub also takes out folder paths, as in Copy setup report
+  const logText = () => invoke<string>('xtra_crash_log_text', { id }).then(scrub)
   const copy = async () => {
     if (busy) return
     setBusy('copy')

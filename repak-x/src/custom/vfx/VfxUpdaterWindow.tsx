@@ -610,7 +610,7 @@ export function VfxUpdaterPanel() {
     const current = await invoke<Record<string, unknown>>('vfx_get_settings').catch(() => ({}))
     // keeps the auto-update bookkeeping. repakxtra: a failed save leaves the old USMAP in place and says so
     try { await invoke('vfx_save_settings', { settings: { ...current, usmapPath: p } }) } catch (e) {
-      addLog(`The USMAP was not saved, the old one is still used: ${e}`, 'error'); return
+      addLog(`The USMAP choice was not saved. Choose it again: ${e}`, 'error'); return
     }
     setUsmapInfo(null) // its version, date and Up to date described the downloaded file, not this one
     setUsmap(p) // after the save: the checks it starts read the saved USMAP
