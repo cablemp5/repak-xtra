@@ -2,7 +2,7 @@
 // On a slow disk that is the difference between reading every pak in the library at each start and reading none.
 use serde::{de::DeserializeOwned, Serialize};
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 
 static DIRTY: AtomicBool = AtomicBool::new(false);
@@ -18,15 +18,26 @@ fn file() -> PathBuf {
 /// (which sees the newer file) starts over instead of trusting them.
 fn stamp() -> String {
     static STAMP: std::sync::OnceLock<String> = std::sync::OnceLock::new();
-    STAMP.get_or_init(launch_stamp).clone()
+    STAMP.get_or_init(|| stamp_of(env!("REPAKXTRA_DETAILS_LOGIC"), std::fs::read(crate::character_data::character_data_path()).ok().as_deref())).clone()
 }
 
-fn launch_stamp() -> String {
-    let mtime = |p: Option<PathBuf>| {
-        p.and_then(|p| std::fs::metadata(p).ok()).and_then(|m| m.modified().ok())
-            .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok()).map_or(0, |d| d.as_secs())
+/// Pure. The character data by its bytes, not its change time: the daily check used to save the same list again, and
+/// the new change time alone made the next launch read every pak in the library.
+fn stamp_of(logic: &str, character_data: Option<&[u8]>) -> String {
+    use sha2::{Digest, Sha256};
+    format!("{logic}:{}", character_data.map_or_else(|| "none".to_string(), |b| format!("{:x}", Sha256::digest(b))))
+}
+
+/// True when the JSON list saved at `path` holds exactly these items, in any order: saving them again would change
+/// nothing but the file's change time (and, for character data, leave one more backup file a day).
+pub fn same_list<T: Serialize + DeserializeOwned>(path: &Path, items: &[T]) -> bool {
+    let sorted = |items: &[T]| {
+        let mut lines = items.iter().map(serde_json::to_string).collect::<Result<Vec<String>, _>>().ok()?;
+        lines.sort();
+        Some(lines)
     };
-    format!("{}:{}", env!("REPAKXTRA_DETAILS_LOGIC"), mtime(Some(crate::character_data::character_data_path())))
+    let saved = std::fs::read(path).ok().and_then(|b| serde_json::from_slice::<Vec<T>>(&b).ok()).and_then(|saved| sorted(&saved));
+    saved.is_some() && saved == sorted(items)
 }
 
 #[derive(Serialize, serde::Deserialize)]
@@ -81,5 +92,28 @@ mod tests {
         assert_eq!(parse::<u32>(&bytes, "1:2"), entries);
         assert!(parse::<u32>(&bytes, "1:3").is_empty(), "a new build or character data starts over");
         assert!(parse::<u32>(b"not json", "1:2").is_empty());
+    }
+
+    #[test]
+    fn the_stamp_follows_the_character_data_bytes_and_the_details_logic() {
+        let a = stamp_of("1", Some(b"[1]"));
+        assert_eq!(a, stamp_of("1", Some(b"[1]")), "the same bytes, whatever the file's change time");
+        assert_ne!(a, stamp_of("1", Some(b"[1,2]")), "new character data starts over");
+        assert_ne!(a, stamp_of("2", Some(b"[1]")), "new details logic starts over");
+        assert_ne!(a, stamp_of("1", None));
+    }
+
+    #[test]
+    fn a_list_already_on_disk_is_the_same_in_any_order() {
+        let path = std::env::temp_dir().join(format!("repakxtra-same-list-{}.json", std::process::id()));
+        std::fs::write(&path, "[\n  \"b\",\n  \"a\"\n]").unwrap();
+        assert!(same_list(&path, &["a".to_string(), "b".to_string()]));
+        assert!(!same_list(&path, &["a".to_string()]), "one fewer");
+        assert!(!same_list(&path, &["a".to_string(), "c".to_string()]), "one changed");
+        assert!(!same_list(&path, &["a".to_string(), "b".to_string(), "b".to_string()]), "one twice");
+        std::fs::write(&path, "not json").unwrap();
+        assert!(!same_list(&path, &["a".to_string()]));
+        std::fs::remove_file(&path).unwrap();
+        assert!(!same_list(&path, &["a".to_string()]), "no file yet");
     }
 }
