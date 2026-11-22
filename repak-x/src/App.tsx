@@ -1935,11 +1935,13 @@ function App() {
 
       // After loading mods, refresh details for each (with progress tracking)
       await preloadModDetails(modList)
-      if (mine !== loadModsSeq.current) return modList as ModRecord[] // repakxtra: a newer load took over: its count and status stand
 
       if (enableDrp) {
-        invoke('discord_set_managing_mods', { modCount: modList.length }).catch(console.warn);
+        // repakxtra: the count of the list on screen: a newer load may have shown one since, from a handler that never
+        // reports to Discord (the folder watcher's)
+        invoke('discord_set_managing_mods', { modCount: (shownList.current ?? modList).length }).catch(console.warn);
       }
+      if (mine !== loadModsSeq.current) return modList as ModRecord[] // repakxtra: a newer load took over: its status stands
 
       // repakxtra: the count the Library's All tab shows, which leaves this edition's loader out (it lives in Setup)
       // shortcut: matched by its pak name, not its files (those land in modDetails later), so a renamed loader still counts
