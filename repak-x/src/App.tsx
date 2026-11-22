@@ -3350,7 +3350,9 @@ function App() {
         // without the done list (an older backend), the failed results by file and name
         const failedByList = (m: InstallModPayload) => failedList.some(f => pathKey(f.source) === pathKey(m.path) && (f.whole || sameSource(m).length <= 1 || (f.requested ?? f.name) === asked(m)))
         const failed = modsWithSettings.filter(m => isNew(m) && (doneList ? !installedRow(m) : failedByList(m)))
-        const failedNames = failed.length ? failed.map(m => asked(m) || nameKey(m.path)) : failedList.map(f => f.requested || f.name)
+        // the rows that failed, then any failed result that has no row of its own (an archive pak with no settings row)
+        const failedNames = [...failed.map(m => asked(m) || nameKey(m.path)),
+          ...failedList.filter(f => !failed.some(m => pathKey(m.path) === pathKey(f.source))).map(f => f.requested || f.name)]
         return { count: Math.max(0, modsWithSettings.filter(isNew).length - failed.length), failed, failedNames } // repakxtra: without the ones already installed
       })().finally(() => { ended = true; unlistenToastProgress.then(u => u()) })
     installToast = alert.promise(installed, {

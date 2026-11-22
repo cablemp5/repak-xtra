@@ -3040,7 +3040,7 @@ async fn install_mods(
         let _ = window.emit("install_log", "  - Directory contains no valid content");
         let error_msg = "No valid mods found to install. Check the install logs for details.";
         toast_events::emit_installation_failed(&window, error_msg);
-        return Err(error_msg.to_string());
+        return Err(format!("Could not install mod: {error_msg}")); // repakxtra: the toast's words, so the two fold into one notice
     }
 
     // Apply user settings to each installable mod
