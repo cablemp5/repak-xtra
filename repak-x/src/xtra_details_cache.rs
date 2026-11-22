@@ -53,10 +53,11 @@ fn sorted_lines<T: Serialize>(items: &[T]) -> Option<Vec<String>> {
     Some(lines)
 }
 
-/// Pure: the same for the same items in any order ("unreadable" for a list that cannot be written as JSON).
+/// Pure: a list by its items in their order ("unreadable" for one that cannot be written as JSON). The order counts:
+/// of two rows with one skin id, the later one is the skin a lookup finds.
 fn list_hash<T: Serialize>(items: &[T]) -> String {
     use sha2::{Digest, Sha256};
-    sorted_lines(items).map_or_else(|| "unreadable".to_string(), |lines| format!("{:x}", Sha256::digest(lines.join("\n"))))
+    serde_json::to_vec(items).map_or_else(|_| "unreadable".to_string(), |json| format!("{:x}", Sha256::digest(json)))
 }
 
 /// True when the JSON list saved at `path` holds exactly these items, in any order: saving them again would change
@@ -123,8 +124,9 @@ mod tests {
     #[test]
     fn the_stamp_follows_the_character_data_and_the_details_logic() {
         let (one, other) = (list_hash(&["a", "b"]), list_hash(&["a", "c"]));
-        assert_eq!(one, list_hash(&["b", "a"]), "the same list in any order, whatever the file's change time or layout");
+        assert_eq!(one, list_hash(&["a", "b"]), "the same list, whatever the file's change time or layout");
         assert_ne!(one, other);
+        assert_ne!(one, list_hash(&["b", "a"]), "another order can change which of two rows a lookup finds");
         let a = stamp_of("1", Some(&one));
         assert_ne!(a, stamp_of("1", Some(&other)), "other character data starts over");
         assert_ne!(a, stamp_of("2", Some(&one)), "new details logic starts over");

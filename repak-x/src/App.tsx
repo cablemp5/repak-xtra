@@ -2042,6 +2042,7 @@ function App() {
           const i = missing[next++]
           results[i] = await invoke('get_mod_details', { modPath: pathsToFetch[i] })
             .then(value => ({ status: 'fulfilled' as const, value }), reason => ({ status: 'rejected' as const, reason }))
+          if (!newest()) return // repakxtra: the progress bar is the newer pass's now
           completedCount++
           setModLoadingProgress(Math.round((completedCount / totalCount) * 100))
         }
