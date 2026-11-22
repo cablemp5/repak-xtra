@@ -34,7 +34,6 @@ export type ReportMod = { name: string; type: string; hero: string; date: string
 export type ReportInput = {
   version: string; repakx?: string; launcher: string; bypass: string; galacta: string; kit?: string
   made?: string // when the report was made
-  notes?: { trying?: string; instead?: string } // what the player typed (ReportNotes.tsx), both optional
   next?: string[] // What to check next: one plain step each, from the checks below
   folder?: string; gameBuild?: string // the game folder's state and the installed game's build, now
   on: ReportMod[]; off: number; conflicts: string; crash: string
@@ -62,12 +61,10 @@ export function relativeToMods(path: string, gamePath: string) {
 }
 
 /** One line of what the player typed: on one line, at most 400 characters. Pure. */
-const note = (t?: string) => t?.replace(/\s+/g, ' ').replace(/```/g, "'''").trim().slice(0, 400) || '' // a fence of its own would end the block
 const LOG_LINES = 120
 
 /** The report text: inside a code block, so Discord keeps underscores and lines as they are. */
 export function buildReport(r: ReportInput) {
-  const trying = note(r.notes?.trying), instead = note(r.notes?.instead)
   const crashed = r.crashRef !== undefined
   const lines = [
     '```',
@@ -76,7 +73,6 @@ export function buildReport(r: ReportInput) {
     '',
     'What to check next:',
     ...(r.next?.length ? r.next.map(l => `  - ${l}`) : ['  Nothing stands out in these checks. Say what you see in your help message.']),
-    ...(trying || instead ? ['', ...(trying ? [`What I was trying to do: ${trying}`] : []), ...(instead ? [`What happened instead: ${instead}`] : [])] : []),
     '',
     'Why mods might not load:',
     ...(r.folder ? [`  Game folder: ${r.folder}`] : []),
@@ -141,7 +137,7 @@ const isOwnLoader = (path: string) =>
 export type ReportStage = 'setup' | 'mods'
 /** Reads everything the report needs; whatever cannot be read says "unknown". Two passes: the setup (versions, loaders,
  *  conflicts, crashes), then what the app knows about each mod that is on. `onStage` names the pass that is running. */
-export async function gatherReport(onStage?: (stage: ReportStage) => void, notes?: ReportInput['notes']): Promise<string> {
+export async function gatherReport(onStage?: (stage: ReportStage) => void): Promise<string> {
   onStage?.('setup')
   const src = reportSource.get?.() ?? { mods: [], modDetails: {}, launcherType: '', gamePath: '' }
   const [repakx, bypass, galacta, clashes, crash, kit, recent, build] = await Promise.all([
@@ -258,7 +254,6 @@ export async function gatherReport(onStage?: (stage: ReportStage) => void, notes
     version: REPAKXTRA_VERSION,
     repakx,
     made: when(Date.now() / 1000),
-    notes,
     next,
     folder: !src.gamePath ? 'not set' : !build ? 'could not be checked' : build.updated ? 'set, the game files are there' : 'set, but the game files were not found there or could not be read',
     gameBuild: !build ? 'could not be read' : build.cl ? String(build.cl) : 'not found in the game files',
@@ -371,10 +366,6 @@ if (import.meta.env.DEV) {
   console.assert(text.indexOf('Newest crash') < text.indexOf('~mods/A.pak | Mesh | Black Panther | 2026-10-01'), 'summary before the mod list', text)
   console.assert(text.indexOf('What to check next:\n  Nothing stands out') < text.indexOf('Why mods might not load:\n') && text.indexOf('Why mods might not load:') < text.indexOf('Newest crash'),
     'what to check next first, then the setup, then the crash', text)
-  const noted = buildReport({ version: '1.0.0', launcher: 'Steam', bypass: 'installed', galacta: 'not installed', on: [], off: 0, conflicts: '0 groups', crash: 'none found',
-    notes: { trying: 'Load  my\nPanther skin from C:\\Users\\Alice\\x.pak', instead: '' }, next: ['Signature bypass is off. Open Setup and turn it on.'] })
-  console.assert(noted.includes('\n\nWhat I was trying to do: Load my Panther skin from %USERPROFILE%') && !noted.includes('Alice') && !noted.includes('What happened instead')
-    && noted.indexOf('What to check next:\n  - Signature bypass is off') < noted.indexOf('What I was trying'), 'notes after the checks, on one line, scrubbed, the empty one left out', noted)
   const logged = buildReport({ version: '1.0.0', launcher: 'Steam', bypass: 'installed', galacta: 'not installed', on: [], off: 0, conflicts: '0 groups', crash: 'x', crashRef: 'r', log: { lines: ['a', '```', 'b'] } })
   console.assert(logged.endsWith("Game log of that crash, last 3 lines (user name, account ids, and tokens taken out):\na\n'''\nb\n```") , 'the log last, its fences cannot end the block', logged)
   console.assert(buildReport({ version: '1.0.0', launcher: 'Steam', bypass: 'installed', galacta: 'not installed', on: [], off: 0, conflicts: '0 groups', crash: 'x', crashRef: 'r', log: { status: logStatusText('log_undecodable') } })
