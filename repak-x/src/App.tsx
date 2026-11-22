@@ -229,6 +229,7 @@ type ContextMenuState = {
   fromLoadout?: boolean // repakxtra: opened on a loadout page's row: acts on that mod only, never the Library's selection
   rename?: () => void // repakxtra: that row's own rename (the Library's list is not on screen)
   koWait?: boolean // repakxtra: not mounted while its KO check runs, so Open in KO Editor never pops in
+  ko?: boolean // repakxtra: the check's answer, kept for this menu (a reload clears the cache while it is open)
 }
 
 type NewFolderPromptState = { paths: string[]; moveFolderId?: string; parentId?: string; moveModPaths?: string[] }
@@ -1142,7 +1143,8 @@ function App() {
       x: row ? row.left + 16 : e.clientX,
       y: row ? row.top + Math.min(row.height, 40) : e.clientY,
       mod,
-      koWait
+      koWait,
+      ko: knownKoMod(mod.path)
     })
     // reading the mod's file list takes milliseconds: the menu shows at most 150 ms later, the row only from the next open then
     if (!koWait) return
@@ -1154,7 +1156,7 @@ function App() {
     const off = () => { window.removeEventListener('keydown', cancel, true); window.removeEventListener('pointerdown', cancel, true) }
     window.addEventListener('keydown', cancel, true); window.addEventListener('pointerdown', cancel, true)
     void Promise.race([checkKoMod(mod.path), new Promise(r => setTimeout(r, 150))])
-      .then(() => { off(); setContextMenu(c => (c?.mod?.path === mod.path && c.koWait ? { ...c, koWait: false } : c)) })
+      .then(() => { off(); setContextMenu(c => (c?.mod?.path === mod.path && c.koWait ? { ...c, koWait: false, ko: knownKoMod(mod.path) } : c)) })
   }
 
   const handleFolderContextMenu = (e: React.MouseEvent, folder: FolderRecord) => {
@@ -4438,7 +4440,7 @@ function App() {
             onUpdateMod={() => contextMenu.mod && handleInitiateUpdate(contextMenu.mod)}
             onSendToVfxUpdater={() => contextMenu.mod && handleSendToVfxUpdater(contextMenu.mod)}
             onUpdateVfx={contextMenu.mod && canUpdateVfx(modDetails[contextMenu.mod.path], contextMenu.mod.path) ? (m => () => void updateVfxModInPlace(m, alert, loadMods))(contextMenu.mod) : undefined /* repakxtra */}
-            onOpenInKo={contextMenu.mod && knownKoMod(contextMenu.mod.path) && !(menuSelection.has(contextMenu.mod.path) && menuSelection.size > 1) ? (m => () => openInKoEditor(m.path, m.folder_id))(contextMenu.mod) : undefined /* repakxtra */}
+            onOpenInKo={contextMenu.mod && contextMenu.ko && !(menuSelection.has(contextMenu.mod.path) && menuSelection.size > 1) ? (m => () => openInKoEditor(m.path, m.folder_id))(contextMenu.mod) : undefined /* repakxtra */}
             onCheckVfx={contextMenu.mod && canUpdateVfx(modDetails[contextMenu.mod.path], contextMenu.mod.path) ? (m => () => void checkVfxModInPlace(m, alert, loadMods))(contextMenu.mod) : undefined /* repakxtra */}
             onShowInAssetExplorer={() => {
               if (!contextMenu.mod) return

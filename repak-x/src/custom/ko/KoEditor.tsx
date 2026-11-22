@@ -124,7 +124,7 @@ function Editor({ onInstall, alert, blocked, shown }: KoEditorProps & { shown: b
   const openRequest = useKoOpen()
   const [fromMod, setFromMod] = useState<{ heroId: string; roles: Role[]; name: string; ownParts: boolean; folder?: string | null } | null>(null)
   const [askReplace, setAskReplace] = useState<{ heroId: string; patch: Saved[string]; ownParts: boolean; folder?: string | null } | null>(null)
-  const source = useRef<Record<string, string | null | undefined>>({}) // each hero opened from a mod: that mod's folder, where its Install goes
+  const source = useRef<Record<string, { stem: string; folder?: string | null }>>({}) // each hero opened from a mod: its file stem and folder, where an Install under that name goes
   const openRun = useRef(0) // the newest open: an older one still reading drops its result
   useEffect(() => {
     if (!openRequest || !usmap || !heroes) return
@@ -150,7 +150,7 @@ function Editor({ onInstall, alert, blocked, shown }: KoEditorProps & { shown: b
   useEffect(() => { if (fromMod && (heroId !== fromMod.heroId || loadError)) setFromMod(null) }, [heroId, loadError]) // eslint-disable-line react-hooks/exhaustive-deps
   const applyMod = (heroId: string, patch: Saved[string], ownParts: boolean, folder?: string | null) => {
     saveFor(heroId, patch); setAskReplace(null); cue('ready')
-    source.current[heroId] = folder
+    source.current[heroId] = { stem: koStem(patch.name ?? '').toLowerCase(), folder }
     if (ownParts) alert.warning('Its own textures stay out', "The KO Editor sets only the prompt's colors. Textures or materials the mod ships are not in what it installs.")
   }
   useEffect(() => { // its hero is up: the mod's colors on the game's roles, asking first over colors already picked
@@ -283,7 +283,8 @@ function Editor({ onInstall, alert, blocked, shown }: KoEditorProps & { shown: b
         return
       }
       const path = await buildKo({ usmapPath: usmap, widgetJson: loaded.widgetJson, widgetRel: hero.widget, roles, colors, name, step: setStep })
-      await onInstall(path, source.current[hero.id])
+      const from = source.current[hero.id]
+      await onInstall(path, from?.stem === stem ? from.folder : undefined) // renamed: a new mod, in the Library's folder
     } catch (e) {
       cue('warning'); alert.warning('Could not prepare the KO prompt', e instanceof Error ? e.message : String(e))
     } finally { setStep(null) }
