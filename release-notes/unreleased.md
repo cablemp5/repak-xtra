@@ -6,3 +6,4 @@
 - Fixed a name typed on the install card being ignored for a .zip, .rar, or .7z holding one mod
 - Fixed mods already installed being left out of a loadout made by the install
 - Fixed app updates failing when repakxtra was started from a PowerShell 7 window
+- Added Open in KO Editor to a KO prompt mod's right-click menu in the Library: the editor opens its hero with the mod's colors and name, ready to change and install over it
