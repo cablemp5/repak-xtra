@@ -345,7 +345,7 @@ export function nextSteps(f: Facts): string[] {
   if (f.suspects.length) out.push(`The newest crash names ${f.crashAsset ?? 'a file'}, and ${holdersAll(f.suspects)} ${f.suspects.length === 1 ? 'replaces' : 'replace'} it. Turn ${f.suspects.length === 1 ? 'it' : 'them'} off and test again.`)
   if (f.broken) out.push(`${plural(f.broken, 'mod')} that ${f.broken === 1 ? 'is' : 'are'} on ${f.broken === 1 ? 'is' : 'are'} broken for this game build. Turn ${f.broken === 1 ? 'it' : 'them'} off or find an update.`)
   const risky = f.mayCrash ?? 0 // without the exact crash suspects, which have their own step above
-  if (risky > 0) out.push(`${plural(risky, 'mod')} that ${risky === 1 ? 'is' : 'are'} on may crash the game. Their notes in the list below say why.`)
+  if (risky > 0) out.push(`${plural(risky, 'mod')} that ${risky === 1 ? 'is' : 'are'} on may crash the game. ${risky === 1 ? 'Its notes' : 'Their notes'} in the list below say why.`)
   if (f.vfx) out.push(`${plural(f.vfx, 'mod')} ${f.vfx === 1 ? 'needs' : 'need'} a VFX update. Open Mod Updater.`)
   if (f.conflicts) out.push(`${plural(f.conflicts, 'conflict group')}. Open Check conflicts and pick which mod wins.`)
   return out.slice(0, 5)
@@ -382,7 +382,7 @@ if (import.meta.env.DEV) {
   const steps = nextSteps({ folder: 'ok', bypass: 'missing', galacta: { installed: 'x', disabled: false, latest: 'v2', up_to_date: false }, vfx: 2, broken: 1, conflicts: 3, notLoaded: 1, suspects: ['~mods/A.pak'], crashAsset: 'MI_Eyes' })
   console.assert(steps.length === 5 && steps[0].startsWith('Signature bypass is not installed') && steps.some(l => l.startsWith('1 mod that was on did not load'))
     && steps.some(l => l === 'The newest crash names MI_Eyes, and ~mods/A.pak replaces it. Turn it off and test again.'), 'blockers first, five at most', steps)
-  console.assert(nextSteps({ folder: 'ok', vfx: 0, broken: 0, mayCrash: 1, notLoaded: 0, suspects: [] })[0] === '1 mod that is on may crash the game. Their notes in the list below say why.'
+  console.assert(nextSteps({ folder: 'ok', vfx: 0, broken: 0, mayCrash: 1, notLoaded: 0, suspects: [] })[0] === '1 mod that is on may crash the game. Its notes in the list below say why.'
     && nextSteps({ folder: 'ok', vfx: 0, broken: 0, mayCrash: 0, notLoaded: 0, suspects: ['a'], crashAsset: 'x' }).length === 1, 'a crash suspect has its own step, not a may crash one')
   console.assert(nextSteps({ folder: 'unset', vfx: 0, broken: 0, notLoaded: 0, suspects: [] })[0].startsWith('No game folder is set')
     && nextSteps({ folder: 'ok', bypass: 'installed', vfx: 0, broken: 0, conflicts: 0, notLoaded: 0, suspects: [] }).length === 0, 'folder first, nothing to say: no steps')

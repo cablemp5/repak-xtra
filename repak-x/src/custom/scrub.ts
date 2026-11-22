@@ -8,7 +8,8 @@
 // a path character: not ): Program Files (x86) is one folder, and not ': a name may hold one (O'Brien, D'Ávila,
 // Players' Mods). A quoted path then runs past its closing quote to the line's last separator: too much goes rather than
 // part of a name staying
-const PC = String.raw`[^\r\n|"<>\]]`
+// A ] closes a bracketed path ([File:...]) unless a separator follows (Jane [work]\Mods)
+const PC = String.raw`(?:[^\r\n|"<>\]]|\](?=[\\/]))`
 const NEXT_DRIVE = String.raw`(?![A-Za-z]:[\\/])`
 export const scrub = (text: string) => text
   // the // of https:// follows a colon, so it is not a network path
@@ -31,7 +32,8 @@ export const scrub = (text: string) => text
   // a user name written plainly runs to the end of its field: "Username: First Last"
   .replace(/\b(\w*?user[ _]?name)(\s*[=:]\s*)(?!\\?["'])([^\r\n,;|&"<>{}]+)/gi, '$1$2<hidden>')
   // a uid or guid key on its own or after a prefix (player_uid), never the end of another word (fluid)
-  .replace(/\b((?:[A-Za-z]+_)?g?uid)(["']?\s*[=:]\s*)("[^"]*"|[^\s"'&,;]+)/gi, '$1$2<hidden>')
+  .replace(/\b((?:[A-Za-z]+_)?(?:g|u)?uid)(\\?["']?\s*[=:]\s*)(\\"(?:[^\\]|\\[^"])*\\"|"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|[^\s"'&,;\\]+)/gi, '$1$2<hidden>')
+  .replace(/\b([a-zA-Z]+(?:Uid|UID|Uuid|UUID|Guid|GUID))(\\?["']?\s*[=:]\s*)(\\"(?:[^\\]|\\[^"])*\\"|"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|[^\s"'&,;\\]+)/g, '$1$2<hidden>') // camelCase: PlayerUid
   // a keyed value: accessToken=, account_id:, username="First Last" (a quoted value goes whole, escaped JSON too)
   .replace(/\b(\w*?(?:token|password|passwd|secret|api[-_]?key|account[ _]?id|client[ _]?id|user[ _]?id|player[ _]?id|user[ _]?name|authorization))(\\?["']?\s*[=:]\s*)(\\"(?:[^\\]|\\[^"])*\\"|"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|[^\s"'&,;\\]+)/gi, '$1$2<hidden>')
 
@@ -62,6 +64,9 @@ if (import.meta.env.DEV) {
   console.assert(scrub(quoted) === "test.txt, '<network path>", 'an apostrophe in any path, a network path goes whole', scrub(quoted))
   const named = "C:\\Users\\D'Ávila\\Games\\a.pak and C:\\Users\\Jane\\Players' Mods\\b.pak"
   console.assert(!/Ávila|Jane|Players/.test(scrub(named)), 'accented names and apostrophe folders never stay', scrub(named))
+  console.assert(scrub('D:\\Downloads\\Jane [work]\\Mods\\Example.pak') === 'Example.pak', 'a bracket inside a folder name', scrub('D:\\Downloads\\Jane [work]\\Mods\\Example.pak'))
+  console.assert(scrub("uid='12345' x") === "uid=<hidden> x" && scrub('{\\"uid\\":\\"12345\\"}') === '{\\"uid\\":<hidden>}', 'quoted and escaped uid values', scrub('{\\"uid\\":\\"12345\\"}'))
+  console.assert(scrub('PlayerUid=1 uuid=2 AccountGUID: 3') === 'PlayerUid=<hidden> uuid=<hidden> AccountGUID: <hidden>', 'camelCase uids and uuids', scrub('PlayerUid=1 uuid=2 AccountGUID: 3'))
   console.assert(scrub('uid=77 player_id: 88 player_uid=9 fluid: 3 liquid=4') === 'uid=<hidden> player_id: <hidden> player_uid=<hidden> fluid: 3 liquid=4', 'uid keys only', scrub('uid=77 player_id: 88 player_uid=9 fluid: 3 liquid=4'))
   console.assert(scrub(keyed) === 'accountId=<hidden> username=<hidden> accessToken=<hidden> author: Someone', 'keyed ids, quoted names, camelCase tokens', scrub(keyed))
   console.assert(scrub(ids) ==='mail <email>, steam <account id>, Bearer <hidden>, token=<hidden>&x=1', 'ids and tokens', scrub(ids))

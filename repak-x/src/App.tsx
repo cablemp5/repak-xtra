@@ -3287,11 +3287,14 @@ function App() {
         // Create a promise that resolves when install_complete event fires
         type Outcome = { name: string; source: string; requested?: string; whole?: boolean } // repakxtra
         const request = `${Date.now()}-${Math.random().toString(36).slice(2)}` // repakxtra: install_complete names it
+        let stopWaiting = () => {}
         const installCompletePromise = new Promise<{ failed: Outcome[]; done?: Outcome[] }>((resolve, reject) => { // repakxtra: what failed in a partial install
           let unlistenComplete: UnlistenFn | null = null
           let unlistenError: UnlistenFn | null = null
           let unlistenRefused: UnlistenFn | null = null // repakxtra
           let timeoutId: ReturnType<typeof setTimeout> | null = null
+          // repakxtra: a refused install (the command itself failed) never completes: its listeners and timer stop here
+          stopWaiting = () => { if (timeoutId) clearTimeout(timeoutId); unlistenComplete?.(); unlistenError?.(); unlistenRefused?.() }
 
           // Set a reasonable timeout (10 minutes for large mods)
           timeoutId = setTimeout(() => {
@@ -3303,7 +3306,7 @@ function App() {
 
           // Listen for success
           listen('install_complete', (event: any) => {
-            if (event.payload?.request && event.payload.request !== request) return // repakxtra: another install's
+            if (event.payload?.request !== request) return // repakxtra: another install's, or a mod update's (it sends none)
             if (timeoutId) clearTimeout(timeoutId)
             if (unlistenComplete) unlistenComplete()
             if (unlistenError) unlistenError()
@@ -3337,7 +3340,8 @@ function App() {
         })
 
         // Start the installation (returns immediately since backend spawns threads)
-        await invoke('install_mods', { mods: sent, request }) // repakxtra: with the left-out ones, and this install's id
+        installCompletePromise.catch(() => {}) // repakxtra: when the command fails first, a later rejection here is not unhandled
+        try { await invoke('install_mods', { mods: sent, request }) } catch (e) { stopWaiting(); throw e } // repakxtra: with the left-out ones, and this install's id
 
         // Wait for the actual installation to complete
         // repakxtra: a failed mod is known by the file or archive it came from (its output name may have changed: a

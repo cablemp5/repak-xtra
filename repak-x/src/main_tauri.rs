@@ -3316,6 +3316,9 @@ async fn install_mods(
                     );
                     window_for_logs.emit("install_log", &msg).ok();
                     partly_failed = failed.iter().map(|r| serde_json::json!({ "name": r.mod_name, "requested": r.requested, "source": r.source.to_string_lossy() })).collect();
+                } else if !unmapped_names.is_empty() {
+                    // repakxtra: every mod that mapped went in, but a path gave none: said as partial, as its toast is
+                    window_for_logs.emit("install_log", format!("Partial install: {} path(s) gave no mod: {}", unmapped_names.len(), unmapped_names.join(", "))).ok();
                 } else {
                     window_for_logs
                         .emit("install_log", "Installation completed successfully!")
