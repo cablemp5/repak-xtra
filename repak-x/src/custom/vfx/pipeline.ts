@@ -43,14 +43,14 @@ export const uncheckedAssets = (r: Pick<VfxReport, 'counts' | 'assets'>) => r.co
  *  an unexpected problem (a layout check that threw included): those keep Try again and leave the mod as it is. */
 export const unsupportedFailure = (r: Pick<VfxReport, 'status' | 'error'>) =>
   r.status === 'failed' && (/without the game's class names/.test(r.error ?? '') // that extract was already read again one-shot (xtra_uat_cli.rs)
-    || !/^(Not updated yet|Stopped on an unexpected problem|Not decrypted|Could not turn it off)|internet|game updated|could not be encrypted|layout could not be checked/i.test(r.error ?? ''))
+    || !/^(Not updated yet|Stopped on an unexpected problem|Not decrypted|Could not turn it off)|internet|game updated|could not be encrypted|layout could not be checked|could not be listed/i.test(r.error ?? ''))
 
 export const repairOutcome = (r: VfxReport) => (r.status === 'mappings' ? 'Waiting for mappings' : r.status !== 'fixed' ? 'Failed' : incompleteAssets(r) ? 'Partially updated' : 'Updated')
 
 /** What a Failed row offers: Retry in Best effort for a rejection only Strict makes, Try again for a problem another try
  *  may pass, else a newer copy of the mod (its page, when one is known). */
 export const failedNext = (r: Pick<VfxReport, 'status' | 'error' | 'strictOnly'>): 'best' | 'again' | 'page' =>
-  r.strictOnly ? 'best' : unsupportedFailure(r) && !/try again|update it again/i.test(r.error ?? '') ? 'page' : 'again'
+  r.strictOnly ? 'best' : unsupportedFailure(r) && !/game's files are read again/.test(r.error ?? '') ? 'page' : 'again'
 
 export type Placed = { fixed: string; source: string; original: string; turnedOff: boolean; replaced: boolean; trashed?: boolean; warning?: string | null }
 export type VfxReport = {
@@ -487,9 +487,9 @@ async function rebuild(o: FixOptions): Promise<VfxReport> {
         log(report.error, 'warning')
         return // failed: the mod stays as it was
       }
-      check()
       const packedBuild = await invoke<{ updated: number }>('xtra_game_build').then(b => b.updated)
       if (buildAt && packedBuild !== buildAt) { report.error = 'Not updated: the game updated while this ran, so the update was made from old game files. Update it again.'; log(report.error, 'warning'); return }
+      check() // the last moment a cancel keeps the original as it was
       if (o.outputDir) report.output = utoc
       else {
         // turned off earlier because it could crash: the safe update goes in on, as the mod was before
@@ -665,7 +665,14 @@ async function rebuild(o: FixOptions): Promise<VfxReport> {
     const failedN = report.assets.filter(a => a.kind === 'failed').length
     if ((failedN || report.counts.unreadable || report.warnings.length) && strict) {
       // only when Best effort would install it: something rebuilt, its own, or files to rebuild or rewrite (a match alone is not)
-      report.strictOnly = !failedN && !report.counts.unreadable && Boolean(report.counts.updated || report.counts.added || staleFiles.length || relaid.size)
+      // failed or unread with mappings older than the game: it waits for them, as Best effort does (packAndPlace)
+      if (wait && (failedN || report.counts.unreadable)) {
+        report.status = 'mappings'
+        report.error = `Not updated yet. With the saved USMAP (game build ${wait.usmap}) ${plural(failedN + report.counts.unreadable, 'file')} of it could not be rebuilt or read. It can be updated once the USMAP for game build ${wait.game} is out.`
+        log(report.error, 'warning')
+        return report
+      }
+      report.strictOnly = !failedN && !report.counts.unreadable && Boolean(report.counts.updated || report.counts.added || relaid.size)
       const why = [failedN && plural(failedN, 'material or blueprint', 'materials and blueprints') + ' could not be rebuilt', report.counts.unreadable && plural(report.counts.unreadable, 'asset') + ' could not be read', report.warnings.length && `Strict found ${plural(report.warnings.length, 'warning')}`].filter(Boolean).join(', and ')
       report.error = `Not updated: ${why}. The mod was not changed. ${report.strictOnly ? changePolicy : failedN || report.counts.unreadable ? 'Check the USMAP in Advanced, then try again.' : 'Its creator edits could not be proven preserved.'}`
       log(report.error, 'warning')
@@ -734,7 +741,7 @@ async function rebuild(o: FixOptions): Promise<VfxReport> {
     }
     // a finished attempt that left the mod as it was, kept until the mod, the game or the mappings change (xtra_broken.rs
     // Outcome): Failed stops Needs update, Waiting reads Waiting for mappings. Any other result forgets the last one
-    if (!o.outputDir && report.status !== 'cancelled') {
+    if (!o.outputDir && report.status !== 'cancelled' && !/game updated (while|during)/.test(report.error ?? '')) {
       const failed = report.status === 'failed'
       await invoke('xtra_vfx_outcome', failed || report.status === 'mappings'
         ? { modPath: o.modPath, status: failed ? 'failed' : 'waiting', error: report.error ?? null, next: failed ? failedNext(report) : null, usmap: o.usmapPath }
@@ -766,7 +773,9 @@ if (import.meta.env.DEV) {
   console.assert(repairOutcome({ ...sample, warnings: ['lost parameter'] }) === 'Updated', 'warnings alone are still Updated')
   console.assert(repairOutcome({ ...sample, status: 'failed' }) === 'Failed' && repairOutcome({ ...sample, status: 'mappings' }) === 'Waiting for mappings', 'failed is never repaired, waiting never failed')
   console.assert(failedNext({ status: 'failed', strictOnly: true, error: 'Not updated: Strict' }) === 'best' && failedNext({ status: 'failed', error: 'Stopped on an unexpected problem: x.' }) === 'again'
-    && failedNext({ status: 'failed', error: 'Not updated: none of its materials or blueprints could be rebuilt.' }) === 'page', 'what a Failed row offers')
+    && failedNext({ status: 'failed', error: 'Not updated: none of its materials or blueprints could be rebuilt. Check the USMAP in Advanced, then try again.' }) === 'page'
+    && failedNext({ status: 'failed', error: "Not updated: 1 material or blueprint could not be rebuilt or read, and the game can crash on it. The mod was not changed. Try again: the game's files are read again." }) === 'again'
+    && failedNext({ status: 'failed', error: 'Not updated: x. Check the internet connection, then try again.' }) === 'again', 'what a Failed row offers')
   console.assert(unsupportedFailure({ status: 'failed', error: 'Not updated: none of its materials or blueprints could be rebuilt. Check the USMAP in Advanced, then try again.' })
     && !unsupportedFailure({ status: 'failed', error: 'Stopped on an unexpected problem: x.' }) && !unsupportedFailure({ status: 'failed', error: 'Not updated yet. Waits.' })
     && !unsupportedFailure({ status: 'failed', error: 'Not updated: x. Check the internet connection, then try again.' }) && !unsupportedFailure({ status: 'cancelled' })

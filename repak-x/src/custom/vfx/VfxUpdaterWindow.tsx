@@ -253,10 +253,10 @@ function Row({ mod, rowKey, loadouts, run, needs, partial, waits, made, picked, 
 
 /** A group of mods that folds away to its heading, as a collection does on the Loadouts screen. Its heading holds the
  *  fold, the name and count, and Select all / Clear for the group. */
-function Group({ title, count, tone, open, onFold, all, none, busy, onPick, note, selectable = true, children }: {
+function Group({ title, count, tone, open, onFold, all, none, busy, onPick, about, selectable = true, children }: {
   title: string; count: number; tone?: 'needs' | 'failed' | 'busy' | 'done' | 'waiting'; open: boolean; onFold: () => void; all: boolean; none: boolean; busy: boolean; onPick: (on: boolean) => void
   /** one line under the heading, folded with the rows */
-  note?: string
+  about?: string
   /** false: its mods cannot be ticked (they wait), so no Select all / Clear */
   selectable?: boolean; children: React.ReactNode
 }) {
@@ -275,7 +275,7 @@ function Group({ title, count, tone, open, onFold, all, none, busy, onPick, note
           <button type="button" className="vf-select" disabled={busy || none} onClick={() => onPick(false)}>Clear</button>
         </span>}
       </div>
-      <div className="t-acc-panel" data-open={open}><div className="t-acc-panel-inner" {...folded(!open)}>{note && <p className="vf-grp-note">{note}</p>}{children}</div></div>
+      <div className="t-acc-panel" data-open={open}><div className="t-acc-panel-inner" {...folded(!open)}>{about && <p className="vf-grp-note">{about}</p>}{children}</div></div>
     </section>
   )
 }
@@ -342,6 +342,8 @@ export function VfxUpdaterPanel() {
   const [repairPolicy, setRepairPolicy] = useState(readRepairPolicy)
   // a mod's main file (norm) -> the last attempt that left it as it was (Failed), kept through restarts (xtra_broken.rs)
   const [saved, setSaved] = useState<Map<string, Outcome>>(new Map())
+  const savedRef = useRef(saved)
+  savedRef.current = saved
   const [stale, setStale] = useState<Map<string, number>>(new Map()) // a mod's .utoc (norm) -> its Niagara files an update will leave out
   // a mod's .utoc (norm) -> files it rebuilds that a patch newer than the USMAP changed: it waits for that patch's USMAP
   const [waits, setWaits] = useState<Map<string, number>>(new Map())
@@ -399,8 +401,8 @@ export function VfxUpdaterPanel() {
   }, [usmap])
   // the main window's checks found new mappings or changed a verdict: the list and the USMAP in use are read again
   useEffect(() => {
+    // the USMAP in use follows at once, a run in progress too (its next mod reads it); the list waits for the run's end
     const again = () => {
-      if (busyRef.current) return
       void invoke<{ usmapPath?: string | null }>('vfx_get_settings').then(s => { if (s?.usmapPath) setUsmap(s.usmapPath) }).catch(() => {})
       setReload(n => n + 1)
     }
@@ -504,9 +506,11 @@ export function VfxUpdaterPanel() {
         if (seeded.current) pick(list.filter(m => waitsRef.current.has(norm(m.utoc)) && !nowWaits.has(norm(m.utoc)) && n.has(norm(m.path))).map(m => norm(m.utoc)), true)
         setWaits(nowWaits)
         const failedNow = new Map(Object.entries(outcomes).filter(([, o]) => o.status === 'failed').map(([p, o]) => [norm(p), o]))
+        const wasSaved = savedRef.current
         setSaved(failedNow)
-        // this session's failures whose kept outcome no longer holds (a new copy, a new game build, new mappings) are judged again
-        setRuns(rs => { const gone = list.filter(m => (rs[norm(m.utoc)]?.status === 'failed' && !failedNow.has(norm(m.path)) && !isUnsupported(m.path)) || (rs[norm(m.utoc)]?.status === 'mappings' && !nowWaits.has(norm(m.utoc)))).map(m => norm(m.utoc)); if (!gone.length) return rs; const n = { ...rs }; gone.forEach(k => delete n[k]); return n })
+        // this session's failures whose kept outcome stopped holding (a new copy, a new game build, new mappings) are judged
+        // again. One never kept (a Safety turn-off that failed, an outcome that could not be saved) stays
+        setRuns(rs => { const gone = list.filter(m => (rs[norm(m.utoc)]?.status === 'failed' && wasSaved.has(norm(m.path)) && !failedNow.has(norm(m.path))) || (rs[norm(m.utoc)]?.status === 'mappings' && !nowWaits.has(norm(m.utoc)))).map(m => norm(m.utoc)); if (!gone.length) return rs; const n = { ...rs }; gone.forEach(k => delete n[k]); return n })
         setMods(list)
         setScanProblems(problems)
         setUncertain(new Map(verdicts.filter(v => v.kind === 'unknown').map(v => [norm(v.path), v.reason])))
@@ -922,7 +926,7 @@ export function VfxUpdaterPanel() {
             ? (loadError && !needle ? null : <p className="lp-empty">{needle || hero ? `No mods match${needle ? ` “${q.trim()}”` : ''}${hero ? ` for ${hero}` : ''}.` : 'No VFX mods in the mods folder. VFX mods and mods with material instances (MI_ files) appear here. Add .utoc takes any other mod.'}</p>)
             : <div className="vf-groups">{groups.map(g => g.mods.length > 0 && (
               <Group key={g.id} title={g.title} count={g.count} tone={g.id === 'needs' ? 'needs' : g.id === 'failed' ? 'failed' : g.id === 'updating' ? 'busy' : g.id === 'updated' ? 'done' : g.id === 'waiting' ? 'waiting' : undefined} busy={busy} all={g.all} none={g.none}
-                note={g.id === 'waiting' ? MAPPINGS_NOTE : undefined} selectable={g.id !== 'waiting'}
+                about={g.id === 'waiting' ? MAPPINGS_NOTE : undefined} selectable={g.id !== 'waiting'}
                 open={Boolean(needle || hero) || !foldedIds.includes(g.id)} onFold={() => fold(g.id)} onPick={on => userPick(g.keys, on)}>
                 <ul className="mod-rows vf-rows">
                   {g.mods.map(m => {

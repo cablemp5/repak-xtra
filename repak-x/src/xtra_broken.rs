@@ -1201,9 +1201,9 @@ pub async fn xtra_broken_mods(mod_paths: Vec<String>, state: State<'_, Arc<Mutex
         // a waiting one with no verdict of its own (updated from All mods, or Add .utoc): it waits all the same
         for p in &mod_paths {
             let utoc = Path::new(p).with_extension("utoc");
-            if verdicts.iter().any(|v| v.path == *p && v.kind == "vfx") { continue; }
+            // any verdict of its own says more (Broken and May crash stay), the Library keeps one per mod
+            if verdicts.iter().any(|v| v.path == *p) { continue; }
             if outcomes.get(&checked_key(&utoc)).is_some_and(|o| o.status == "waiting" && outcome_holds(o, file_stamp(&utoc), game_updated, &usmap_now)) {
-                verdicts.retain(|v| v.path != *p || v.kind == "broken" || v.kind == "risky");
                 verdicts.push(Verdict { path: p.clone(), kind: "vfx", reason: "An update found it needs the game's new mappings (USMAP) before it can be rebuilt whole.".into(), stale_niagara: 0, usmap_wait: 1, off_only: false });
             }
         }
