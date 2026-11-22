@@ -13,7 +13,7 @@ export const forgetKoMods = () => { known.clear(); generation++ }
 export const knownKoMod = (path: string) => known.get(path)
 export const checkKoMod = (path: string) => { const g = generation; return invoke<boolean>('xtra_ko_is_mod', { modPath: path }).catch(() => false).then(ko => { if (g === generation) known.set(path, ko); return ko }) }
 
-export type KoOpen = { path: string; name: string; folder?: string | null }
+export type KoOpen = { path: string; name: string }
 let request: KoOpen | null = null
 const subs = new Set<() => void>()
 const subscribe = (f: () => void) => { subs.add(f); return () => { subs.delete(f) } }
@@ -21,9 +21,8 @@ const subscribe = (f: () => void) => { subs.add(f); return () => { subs.delete(f
 /** The mod's file name as the editor's Name field: its Install then finds the mod and offers to replace it. */
 export const koModName = (path: string) => (path.split(/[\\/]/).pop() ?? '').replace(/\..*$/, '').replace(/(_\d+)?_P$/i, '').replace(/_/g, ' ').trim()
 
-/** `folder`: the mod's Library folder, where the editor's Install puts the new one so it replaces the old one there. */
-export function openInKoEditor(path: string, folder?: string | null) {
-  request = { path, name: koModName(path), folder }
+export function openInKoEditor(path: string) {
+  request = { path, name: koModName(path) }
   subs.forEach(f => f())
   setView('ko')
 }

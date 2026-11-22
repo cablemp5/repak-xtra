@@ -457,7 +457,6 @@ function App() {
   // Non-null only while hero portraits are downloading (see 'hero_sync_progress')
   const [heroSyncProgress, setHeroSyncProgress] = useState<{ percent: number; message: string } | null>(null)
   const [selectedFolderId, setSelectedFolderId] = useState('all')
-  const [installFolder, setInstallFolder] = useState<string | null>(null) // repakxtra: the install card's folder for one install (KO Editor)
   const [viewMode, setViewMode] = useState<ViewMode>('list') // 'grid', 'compact', 'list'
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null) // { x, y, mod }
   const [isLogDrawerOpen, setIsLogDrawerOpen] = useState(false)
@@ -1131,7 +1130,6 @@ function App() {
   }, [mods, isRightPanelOpen, lastPanelWidth])
 
   useEffect(() => forgetKoMods(), [mods]) // repakxtra: a reread mods folder (Replace file, an install) is checked for KO mods again
-  useEffect(() => { if (!panels.install) setInstallFolder(null) }, [panels.install]) // repakxtra: the KO Editor's folder is for its one install
 
   const handleContextMenu = (e: React.MouseEvent, mod: ModRecord) => {
     if (isBuiltin(mod.path)) { e.preventDefault(); return } // repakxtra: no file actions on a built-in
@@ -3584,7 +3582,7 @@ function App() {
           mods={modsToInstall}
           allTags={allTags}
           folders={folders}
-          currentFolderId={installFolder ?? selectedFolderId} /* repakxtra: the KO Editor's install of an opened mod goes to its folder */
+          currentFolderId={selectedFolderId}
           onCreateTag={registerTagFromInstallPanel}
           onDeleteTag={handleDeleteTagFromCatalog}
           onCreateFolder={handleCreateFolderAndReturn}
@@ -3931,13 +3929,12 @@ function App() {
           alert={alert}
           onModContextMenu={(e, m, rename) => { handleContextMenu(e, m as ModRecord); setContextMenu(c => c && { ...c, fromLoadout: true, rename }) }} /* repakxtra: a loadout page's rows open the Library's menu, for that row */
         />
-        <KoEditor alert={alert} blocked={gameRunning && !bypassGameRunningLock} onInstall={async (path, folder) => {
+        <KoEditor alert={alert} blocked={gameRunning && !bypassGameRunningLock} onInstall={async path => {
           const parsed = await invoke<DroppedModParse[]>('parse_dropped_files', { paths: [path] })
           if (!parsed.length) throw new Error('The generated KO prompt could not be opened for installation.')
-          setInstallFolder(folder ?? null)
           setModsToInstall(parsed)
           setPanel('install', true)
-        }} />{/* repakxtra: KO Editor view */}
+        }} onReplace={(oldPath, path) => handleConfirmUpdate(true, false, { mod: mods.find(m => m.path === oldPath) ?? { path: oldPath }, newSourcePath: path })} />{/* repakxtra: KO Editor view */}
         <SoundsScreen alert={alert} blocked={gameRunning && !bypassGameRunningLock} onInstall={async path => {
           const parsed = await invoke<DroppedModParse[]>('parse_dropped_files', { paths: [path] })
           if (!parsed.length) throw new Error('The sound mod could not be opened for installation.')
@@ -4440,7 +4437,7 @@ function App() {
             onUpdateMod={() => contextMenu.mod && handleInitiateUpdate(contextMenu.mod)}
             onSendToVfxUpdater={() => contextMenu.mod && handleSendToVfxUpdater(contextMenu.mod)}
             onUpdateVfx={contextMenu.mod && canUpdateVfx(modDetails[contextMenu.mod.path], contextMenu.mod.path) ? (m => () => void updateVfxModInPlace(m, alert, loadMods))(contextMenu.mod) : undefined /* repakxtra */}
-            onOpenInKo={contextMenu.mod && contextMenu.ko && !(menuSelection.has(contextMenu.mod.path) && menuSelection.size > 1) ? (m => () => openInKoEditor(m.path, m.folder_id))(contextMenu.mod) : undefined /* repakxtra */}
+            onOpenInKo={contextMenu.mod && contextMenu.ko && !(menuSelection.has(contextMenu.mod.path) && menuSelection.size > 1) ? (path => () => openInKoEditor(path))(contextMenu.mod.path) : undefined /* repakxtra */}
             onCheckVfx={contextMenu.mod && canUpdateVfx(modDetails[contextMenu.mod.path], contextMenu.mod.path) ? (m => () => void checkVfxModInPlace(m, alert, loadMods))(contextMenu.mod) : undefined /* repakxtra */}
             onShowInAssetExplorer={() => {
               if (!contextMenu.mod) return
