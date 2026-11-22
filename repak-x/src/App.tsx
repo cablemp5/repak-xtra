@@ -90,6 +90,7 @@ import { fixInVfxWindow } from './custom/vfx/handoff' // repakxtra: the Mod Upda
 import VfxNotice, { VfxDot } from './custom/vfx/VfxNotice' // repakxtra: the game updated, VFX mods to fix
 import { blockedReason, showKeptOff } from './custom/safeOff' // repakxtra: mods turned off because they can crash stay off
 import { canUpdateVfx, checkVfxModInPlace, updateVfxModInPlace } from './custom/vfx/quick' // repakxtra: Update VFX in the right-click menu
+import { checkKoMod, forgetKoMods, knownKoMod, openInKoEditor } from './custom/ko/openMod' // repakxtra: Open in KO Editor in the right-click menu
 import { PREF_TOGGLED, type PrefToggled, fewerPopups, liteOn, newDefaultsOnce, prefOn, setPref } from './custom/uiPrefs' // repakxtra
 import { reportSource } from './custom/setupReport' // repakxtra: Copy setup report reads the live list
 import { finishInstallLoadout, sameRow, type SameMod } from './custom/installLoadout'
@@ -227,6 +228,8 @@ type ContextMenuState = {
   folder?: FolderRecord | null
   fromLoadout?: boolean // repakxtra: opened on a loadout page's row: acts on that mod only, never the Library's selection
   rename?: () => void // repakxtra: that row's own rename (the Library's list is not on screen)
+  koWait?: boolean // repakxtra: not mounted while its KO check runs, so Open in KO Editor never pops in
+  ko?: boolean // repakxtra: the check's answer, kept for this menu (a reload clears the cache while it is open)
 }
 
 type NewFolderPromptState = { paths: string[]; moveFolderId?: string; parentId?: string; moveModPaths?: string[] }
@@ -1126,16 +1129,32 @@ function App() {
     }
   }, [mods, isRightPanelOpen, lastPanelWidth])
 
+  useEffect(() => forgetKoMods(), [mods]) // repakxtra: a reread mods folder (Replace file, an install) is checked for KO mods again
+
   const handleContextMenu = (e: React.MouseEvent, mod: ModRecord) => {
     if (isBuiltin(mod.path)) { e.preventDefault(); return } // repakxtra: no file actions on a built-in
     e.preventDefault()
     // repakxtra: Shift+F10 or the Menu key (not a right click) opens it under the row's name
     const row = e.button !== 2 ? e.currentTarget.getBoundingClientRect() : null
+    const koWait = knownKoMod(mod.path) === undefined // repakxtra: a KO prompt mod gets Open in KO Editor
     setContextMenu({
       x: row ? row.left + 16 : e.clientX,
       y: row ? row.top + Math.min(row.height, 40) : e.clientY,
-      mod
+      mod,
+      koWait,
+      ko: knownKoMod(mod.path)
     })
+    // reading the mod's file list takes milliseconds: the menu shows at most 150 ms later, the row only from the next open then
+    if (!koWait) return
+    // the menu's own Esc and outside click are not there yet: these stand in for them while it waits
+    const cancel = (ev: Event) => {
+      if (ev instanceof KeyboardEvent) { if (ev.key !== 'Escape') return; ev.stopPropagation() }
+      off(); setContextMenu(c => (c?.mod?.path === mod.path && c.koWait ? null : c))
+    }
+    const off = () => { window.removeEventListener('keydown', cancel, true); window.removeEventListener('pointerdown', cancel, true) }
+    window.addEventListener('keydown', cancel, true); window.addEventListener('pointerdown', cancel, true)
+    void Promise.race([checkKoMod(mod.path), new Promise<undefined>(r => setTimeout(r, 150))]) // the answer itself: a reload may clear the cache meanwhile
+      .then(ko => { off(); setContextMenu(c => (c?.mod?.path === mod.path && c.koWait ? { ...c, koWait: false, ko } : c)) })
   }
 
   const handleFolderContextMenu = (e: React.MouseEvent, folder: FolderRecord) => {
@@ -3915,7 +3934,7 @@ function App() {
           if (!parsed.length) throw new Error('The generated KO prompt could not be opened for installation.')
           setModsToInstall(parsed)
           setPanel('install', true)
-        }} />{/* repakxtra: KO Editor view */}
+        }} onReplace={(oldPath, path) => handleConfirmUpdate(true, false, { mod: mods.find(m => m.path === oldPath) ?? { path: oldPath }, newSourcePath: path })} />{/* repakxtra: KO Editor view */}
         <SoundsScreen alert={alert} blocked={gameRunning && !bypassGameRunningLock} onInstall={async path => {
           const parsed = await invoke<DroppedModParse[]>('parse_dropped_files', { paths: [path] })
           if (!parsed.length) throw new Error('The sound mod could not be opened for installation.')
@@ -4350,7 +4369,7 @@ function App() {
       />
 
       {
-        contextMenu && (
+        contextMenu && !contextMenu.koWait && ( /* repakxtra: koWait */
           <ContextMenu
             x={contextMenu.x}
             y={contextMenu.y}
@@ -4418,6 +4437,7 @@ function App() {
             onUpdateMod={() => contextMenu.mod && handleInitiateUpdate(contextMenu.mod)}
             onSendToVfxUpdater={() => contextMenu.mod && handleSendToVfxUpdater(contextMenu.mod)}
             onUpdateVfx={contextMenu.mod && canUpdateVfx(modDetails[contextMenu.mod.path], contextMenu.mod.path) ? (m => () => void updateVfxModInPlace(m, alert, loadMods))(contextMenu.mod) : undefined /* repakxtra */}
+            onOpenInKo={contextMenu.mod && contextMenu.ko && !(menuSelection.has(contextMenu.mod.path) && menuSelection.size > 1) ? (path => () => openInKoEditor(path))(contextMenu.mod.path) : undefined /* repakxtra */}
             onCheckVfx={contextMenu.mod && canUpdateVfx(modDetails[contextMenu.mod.path], contextMenu.mod.path) ? (m => () => void checkVfxModInPlace(m, alert, loadMods))(contextMenu.mod) : undefined /* repakxtra */}
             onShowInAssetExplorer={() => {
               if (!contextMenu.mod) return

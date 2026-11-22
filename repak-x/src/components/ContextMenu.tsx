@@ -43,6 +43,7 @@ type ContextMenuProps = {
   onSendToVfxUpdater?: (mod: ModRecord) => void
   onUpdateVfx?: () => void // repakxtra: a VFX mod, updated in place (custom/vfx/quick.ts)
   onCheckVfx?: () => void // repakxtra: Check for VFX update (custom/vfx/quick.ts)
+  onOpenInKo?: () => void // repakxtra: a KO prompt mod, its colors opened in the KO Editor (custom/ko/openMod.ts)
   onShowInAssetExplorer?: (mod: ModRecord) => void
   onExtractAssets?: (mod: ModRecord) => void
   allTags: string[]
@@ -53,7 +54,7 @@ type ContextMenuProps = {
   selectionCount?: number
 }
 
-const ContextMenu = ({ x, y, mod, folder, onClose, onAssignTag, onNewTag, onMoveTo, onMoveFolderTo, onCreateFolder, folders, onDelete, onToggle, onRename, onRenameFolder, onCheckConflicts, loadoutMenu, onUpdateMod, onSendToVfxUpdater, onUpdateVfx, onCheckVfx, onShowInAssetExplorer, onExtractAssets, allTags, onDeleteTag, gamePath, holdToDelete = true, selectionCount = 0 }: ContextMenuProps) => {
+const ContextMenu = ({ x, y, mod, folder, onClose, onAssignTag, onNewTag, onMoveTo, onMoveFolderTo, onCreateFolder, folders, onDelete, onToggle, onRename, onRenameFolder, onCheckConflicts, loadoutMenu, onUpdateMod, onSendToVfxUpdater, onUpdateVfx, onCheckVfx, onOpenInKo, onShowInAssetExplorer, onExtractAssets, allTags, onDeleteTag, gamePath, holdToDelete = true, selectionCount = 0 }: ContextMenuProps) => {
   const [isDeleting, setIsDeleting] = useState(false)
   const deleteTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const menuRef = useRef<HTMLDivElement | null>(null)
@@ -357,6 +358,7 @@ const ContextMenu = ({ x, y, mod, folder, onClose, onAssignTag, onNewTag, onMove
         Rename
       </div>
       {onUpdateVfx && <div className="context-menu-item" onClick={() => { onUpdateVfx(); onClose(); }}>Update mod</div>}{/* repakxtra */}
+      {onOpenInKo && <div className="context-menu-item" onClick={() => { onOpenInKo(); onClose(); }}>Open in KO Editor</div>}{/* repakxtra */}
       <div className="context-menu-separator" />
       {/* repakxtra: the three "put it somewhere" submenus side by side (Law of Proximity, Law of Similarity), loadouts first */}
       {loadoutMenu && (
