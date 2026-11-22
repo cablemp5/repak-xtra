@@ -35,18 +35,19 @@ export default function BisectPanel({ deps, mods }: { deps: KeepDeps; mods: Mod[
   }, [deps])
   // Esc closes it only where nothing is switched (before the start, and at the end with every mod back)
   const { ref, onKeyDown } = useDialogFocus(Boolean(view), view && view.step !== 'test' && !busy ? () => { cue('close'); setNote(null); setView(null) } : undefined)
-  const [hint, setHint] = useState<Hint | null>(null)
+  // undefined while the newest crash is read: Start waits for it, so the first split is the one the intro shows
+  const [hint, setHint] = useState<Hint | null | undefined>(null)
   const intro = view?.step === 'intro'
   useEffect(() => {
     if (!intro) return
     let live = true
-    setHint(null)
+    setHint(undefined)
     const onNow = suspects(mods).map(m => m.path)
     // the newest crash only: an older one is likely about something since fixed
     invoke<Listed[]>('xtra_recent_crashes').then(([c]) => c?.asset_path ? recentCrashes(mods.map(m => m.path), onNow, [c]) : []).then(([c]) => {
       const likely = likelyIn(onNow, onNow.filter(p => c?.held?.some(h => stem(h) === stem(p))))
-      if (live && c?.asset && likely.length) setHint({ time: c.time, asset: c.asset, likely })
-    }).catch(() => {})
+      if (live) setHint(c?.asset && likely.length ? { time: c.time, asset: c.asset, likely } : null)
+    }).catch(() => { if (live) setHint(null) })
     return () => { live = false }
   }, [intro])   // once per opening: the line does not change under the reader
   useEffect(() => {
@@ -70,7 +71,7 @@ export default function BisectPanel({ deps, mods }: { deps: KeepDeps; mods: Mod[
   }
   const close = () => { cue('close'); setNote(null); setView(null) }
   const title = view.step !== 'end' ? 'Find the crashing mod'
-    : view.end.kind === 'found' ? (view.end.culprits.length === 1 ? 'Turning this mod off stopped the crash' : 'Turning these mods off stopped the crash') : view.end.kind === 'not-mods' ? 'The crash also happens with all mods off' : 'Could not narrow it to one mod'
+    : view.end.kind === 'found' ? (view.end.culprits.length === 1 ? 'Turning this mod off stopped the crash' : 'Turning these mods off stopped the crash') : view.end.kind === 'not-mods' ? 'The crash also happens with all mods off' : view.end.kind === 'no-repro' ? 'The crash did not come back' : 'Could not narrow it to one mod'
 
   return (
     <div className="modal-overlay bs-overlay">
@@ -109,13 +110,13 @@ export default function BisectPanel({ deps, mods }: { deps: KeepDeps; mods: Mod[
               <div><dt>Launches, at most (with {plural(on.length, 'mod')} enabled)</dt><dd>{estimate(firstTest(on.map(m => m.path), hint?.likely))}</dd></div>
               {hint && <div><dt>When the crash report is right</dt><dd>{estimateLikely(hint.likely.length)}</dd></div>}
             </dl>
-            <p className="cs-note">That is when one mod causes the crash. Each other mod that crashes it adds up to {roundsLeft(on.length) + 1} launches.</p>
+            <p className="cs-note">That is when one mod causes the crash. Each other mod that crashes it adds up to {roundsLeft(on.length) + (hint ? 2 : 1)} launches.</p>
           </div>
           <div className="modal-footer cs-footer">
             {/* a hint, not a section: the way back is on every step, so it only needs saying once, quietly */}
             <span className="bs-hint">Restore your mods at any time</span>
             <button type="button" className="lo-text-btn" onClick={close}>Not now</button>
-            <button type="button" className="btn-primary" disabled={busy || on.length === 0}
+            <button type="button" className="btn-primary" disabled={busy || on.length === 0 || hint === undefined}
               onClick={() => work(async () => { cue('tap'); const r = await startBisect(d, mods, hint?.likely); if (r) cue('toggle'); return r && { step: 'test', run: r } })}>
               {busy ? 'Switching mods…' : 'Start testing'}
             </button>
@@ -184,7 +185,8 @@ function Test({ run, resumed, busy, deps, loader, answer, undo, stop }: {
     resumeBisect(deps, run).then(r => {
       if (!live) return
       if (r.refused) { setStuck(true); deps.alert.warning('Mods not set for this test', r.refused) }
-      else { setStuck(false); setFixed(r.changed); setReady(true) }
+      // files had to switch: a game closed while this waited ran other mods, so only a new launch counts
+      else { setStuck(false); setFixed(r.changed); setReady(true); if (r.changed) { setPlayed(false); setLaunched(false); since.current = null } }
     })
     return () => { live = false }
   }, [resumeTry])
@@ -196,7 +198,7 @@ function Test({ run, resumed, busy, deps, loader, answer, undo, stop }: {
       if (!live) return
       setRunning(r)
       // seen up to 1.5 s after it started: a few seconds back, so a crash at once still counts
-      if (r) { seen = true; setStarting(false); since.current ??= Date.now() / 1000 - 5 }
+      if (r) { seen = true; setStarting(false); since.current ??= Math.floor(Date.now() / 1000) - 5 }
       else if (seen) { seen = false; cue('ready'); setPlayed(true) }
     }
     void check()
@@ -225,13 +227,14 @@ function Test({ run, resumed, busy, deps, loader, answer, undo, stop }: {
     setPlayed(false)
     setLaunched(false)
     setStarting(true)
-    since.current = Date.now() / 1000
+    since.current = Math.floor(Date.now() / 1000) - 2   // whole seconds, as the crash report's time
     clearTimeout(unseen.current)
     try { await invoke('launch_game'); unseen.current = setTimeout(() => setLaunched(true), 20000) } catch (e) { setStarting(false); deps.alert.error('Game did not launch', String(e)) }
   }
   const offNow = testOff(run)
   const found = run.found ?? []
   const what = run.phase === 'baseline' ? `repakxtra turned off all ${plural(offNow.length, 'mod')} you had on, to check a mod is the cause.${loader ? ' The mod loader stays on.' : ''}`
+    : run.phase === 'reproduce' ? `Last check: repakxtra turned every mod back on${found.length ? ' except the ones found so far' : ''}. Your other mods played fine without this one, so if the game crashes now, it is the cause.`
     : run.phase === 'confirm' ? (found.length ? 'Last check: repakxtra turned every mod back on except this one and the ones found so far.' : 'Last check: repakxtra turned every mod back on except this one.')
     : `repakxtra turned ${run.start.length - offNow.length} of your mods on and ${offNow.length} off for this test. ${plural(run.candidates.length, 'suspect')} left.`
   const live = running || starting
@@ -240,7 +243,7 @@ function Test({ run, resumed, busy, deps, loader, answer, undo, stop }: {
   return <>
     <div className="modal-body cs-body bs-body">
       <p className="bs-lead">{resumed && !played && !launched && <span className="bs-resumed">Resuming your saved test. </span>}{what}</p>
-      {run.phase === 'confirm' && <div className="bs-mod"><span className="cs-name"><ModName name={nameKey(run.candidates[0])} /></span></div>}
+      {(run.phase === 'confirm' || run.phase === 'reproduce') && <div className="bs-mod"><span className="cs-name"><ModName name={nameKey(run.candidates[0])} /></span></div>}
       {found.length > 0 && (
         <p className="bs-found">{found.length === 1 ? <span><ModName name={nameKey(found[0])} /></span> : <span>{plural(found.length, 'mod')}</span>} {found.length === 1 ? 'crashes' : 'crash'} the game, but something else does too. {found.length === 1 ? 'It stays' : 'They stay'} off while repakxtra finds the rest.</p>
       )}
@@ -266,7 +269,7 @@ function Test({ run, resumed, busy, deps, loader, answer, undo, stop }: {
       {launched && !played && !running && <button type="button" className="bs-link" onClick={() => { setStarting(false); setPlayed(true) }}>The game closed before repakxtra saw it running</button>}
       {stuck && <button type="button" className="bs-link" onClick={() => { setStuck(false); setResumeTry(n => n + 1) }}>Check again</button>}
       {resumed && ready && !fixed && !launched && !played && !running && <button type="button" className="bs-link" onClick={() => setPlayed(true)}>I already played this test before repakxtra closed</button>}
-      {run.phase !== 'confirm' && (
+      {run.phase !== 'confirm' && run.phase !== 'reproduce' && (
         <details className="bs-off">
           <summary>Which mods are off</summary>
           <ul className="cs-list">{offNow.map(p => <li key={p}><span className="cs-name"><ModName name={nameKey(p)} /></span></li>)}</ul>
@@ -298,6 +301,10 @@ function End({ view, busy, close, loader, undo, turnOff }: {
         <p className="bs-lead">The game crashed with every mod off, so the crash also happens without these mods. They are back on. Verify the game files in your launcher, or update your graphics driver.</p>
         {/* never tested: every mod made for it needs it on, but an old loader crashes the game by itself */}
         {loader && <p className="cs-note">The mod loader stayed on in every test. If the game crashes without mods only since a game update, turn the loader off and launch once to rule it out.</p>}
+      </>}
+      {e.kind === 'no-repro' && <>
+        <p className="bs-lead">The game played fine with <strong><ModName name={nameKey(e.culprit)} /></strong> off, and with it back on too. The crash may not happen every time.</p>
+        <p className="cs-note">Every mod is back as it was. Test again and repeat the same thing each launch.</p>
       </>}
       {e.kind === 'unsure' && <>
         <p className="bs-lead">The game kept crashing with <strong><ModName name={nameKey(e.culprit)} /></strong> off, and every other mod tested fine. The crash may not happen every time, or it needs several mods at once.</p>

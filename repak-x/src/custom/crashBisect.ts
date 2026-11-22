@@ -1,9 +1,12 @@
-// repakxtra: Find the crashing mod (guided bisect). Three kinds of test, each one game launch:
+// repakxtra: Find the crashing mod (guided bisect). Four kinds of test, each one game launch:
 //   baseline  every mod off: a crash then means the cause is not one of these mods, and the test stops
 //   halve     the mods proven fine (`ok`) and half of the suspects on, everything else off: a crash keeps that half,
 //             no crash proves it fine and keeps the other half. When the newest crash report names a file some suspects
 //             replace (`likely`), those alone are the half turned off: when they are the cause, only they are left
 //   confirm   the starting setup with only the last suspect (and any found before) off: proves it before it is named
+//   reproduce the last suspect back on with every mod proven fine, when the setup without it already played fine but no
+//             test with it on has crashed yet (every answer so far was No crash): a mod is named only once a test with it
+//             on crashed. When the last suspect was on in the crash just answered, nothing is left to test: it is named
 // When the confirm test still crashes, another mod crashes the game too: the suspect stays off (`found`) and the search
 // goes on among the mods not yet proven fine, so two or more mods that each crash it are all named. Only mods proven
 // fine stay on during a search: a second crashing mod left on would make every test crash. The run is saved before any
@@ -14,7 +17,7 @@ import { isModLoader, nameKey } from './loadoutStore'
 import { MOD_LOADERS } from './edition'
 
 type Mod = { path: string; enabled?: boolean }
-export type Phase = 'baseline' | 'halve' | 'confirm'
+export type Phase = 'baseline' | 'halve' | 'confirm' | 'reproduce'
 /** `start`: the paths that were on at the start (stems match them after a switch). `off`: the suspects off in this test.
  *  `found`: mods that crash the game but are not the only cause, kept off in every later test. `tests`: answers so far.
  *  `prev`: the test before, for Undo last answer. */
@@ -24,6 +27,7 @@ export type Outcome =
   | { kind: 'found'; culprits: string[] }   // turning these off stopped the crash
   | { kind: 'not-mods' }                    // it crashed with every suspect off
   | { kind: 'unsure'; culprit: string }     // still crashed with every suspect but this one ruled out: an unsteady crash
+  | { kind: 'no-repro'; culprit: string }   // no crash with the last suspect back on either: the crash did not come back
 
 const KEY = 'repakxtra.bisect'
 export const OPEN_BISECT = 'repakxtra-crash-bisect'
@@ -49,7 +53,7 @@ const split = (c: string[], likely?: string[]) => {
 /** Worst-case halving tests to get from n suspects to one. */
 export const roundsLeft = (n: number) => (n <= 1 ? 0 : Math.ceil(Math.log2(n)))
 
-/** Worst-case tests to name one of n suspects: the halvings and the confirm test. */
+/** Worst-case tests to name one of n suspects: the halvings and the last test (confirm or reproduce). */
 const cost = (n: number) => roundsLeft(n) + 1
 /** The same from a halving test that turns `off` of `c` off, this test included. */
 const costSplit = (c: string[], off: number) => 1 + Math.max(cost(off), cost(c.length - off))
@@ -58,12 +62,12 @@ export const estimateLikely = (likely: number) => 2 + cost(likely)
 
 /** Tests in this run so far plus the ones still to come in the worst case (this one included). */
 export const estimate = (b: Bisect) => b.tests + (
-  b.phase === 'baseline' ? 1 + (b.candidates.length > 1 ? costSplit(b.candidates, split(b.candidates, b.likely).length) : 0)
+  b.phase === 'baseline' ? 1 + (b.candidates.length > 1 ? costSplit(b.candidates, split(b.candidates, b.likely).length) : cost(1))
   : b.phase === 'halve' ? costSplit(b.candidates, b.candidates.filter(p => b.off.includes(p)).length)
   : 1)
 
 /** The mods off in a test. Confirm: the suspect and the ones found. Otherwise: all but the proven fine and the suspects'
- *  half that is on. */
+ *  half that is on (reproduce: its `off` is empty, so only the ones found stay off). */
 export function testOff(b: Bisect) {
   if (b.phase === 'confirm') return [...b.candidates, ...(b.found ?? [])]
   const on = new Set([...(b.ok ?? []), ...b.candidates.filter(p => !b.off.includes(p))])
@@ -79,23 +83,34 @@ export function next(b: Bisect, crashed: boolean): Outcome {
   const ok = b.ok ?? []
   const run = (phase: Phase, candidates: string[], off: string[], f: string[], k: string[]): Outcome =>
     ({ kind: 'run', run: { start: b.start, candidates, off, phase, tests: b.tests + 1, found: f, ok: k, likely: b.likely, prev: b } })
-  // a search among `rest`: halving, or straight to the confirm test when one is left
-  const search = (rest: string[], f: string[], k: string[]) => rest.length > 1 ? run('halve', rest, split(rest, b.likely), f, k) : run('confirm', rest, rest, f, k)
-  if (b.phase === 'baseline') {
-    if (crashed) return { kind: 'not-mods' }
-    return b.candidates.length === 1 ? { kind: 'found', culprits: b.candidates } : search(b.candidates, found, ok)
+  // a search among `rest` (`hit`: they were on in the crash just answered): halving, or the last test when one is left.
+  // The setup with every other mod proven fine (or found, off) and that one off is the last no-crash test: the proven
+  // fine set only grows by a whole no-crash test. So confirm would repeat it: after a crash with it on it is named,
+  // else the reproduce test turns it back on to see the crash come back
+  const search = (rest: string[], f: string[], k: string[], hit: boolean): Outcome => {
+    if (rest.length > 1) return run('halve', rest, split(rest, b.likely), f, k)
+    const [x] = rest
+    if (!b.start.every(p => p === x || f.includes(p) || k.includes(p))) return run('confirm', rest, rest, f, k)
+    return hit ? { kind: 'found', culprits: [...f, x] } : run('reproduce', rest, [], f, k)
   }
+  if (b.phase === 'baseline') return crashed ? { kind: 'not-mods' } : search(b.candidates, found, ok, false)
   if (b.phase === 'confirm') {
     const [c] = b.candidates
     if (!crashed) return { kind: 'found', culprits: [...found, c] }
     // it crashed with this one off too: another mod crashes it. This one stays off while the rest are searched.
     const rest = b.start.filter(p => p !== c && !found.includes(p) && !ok.includes(p))
-    return rest.length ? search(rest, [...found, c], ok) : { kind: 'unsure', culprit: c }
+    return rest.length ? search(rest, [...found, c], ok, true) : { kind: 'unsure', culprit: c }
+  }
+  if (b.phase === 'reproduce') {
+    const [x] = b.candidates
+    if (crashed) return { kind: 'found', culprits: [...found, x] }
+    // the setup with the ones found off played fine before too: they stand, this one is cleared
+    return found.length ? { kind: 'found', culprits: found } : { kind: 'no-repro', culprit: x }
   }
   const off = new Set(b.off)
   const onHalf = b.candidates.filter(p => !off.has(p))
   // no crash: every mod that was on is fine
-  return crashed ? search(onHalf, found, ok) : search(b.candidates.filter(p => off.has(p)), found, [...ok, ...onHalf])
+  return crashed ? search(onHalf, found, ok, true) : search(b.candidates.filter(p => off.has(p)), found, [...ok, ...onHalf], false)
 }
 
 export const readBisect = (): Bisect | null => {
@@ -263,6 +278,9 @@ if (import.meta.env.DEV) {
     console.assert(r?.o.kind === 'found' && r.o.culprits.join() === culprit && r.tests <= r.est && r.tests <= 7, `finds ${culprit} within 7 tests`, r)
   }
   console.assert(play(() => true)?.o.kind === 'not-mods', 'a crash with every mod off blames no mod')
+  // the crash report points at one of 30 mods: right, 3 tests
+  const hit1 = play(on => on('m7.pak'), mods, ['m7.pak'])
+  console.assert(hit1?.o.kind === 'found' && hit1.o.culprits.join() === 'm7.pak' && hit1.tests === 3 && hit1.tests <= estimateLikely(1), 'a right one-mod crash report finds it in 3 tests', hit1)
   // the crash report points at two of 30 mods: right, 4 tests instead of 7, wrong, at most 8
   const likely = ['m7.pak', 'm21.pak']
   const hit = play(on => on('m21.pak'), mods, likely)
@@ -284,7 +302,23 @@ if (import.meta.env.DEV) {
     const r = play(on => bad.some(on))?.o
     console.assert(r?.kind === 'found' && [...r.culprits].sort().join() === [...bad].sort().join(), `names every mod that crashes it alone: ${bad}`, r)
   }
-  console.assert(play(on => on('m0.pak'), ['m0.pak'])?.o.kind === 'found', 'one mod on: the first test proves it')
+  const one = play(on => on('m0.pak'), ['m0.pak'])
+  console.assert(one?.o.kind === 'found' && one.tests === 2 && one.est === 2, 'one mod on: all off, then back on', one)
+  // a crash that never comes back names no mod (every answer No crash), with or without a crash report hint
+  for (const [start, hint] of [[mods, undefined], [mods.slice(0, 4), ['m2.pak']], [['m0.pak'], undefined]] as const) {
+    const r = play(() => false, [...start], hint && [...hint])
+    console.assert(r?.o.kind === 'no-repro' && r.tests <= r.est, 'a crash that never comes back names no mod', r)
+  }
+  // no test repeats the setup of the test before it
+  {
+    let b = firstTest(mods, ['m7.pak'])
+    for (let i = 0; i < 40; i++) {
+      const o = next(b, ['m7.pak', 'm12.pak'].some(p => !testOff(b).includes(p)))
+      if (o.kind !== 'run') break
+      console.assert(testOff(o.run).join() !== testOff(b).join(), 'a test never repeats the one before', b, o.run)
+      b = o.run
+    }
+  }
   console.assert(duplicates([{ path: 'a.bak_repak', enabled: false }, { path: 'a.pak_disabled', enabled: false }, { path: 'b.pak', enabled: true }], ['a.pak', 'b.pak']).join() === 'a',
     'an on copy and an off copy of one mod are refused')
   console.assert(duplicates([{ path: 'a.pak', enabled: true }, { path: 'b.pak_disabled', enabled: false }], ['a.pak']).length === 0, 'one file per mod is fine')
