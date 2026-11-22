@@ -6,11 +6,12 @@ import { invoke } from '@tauri-apps/api/core'
 import { setView } from '../loadoutStore'
 
 const known = new Map<string, boolean>()
+let generation = 0 // a check still running when the cache clears does not write its old answer back
 /** The mods folder was read again (an install, Replace file, a rename): every mod is checked again on its next right-click. */
-export const forgetKoMods = () => known.clear()
+export const forgetKoMods = () => { known.clear(); generation++ }
 /** Whether the mod is a KO prompt mod, or undefined when not read yet. */
 export const knownKoMod = (path: string) => known.get(path)
-export const checkKoMod = (path: string) => invoke<boolean>('xtra_ko_is_mod', { modPath: path }).catch(() => false).then(ko => { known.set(path, ko); return ko })
+export const checkKoMod = (path: string) => { const g = generation; return invoke<boolean>('xtra_ko_is_mod', { modPath: path }).catch(() => false).then(ko => { if (g === generation) known.set(path, ko); return ko }) }
 
 export type KoOpen = { path: string; name: string; folder?: string | null }
 let request: KoOpen | null = null
