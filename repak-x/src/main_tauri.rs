@@ -3060,18 +3060,29 @@ async fn install_mods(
             "  Matching installable '{}' (repak={})...",
             installable.mod_name, installable.repak
         ));
+        // repakxtra: a mod unpacked from a single-pak archive: that archive's only row (named after the archive, so the
+        // lookups below miss it). Its name, folder, and switches apply, but repak and legacy stay as detected from the
+        // pak itself (as for every archive-expanded mod, see below)
+        let own_row = (installable.source != installable.mod_path).then(|| {
+            let mut rows = mods.iter().filter(|m| m.enabled && PathBuf::from(&m.path) == installable.source);
+            rows.next().filter(|_| rows.next().is_none())
+        }).flatten();
+        if let Some(row) = own_row {
+            if let Some(custom) = row.custom_name.as_ref().filter(|c| !c.is_empty()) {
+                installable.mod_name = custom.clone();
+            }
+            installable.install_subfolder = resolve_subfolder(&row.install_subfolder);
+            installable.obfuscate = row.obfuscate;
+            installable.hybrid = row.hybrid;
+            installable.parallel_processing = parallel_processing;
+            continue;
+        }
         let by_name = user_settings.get(&installable.mod_name).copied();
         let matched = by_name.or_else(|| {
             mods.iter().find(|m| {
                 let m_path = PathBuf::from(&m.path);
                 m_path == installable.mod_path
             })
-        })
-        // repakxtra: a single-pak archive's row (named after the archive): the only row its archive has. Without it the
-        // name typed on the card, the folder and the switches were dropped
-        .or_else(|| {
-            let mut rows = mods.iter().filter(|m| m.enabled && PathBuf::from(&m.path) == installable.source);
-            rows.next().filter(|_| rows.next().is_none())
         });
 
         if let Some(mod_to_install) = matched {

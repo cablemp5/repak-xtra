@@ -118,12 +118,13 @@ type Installed = { path?: string; customName?: string; mod_name?: string; loadou
  *  and the path that was dropped. */
 export type SameMod = { name: string; path: string; source?: string }
 const samePath = (a = '', b = '') => a.replace(/\\/g, '/').toLowerCase() === b.replace(/\\/g, '/').toLowerCase()
-/** The left-out mod an install card row stands for: by the name it came as (the one typed, or its own), or, for the
- *  only row of its dropped path (a single-pak archive's row is named after the archive, the mod after its pak), by that
- *  path. Pure. */
-export const sameRow = (same: SameMod[], rows: Installed[], row: Installed) =>
-  same.find(s => s.name === (row.customName || row.mod_name || ''))
-  ?? (rows.filter(r => samePath(r.path, row.path)).length === 1 ? same.find(s => samePath(s.source, row.path)) : undefined)
+/** The left-out mod an install card row stands for: one dropped from the row's own path, and for a path with several rows
+ *  (an archive of several paks) the one with the row's name (the one typed, or its own). A single-pak archive's only row
+ *  is named after the archive, the mod after its pak. Pure. */
+export const sameRow = (same: SameMod[], rows: Installed[], row: Installed) => {
+  const only = rows.filter(r => samePath(r.path, row.path)).length === 1
+  return same.find(s => samePath(s.source, row.path) && (only || s.name === (row.customName || row.mod_name || '')))
+}
 type Landed = { keys: string[]; loadouts?: string[] }
 
 /** One spelling per name for matching: the backend keeps a name as typed ("mesh+matSwap", spaces) where
@@ -134,6 +135,7 @@ export const looseKey = (key: string) => key.toLowerCase().replace(/[^a-z0-9]/g,
  *  installs its paks under their own names, not the archive's). A row that is one pak of a multi-pak archive (its
  *  mod_name is that pak's) keeps only its own pak: the archive's others may have been left out. */
 const landedKeys = (m: Installed, paks: string[] = []) => {
+  if (m.customName) return [installedKey(m)] // installed under the name typed on the card, never its paks' own names
   const own = paks.filter(p => looseKey(p) === looseKey(m.mod_name ?? ''))
   return [...new Set([installedKey(m), ...(own.length ? own : paks).map(p => installedKey({ mod_name: p }))])]
 }
@@ -230,6 +232,7 @@ if (import.meta.env.DEV) {
   console.assert(!kept.includes('C') && resolveLanded(kept, new Set(['|A', '|B', '|C']), []).join() === '|A,|B', 'a mod left out of an archive stays out of the loadout')
   // already installed: a renamed row by its typed name, a single-pak archive's row by its path, never a multi-pak archive's other rows
   const same: SameMod[] = [{ name: 'Mine', path: 'm/Mine_9999999_P.pak', source: 'D:/x.pak' }, { name: 'Inner_P', path: 'm/Inner_P.pak', source: 'D:\\dl\\One.zip' }, { name: 'A', path: 'm/A.pak', source: 'D:/two.zip' }]
-  const rows = [{ path: 'D:/x.pak', mod_name: 'x', customName: 'Mine' }, { path: 'D:/dl/one.zip', mod_name: 'One' }, { path: 'D:/two.zip', mod_name: 'A' }, { path: 'D:/two.zip', mod_name: 'B' }]
-  console.assert(rows.map(r => sameRow(same, rows, r)?.path ?? '-').join() === 'm/Mine_9999999_P.pak,m/Inner_P.pak,m/A.pak,-', 'rows left out as already installed', rows.map(r => sameRow(same, rows, r)?.path))
+  const rows = [{ path: 'D:/x.pak', mod_name: 'x', customName: 'Mine' }, { path: 'D:/dl/one.zip', mod_name: 'One' }, { path: 'D:/two.zip', mod_name: 'A' }, { path: 'D:/two.zip', mod_name: 'B' }, { path: 'D:/loose/Inner_P.pak', mod_name: 'Inner_P' }]
+  console.assert(rows.map(r => sameRow(same, rows, r)?.path ?? '-').join() === 'm/Mine_9999999_P.pak,m/Inner_P.pak,m/A.pak,-,-', 'rows left out as already installed', rows.map(r => sameRow(same, rows, r)?.path))
+  console.assert(landedKeys({ customName: 'Renamed', mod_name: 'One' }, ['Inner_P']).join() === 'Renamed', 'a renamed row lands only under its new name')
 }
