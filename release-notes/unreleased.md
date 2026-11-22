@@ -12,3 +12,7 @@
 - Added crash report hints to Find the crashing mod: the newest crash's mods are tested first, and each launch says whether the game wrote a crash report
 - Fixed Find the crashing mod naming a mod when the crash never came back: the last test turns it back on first
 - Fixed Find the crashing mod repeating a launch it had just made, and its launch count growing during a test
+- Added a Waiting for game mappings group to the Mod Updater and a Waiting for mappings badge in the Library, so mods that need the game's new mappings are kept out of Update and never counted as failed
+- Removed the Mod Updater's candidate review: Best effort installs an update that passes its checks and marks it Partially updated when part could not be rebuilt, and Strict lists anything less under Failed
+- Fixed a failed update renaming the mod _UNSUPPORTED and turning it off: the mod keeps its name, loadouts, and on or off state, and its row offers Retry in Best effort, Try again, or the mod's page
+- Fixed Needs update coming back after a failed or partial update, until the game, the mod, or the mappings change
