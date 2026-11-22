@@ -176,7 +176,7 @@ pub fn save_character_data(skins: &[CharacterSkin]) -> Result<(), String> {
     let path = character_data_path();
     // repakxtra: the list the file already holds is not saved again (no backup either), so a daily check that finds
     // nothing new leaves the file, and the mod details cache stamped from it, as they are
-    if crate::xtra_details_cache::character_data_same(&path, skins) {
+    if crate::xtra_details_cache::same_list(&path, skins) {
         return Ok(());
     }
 
@@ -239,6 +239,7 @@ pub(crate) fn init_test_cache() {
 }
 
 fn cache_character_data(skins: Vec<CharacterSkin>) {
+    crate::xtra_details_cache::character_data_loaded(&skins); // repakxtra: the mod details cache is stamped from this list
     let mut cache = CHARACTER_CACHE.write().unwrap();
     cache.by_skin_id.clear();
     cache.character_ids.clear();

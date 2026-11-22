@@ -1894,7 +1894,8 @@ function App() {
 
       // Start the file watcher
       await invoke('start_file_watcher')
-      return (await loading).length
+      const first = await loading
+      return (shownList.current ?? first).length // repakxtra: the list on screen, when the folder changed during the reads
     } catch (error) {
       uiLog.error('Startup', `Startup failed partway through: ${error}`)
       return 0
@@ -1932,6 +1933,7 @@ function App() {
 
       // After loading mods, refresh details for each (with progress tracking)
       await preloadModDetails(modList)
+      if (mine !== loadModsSeq.current) return modList as ModRecord[] // repakxtra: a newer load took over: its count and status stand
 
       if (enableDrp) {
         invoke('discord_set_managing_mods', { modCount: modList.length }).catch(console.warn);
@@ -1948,8 +1950,10 @@ function App() {
       alert.error('Could not load mods', String(error)) // repakxtra: a toast, not only the log bar's status line
       return []
     } finally {
-      setIsModsLoading(false)
-      setModLoadingProgress(0)
+      if (mine === loadModsSeq.current) { // repakxtra: not while a newer load is still at work
+        setIsModsLoading(false)
+        setModLoadingProgress(0)
+      }
     }
   }
 

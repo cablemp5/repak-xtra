@@ -6,57 +6,64 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 
 static DIRTY: AtomicBool = AtomicBool::new(false);
-/// New character data was saved after this launch's stamp was taken (`character_data_same`).
+/// The hash of the character data the app loaded first (`character_data_loaded`), and whether it loaded a different
+/// list since.
+static LOADED: std::sync::OnceLock<String> = std::sync::OnceLock::new();
 static CHANGED: AtomicBool = AtomicBool::new(false);
-static STAMP: std::sync::OnceLock<String> = std::sync::OnceLock::new();
 
 fn file() -> PathBuf {
     dirs::config_dir().unwrap_or_else(|| PathBuf::from(".")).join("Repak-X").join("repakxtra-details-cache.json")
 }
 
-/// A change to the code that works out details (REPAKXTRA_DETAILS_LOGIC, a fingerprint of it from build_xtra.rs) or a
-/// character data update can change what details say, so either one starts the cache over. Not the exe's date: that
-/// started it over on every app update, and between a dev and a stable copy sharing it. Taken once at launch (`load`),
-/// and a save after the character data changed gets a stamp of its own (`save_stamp`).
+/// A change to the code that works out details (REPAKXTRA_DETAILS_LOGIC, a fingerprint of it from build_xtra.rs) or
+/// other character data can change what details say, so either one starts the cache over. Not the exe's date: that
+/// started it over on every app update, and between a dev and a stable copy sharing it. Not the character data file's
+/// change time either: the daily check used to save the same list again, and the new time alone made the next launch
+/// read every pak in the library.
 fn stamp() -> String {
-    STAMP.get_or_init(|| stamp_of(env!("REPAKXTRA_DETAILS_LOGIC"), std::fs::read(crate::character_data::character_data_path()).ok().as_deref())).clone()
+    stamp_of(env!("REPAKXTRA_DETAILS_LOGIC"), LOADED.get().map(String::as_str))
 }
 
-/// Pure: the stamp a save writes. Once new character data was saved while the app runs, the cache holds entries from
-/// before and after it, so every later save gets a stamp no launch has and the next launch starts over, also when the
-/// file is back to its old bytes by then.
+/// Pure.
+fn stamp_of(logic: &str, character_data: Option<&str>) -> String {
+    format!("{logic}:{}", character_data.unwrap_or("none"))
+}
+
+/// Pure: the stamp a save writes. Once the app loaded other character data than at launch, the cache holds entries
+/// from before and after it, so every later save gets a stamp no launch has and the next launch starts over, also
+/// when the old list is back by then.
 fn save_stamp(launch: &str, changed: bool) -> String {
     if changed { format!("{launch}+changed") } else { launch.to_string() }
 }
 
-/// The hook in character_data.rs's save: true when the file already holds this list, so the save leaves it alone.
-/// A save that goes on after the launch's stamp was taken is new character data for a running app (`save_stamp`). One
-/// before it (the bundled list on a first run) is what the stamp then describes.
-pub fn character_data_same<T: Serialize + DeserializeOwned>(path: &Path, items: &[T]) -> bool {
-    let same = same_list(path, items);
-    if !same && STAMP.get().is_some() {
+/// The hook where character_data.rs fills the list details are worked out from: at launch (before `load`), after an
+/// update, and on a manual refresh. The first list is the launch's stamp, and a different one later marks every save
+/// from then on (`save_stamp`).
+pub fn character_data_loaded<T: Serialize>(skins: &[T]) {
+    let now = list_hash(skins);
+    if *LOADED.get_or_init(|| now.clone()) != now {
         CHANGED.store(true, Ordering::Relaxed);
     }
-    same
 }
 
-/// Pure. The character data by its bytes, not its change time: the daily check used to save the same list again, and
-/// the new change time alone made the next launch read every pak in the library.
-fn stamp_of(logic: &str, character_data: Option<&[u8]>) -> String {
+/// A list's items as JSON lines in sorted order, so two lists holding the same items in any order compare the same.
+fn sorted_lines<T: Serialize>(items: &[T]) -> Option<Vec<String>> {
+    let mut lines = items.iter().map(serde_json::to_string).collect::<Result<Vec<String>, _>>().ok()?;
+    lines.sort();
+    Some(lines)
+}
+
+/// Pure: the same for the same items in any order ("unreadable" for a list that cannot be written as JSON).
+fn list_hash<T: Serialize>(items: &[T]) -> String {
     use sha2::{Digest, Sha256};
-    format!("{logic}:{}", character_data.map_or_else(|| "none".to_string(), |b| format!("{:x}", Sha256::digest(b))))
+    sorted_lines(items).map_or_else(|| "unreadable".to_string(), |lines| format!("{:x}", Sha256::digest(lines.join("\n"))))
 }
 
 /// True when the JSON list saved at `path` holds exactly these items, in any order: saving them again would change
 /// nothing but the file's change time (and, for character data, leave one more backup file a day).
-fn same_list<T: Serialize + DeserializeOwned>(path: &Path, items: &[T]) -> bool {
-    let sorted = |items: &[T]| {
-        let mut lines = items.iter().map(serde_json::to_string).collect::<Result<Vec<String>, _>>().ok()?;
-        lines.sort();
-        Some(lines)
-    };
-    let saved = std::fs::read(path).ok().and_then(|b| serde_json::from_slice::<Vec<T>>(&b).ok()).and_then(|saved| sorted(&saved));
-    saved.is_some() && saved == sorted(items)
+pub fn same_list<T: Serialize + DeserializeOwned>(path: &Path, items: &[T]) -> bool {
+    let saved = std::fs::read(path).ok().and_then(|b| serde_json::from_slice::<Vec<T>>(&b).ok()).and_then(|saved| sorted_lines(&saved));
+    saved.is_some() && saved == sorted_lines(items)
 }
 
 #[derive(Serialize, serde::Deserialize)]
@@ -67,8 +74,7 @@ struct Saved<M> {
 
 /// The saved entries of mods that are still there (an empty map when the build or character data changed).
 pub fn load<T: DeserializeOwned>() -> HashMap<PathBuf, T> {
-    let stamp = stamp(); // at launch also when no cache is saved yet: a first save must not take a later update's stamp
-    let mut entries = std::fs::read(file()).map(|b| parse(&b, &stamp)).unwrap_or_default();
+    let mut entries = std::fs::read(file()).map(|b| parse(&b, &stamp())).unwrap_or_default();
     entries.retain(|p, _| p.exists());
     entries
 }
@@ -115,15 +121,17 @@ mod tests {
     }
 
     #[test]
-    fn the_stamp_follows_the_character_data_bytes_and_the_details_logic() {
-        let a = stamp_of("1", Some(b"[1]"));
-        assert_eq!(a, stamp_of("1", Some(b"[1]")), "the same bytes, whatever the file's change time");
-        assert_ne!(a, stamp_of("1", Some(b"[1,2]")), "new character data starts over");
-        assert_ne!(a, stamp_of("2", Some(b"[1]")), "new details logic starts over");
+    fn the_stamp_follows_the_character_data_and_the_details_logic() {
+        let (one, other) = (list_hash(&["a", "b"]), list_hash(&["a", "c"]));
+        assert_eq!(one, list_hash(&["b", "a"]), "the same list in any order, whatever the file's change time or layout");
+        assert_ne!(one, other);
+        let a = stamp_of("1", Some(&one));
+        assert_ne!(a, stamp_of("1", Some(&other)), "other character data starts over");
+        assert_ne!(a, stamp_of("2", Some(&one)), "new details logic starts over");
         assert_ne!(a, stamp_of("1", None));
         assert_eq!(save_stamp(&a, false), a, "character data as at launch: the next launch keeps the cache");
         let mixed = save_stamp(&a, true);
-        assert!(mixed != a && mixed != stamp_of("1", Some(b"[1,2]")), "changed while running: no launch has this stamp, whichever bytes it finds");
+        assert!(mixed != a && mixed != stamp_of("1", Some(&other)), "changed while running: no launch has this stamp, whichever list it loads");
     }
 
     #[test]
