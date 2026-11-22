@@ -504,7 +504,8 @@ export function VfxUpdaterPanel() {
         const utocs = new Map(list.map(m => [norm(m.path), norm(m.utoc)]))
         setStale(new Map(verdicts.filter(v => v.kind === 'vfx' && v.staleNiagara && utocs.has(norm(v.path))).map(v => [utocs.get(norm(v.path))!, v.staleNiagara!])))
         // a May crash or Safety unknown mod waits too when an update found it needs mappings (its badge stays)
-        const nowWaits = new Map(verdicts.filter(v => v.kind !== 'broken' && v.usmapWait && utocs.has(norm(v.path))).map(v => [utocs.get(norm(v.path))!, v.usmapWait!]))
+        // a check that could not run (the game is open) keeps the waits from before: never an empty Waiting group
+        const nowWaits = failed ? waitsRef.current : new Map(verdicts.filter(v => v.kind !== 'broken' && v.usmapWait && utocs.has(norm(v.path))).map(v => [utocs.get(norm(v.path))!, v.usmapWait!]))
         // mods the new mappings let through move to Needs an update, ticked like the rest there
         if (seeded.current) pick(list.filter(m => waitsRef.current.has(norm(m.utoc)) && !nowWaits.has(norm(m.utoc)) && n.has(norm(m.path))).map(m => norm(m.utoc)), true)
         setWaits(nowWaits)

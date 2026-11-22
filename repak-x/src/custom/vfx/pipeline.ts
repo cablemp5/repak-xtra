@@ -766,8 +766,8 @@ async function rebuild(o: FixOptions): Promise<VfxReport> {
         ? { modPath: o.modPath, status: failed ? 'failed' : 'waiting', error: report.error ?? null, next: failed ? failedNext(report) : null, usmap: o.usmapPath, game: buildAt || null }
         : { modPath: o.modPath, status: null, error: null, next: null, usmap: null, game: null }).then(() => { report.kept = failed || report.status === 'mappings' }, e => log(`Could not save how the update ended: ${e}`, 'warning'))
     }
-    // A failed or cancelled run is the updater falling short, not news about the mod: it stays exactly as it was, flag and
-    // all. Only a run that proved the original crashes the game (every file matches the game, but in the old layout) takes
+    // A failed or cancelled run leaves the mod's files exactly as they were (a failure only clears Needs update, through
+    // its kept outcome above). Only a run that proved the original crashes the game (every file matches the game, but in the old layout) takes
     // it out, as Safety says: off, never deleted, and its Needs update flag stays so the Library still says why
     if (report.status === 'nothing' && report.counts.relaid > 0 && o.safeOff !== false && !o.outputDir) {
       const out = await retireUnsafe(o.modPath, report.error ?? 'It was made for an older game build and can crash it.')
