@@ -38,10 +38,10 @@ export const halve = (c: string[]): [on: string[], off: string[]] => {
   return [c.slice(0, n), c.slice(n)]
 }
 
-/** The `likely` mods among `c`, when they are at most half of it (more would test no faster than halves). */
+/** The `likely` mods among `c`, when testing them first finds a cause among them in fewer tests than halving `c`. */
 export const likelyIn = (c: string[], likely: string[] = []) => {
   const l = c.filter(p => likely.includes(p))
-  return l.length * 2 <= c.length ? l : []
+  return l.length && roundsLeft(l.length) + 1 < roundsLeft(c.length) ? l : []
 }
 
 /** The part that turns off in a halving test: the likely mods when there are any, else the second half. */
@@ -53,17 +53,21 @@ const split = (c: string[], likely?: string[]) => {
 /** Worst-case halving tests to get from n suspects to one. */
 export const roundsLeft = (n: number) => (n <= 1 ? 0 : Math.ceil(Math.log2(n)))
 
-/** Worst-case tests to name one of n suspects: the halvings and the last test (confirm or reproduce). */
+/** Worst-case tests to name one of n suspects by halving: the halvings and the last test (confirm or reproduce). */
 const cost = (n: number) => roundsLeft(n) + 1
-/** The same from a halving test that turns `off` of `c` off, this test included. */
-const costSplit = (c: string[], off: number) => 1 + Math.max(cost(off), cost(c.length - off))
+/** The same for these suspects, splitting them the way the search will (the likely ones first where that is faster). */
+const worst = (c: string[], likely?: string[]): number => {
+  if (c.length <= 1) return 1
+  const off = new Set(split(c, likely))
+  return 1 + Math.max(worst(c.filter(p => off.has(p)), likely), worst(c.filter(p => !off.has(p)), likely))
+}
 /** Worst-case tests when the `likely` mods (this many) hold the cause: the first test, theirs, then the search among them. */
 export const estimateLikely = (likely: number) => 2 + cost(likely)
 
 /** Tests in this run so far plus the ones still to come in the worst case (this one included). */
 export const estimate = (b: Bisect) => b.tests + (
-  b.phase === 'baseline' ? 1 + (b.candidates.length > 1 ? costSplit(b.candidates, split(b.candidates, b.likely).length) : cost(1))
-  : b.phase === 'halve' ? costSplit(b.candidates, b.candidates.filter(p => b.off.includes(p)).length)
+  b.phase === 'baseline' ? 1 + worst(b.candidates, b.likely)
+  : b.phase === 'halve' ? 1 + Math.max(worst(b.candidates.filter(p => b.off.includes(p)), b.likely), worst(b.candidates.filter(p => !b.off.includes(p)), b.likely))
   : 1)
 
 /** The mods off in a test. Confirm: the suspect and the ones found. Otherwise: all but the proven fine and the suspects'
@@ -247,6 +251,11 @@ export const returnTo = serial(async (d: KeepDeps, from: Bisect | null, to: Bise
   return goTo(d, from, to)
 })
 
+/** When the last test ended (ms): App keeps a crash toast quiet for 30 s after, as the test's own crash can be found
+ *  by the game poll only after the answer put every mod back. */
+let ended = 0
+export const testRecent = () => readBisect() !== null || Date.now() - ended < 30_000
+
 /** Every start mod on again (mods off at the start were never touched). The run stays saved until this works. */
 export const restoreBisect = serial((d: KeepDeps, b: Bisect) => restore(d, b))
 async function restore(d: KeepDeps, b: Bisect) {
@@ -254,6 +263,7 @@ async function restore(d: KeepDeps, b: Bisect) {
   const refused = await apply(d, b, [], false)
   if (refused) { d.alert.warning('Mods not restored yet', `${refused} The test stays open so you can try again.`); return false }
   save(null)
+  ended = Date.now()
   return true
 }
 
@@ -293,7 +303,19 @@ if (import.meta.env.DEV) {
     const r = play(on => bad.some(on), mods, likely)?.o
     console.assert(r?.kind === 'found' && [...r.culprits].sort().join() === [...bad].sort().join(), `with a crash report hint, names every mod that crashes it alone: ${bad}`, r)
   }
-  console.assert(likelyIn(['a', 'b', 'c'], ['a', 'b']).length === 0 && likelyIn(['a', 'b', 'c', 'd'], ['a', 'b']).join() === 'a,b', 'likely mods lead only when they are at most half')
+  console.assert(likelyIn(['a', 'b', 'c', 'd'], ['a', 'b']).length === 0 && likelyIn(['a', 'b', 'c', 'd'], ['a']).join() === 'a'
+    && likelyIn(mods, mods.slice(0, 8)).length === 8 && likelyIn(mods, mods.slice(0, 9)).length === 0, 'likely mods lead only when that is faster when they are right')
+  // the progress total never grows while the first crashing mod is looked for, with any hint size
+  for (const n of [1, 2, 5, 8, 9, 15]) for (const culprit of ['m0.pak', 'm14.pak', 'm29.pak']) {
+    let b = firstTest(mods, mods.slice(0, n))
+    const top = estimate(b)
+    for (let i = 0; i < 40; i++) {
+      const o = next(b, !testOff(b).includes(culprit))
+      if (o.kind !== 'run') { console.assert(b.tests + 1 <= top, 'never more tests than the first estimate', n, culprit); break }
+      console.assert(estimate(o.run) <= top, 'the total never grows', n, culprit, o.run)
+      b = o.run
+    }
+  }
   // two mods that only crash together: either one is a true answer (turning it off stops the crash)
   const pair = play(on => on('m3.pak') && on('m20.pak'))?.o
   console.assert(pair?.kind === 'found' && pair.culprits.length === 1 && ['m3.pak', 'm20.pak'].includes(pair.culprits[0]), 'two mods crashing together: names one that stops it', pair)

@@ -166,7 +166,7 @@ import { keepThisOne, setModsBlocked } from './custom/keepOne' // repakxtra: Kee
 import { NEXUS_TYPE, recordSourceAs, recordSources, renameSource, sourceOf, useNexusScan, useNexusSources } from './custom/nexusSource' // repakxtra: Nexus source
 import { stageOffFiles } from './custom/offFiles' // repakxtra: .pak.off files
 import CrashSuspects, { previousCrashes, withSuspects } from './custom/CrashSuspects' // repakxtra: crash suspects
-import { readBisect } from './custom/crashBisect' // repakxtra: a crash test shows its own crash note
+import { testRecent } from './custom/crashBisect' // repakxtra: a crash test shows its own crash note
 import { revealBuiltin, toggleBuiltin, useBuiltins, watchBuiltins } from './custom/BuiltinMods' // repakxtra: built-in mods
 import { isBuiltin, useBuiltinRows } from './custom/builtinRows'
 
@@ -1574,7 +1574,7 @@ function App() {
     // Listen for game crash notifications
     const unlistenCrash = listen('game_crash_detected', (event: any) => {
       const payload = event.payload
-      if (readBisect()) return // repakxtra: during Find the crashing mod the test itself asks whether it crashed
+      if (testRecent()) return // repakxtra: during Find the crashing mod (and just after) the test itself asks whether it crashed
 
       // Show persistent error toast for crashes
       alert.crash(payload.title, payload.description, {
