@@ -93,6 +93,7 @@ function Editor({ onInstall, onReplace, alert, blocked, shown }: KoEditorProps &
   }, [])
   const [step, setStep] = useState<KoStep | null>(null)
   const [taken, setTaken] = useState<{ name: string; path: string } | null>(null) // a mod already installed under the name: Install asks before replacing it
+  useEffect(() => setTaken(null), [heroId]) // another hero: its question was about the last one's mod
 
   const hero = heroes?.find(h => h.id === heroId) ?? null
   // one bar from the editor starting to the first hero's prompt: starting fills the first 30%, the hero the rest
