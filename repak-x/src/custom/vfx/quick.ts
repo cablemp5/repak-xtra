@@ -121,6 +121,8 @@ function resultToast(r: VfxReport, name: string, alert: Alert, path: string) {
   } else if (r.status === 'mappings') {
     alert.showAlert({ color: 'default', duration: 0, title: `${name} is waiting for game mappings`, description: 'Mappings usually arrive within 24 hours of a game update. The mod was not changed.',
       action: { label: 'Open Mod Updater', onClick: () => { void fixInVfxWindow([path], false) } } })
+  } else if (r.status === 'nothing' && r.offError) {
+    alert.showAlert({ color: 'warning', duration: 0, title: `${name} could not be turned off`, description: `${r.error ?? ''} Safety could not turn it off (${r.offError.replace(/[.!]?\s*$/, '')}), so it is still on.` })
   } else if (r.status === 'nothing') {
     alert.showAlert({ color: r.turnedOff ? 'warning' : 'default', duration: r.turnedOff ? 0 : 6000, title: r.turnedOff ? `${name} was turned off` : `${name} needs no update`,
       description: `${r.error ?? ''}${r.turnedOff ? ' It is off now, so it cannot crash the game.' : ''}` })

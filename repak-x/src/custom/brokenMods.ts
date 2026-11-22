@@ -205,7 +205,7 @@ export function useBrokenWatch(mods: { path: string; modified_date?: number; fil
       })
       // new mappings change which mods wait for them (Waiting for mappings): the badges are read again
       .then(() => (live ? invoke<{ updated?: boolean }>('vfx_check_usmap_update', { force: false }).catch(() => null) : null))
-      .then(u => (live && u?.updated ? check() : undefined))
+      .then(u => (live && u?.updated ? verdictsChanged() : undefined)) // the Library and an open Mod Updater both read them again
       // every mod for meshes: an update carries the original's meshes as they were, and nothing in the Mod Updater checks them
       // the passes planned above, each through every scan
       .then(() => {

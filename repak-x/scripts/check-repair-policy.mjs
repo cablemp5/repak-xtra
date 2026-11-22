@@ -71,8 +71,8 @@ async function repair(policy, sameParameters = false, scenario = {}) {
     calls.push(cmd)
     switch (cmd) {
       case 'xtra_vfx_source': return a.modPath
-      case 'xtra_vfx_usmap_wait': return scenario.wait ? { usmap: 1, game: 2, changed: 3 } : null
-      case 'xtra_game_build': return { updated: 100 }
+      case 'xtra_vfx_usmap_wait': return scenario.wait ? { usmap: 1, game: 2, changed: scenario.wait === 'late' ? 0 : 3 } : null
+      case 'xtra_game_build': return { updated: scenario.buildMoves && calls.includes('vfx_pack_to_iostore') ? 200 : 100 }
       case 'xtra_vfx_dirs': return dirs
       case 'vfx_extract_mod_assets': return [dirs.modExtract + '/' + rel + '.uasset', ...(scenario.niagara ? [dirs.modExtract + '/NS_Fixture.uasset'] : []), ...(scenario.unreadable ? [dirs.modExtract + '/' + rel + 'B.uasset'] : [])]
       case 'xtra_vfx_pak_half': return []
@@ -124,8 +124,9 @@ for (const same of [false, true]) {
   assert.ok(!result.calls.includes('xtra_vfx_place'), 'strict cannot install an unproven reconstruction')
   assert.ok(!result.calls.includes('xtra_vfx_no_update'), 'matching supported parameters cannot clear the original warning')
   // a rejection only Strict makes: kept as Failed (Needs update clears), its row offers Retry in Best effort
-  assert.ok(result.report.strictOnly, 'warnings alone are a strict-only rejection')
-  assert.deepEqual([result.outcome.status, result.outcome.next], ['failed', 'best'], 'the failure is kept with Retry in Best effort')
+  // a rebuilt material Best effort would install is strict-only, a match alone is not (Best effort refuses it too)
+  assert.equal(Boolean(result.report.strictOnly), !same, 'strict-only only when Best effort would install it')
+  assert.deepEqual([result.outcome.status, result.outcome.next], ['failed', same ? 'page' : 'best'], 'the failure is kept with the next step that fits')
   assert.ok(!result.calls.some(c => c.startsWith('turn_off:')) && !result.calls.includes('rename_mod'), 'a failure never renames or turns off the mod')
 }
 // Best effort: a candidate that passes the checks goes in without asking, and clears the kept outcome
@@ -166,6 +167,16 @@ const unsafe = await repair('bestEffort', false, { unreadable: true, safeOff: tr
 assert.equal(unsafe.report.status, 'failed')
 assert.ok(!unsafe.calls.includes('xtra_vfx_place'), 'an unread asset blocks placement')
 assert.ok(!unsafe.calls.some(c => c.startsWith('turn_off:')), 'a failed update leaves even a flagged mod as it was, on')
+// mappings older than the files it left out: Waiting, never Failed (this fixture's warnings stop Strict earlier, at step 6)
+for (const policy of ['bestEffort']) {
+  const late = await repair(policy, false, { wait: 'late', niagara: 'retry' })
+  assert.equal(late.report.status, 'mappings', `${policy}: an incomplete rebuild with old mappings waits`)
+  assert.ok(!late.calls.includes('xtra_vfx_place'))
+}
+// the game updates while it packs: nothing is installed
+const moved = await repair('bestEffort', false, { buildMoves: true })
+assert.equal(moved.report.status, 'failed')
+assert.ok(!moved.calls.includes('xtra_vfx_place') && /game updated/.test(moved.report.error), 'a candidate built for the previous patch is never installed')
 // it needs the game's new mappings first: Waiting, never Failed, and nothing is read or changed
 const waits = await repair('bestEffort', false, { wait: true })
 assert.equal(waits.report.status, 'mappings')

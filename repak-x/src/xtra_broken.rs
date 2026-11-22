@@ -929,7 +929,8 @@ static OUTCOMES_WRITING: Mutex<()> = Mutex::new(());
 
 /// Records (or with no `status`, forgets) the Mod Updater's outcome for `mod_path` (pipeline.ts, when a run ends).
 #[tauri::command(async)]
-pub fn xtra_vfx_outcome(mod_path: String, status: Option<String>, error: Option<String>, next: Option<String>, state: State<'_, Arc<Mutex<AppState>>>) -> Result<(), String> {
+/// `usmap`: the mappings the run read with (else the saved ones now): a run that ends after a new download keeps its own.
+pub fn xtra_vfx_outcome(mod_path: String, status: Option<String>, error: Option<String>, next: Option<String>, usmap: Option<String>, state: State<'_, Arc<Mutex<AppState>>>) -> Result<(), String> {
     let mods_dir = state.lock().unwrap().game_path.clone();
     let utoc = Path::new(&mod_path).with_extension("utoc");
     let _one = OUTCOMES_WRITING.lock().unwrap_or_else(|e| e.into_inner());
@@ -939,7 +940,8 @@ pub fn xtra_vfx_outcome(mod_path: String, status: Option<String>, error: Option<
         None => { if all.remove(&checked_key(&utoc)).is_none() { return Ok(()); } }
         Some(status) => {
             let (size, modified) = file_stamp(&utoc).ok_or_else(|| format!("{} is not there", utoc.display()))?;
-            all.insert(checked_key(&utoc), Outcome { status, error: error.unwrap_or_default(), next: next.unwrap_or_default(), size, modified, game: game_updated(&mods_dir), usmap: usmap_name() });
+            all.insert(checked_key(&utoc), Outcome { status, error: error.unwrap_or_default(), next: next.unwrap_or_default(), size, modified, game: game_updated(&mods_dir),
+                usmap: usmap.and_then(|u| Path::new(&u).file_name().map(|n| n.to_string_lossy().into_owned())).unwrap_or_else(usmap_name) });
         }
     }
     // bounded: outcomes that no longer hold go first (a mod updated, removed or made for an older game)
@@ -1188,12 +1190,23 @@ pub async fn xtra_broken_mods(mod_paths: Vec<String>, state: State<'_, Arc<Mutex
                 Some(o) if o.status == "failed" => false,
                 Some(o) if o.status == "waiting" && v.usmap_wait == 0 => {
                     v.usmap_wait = 1;
+                    // its "can be updated now" note no longer holds
+                    if let Some(at) = v.reason.find(" No patch newer than the saved USMAP") { v.reason.truncate(at); }
                     v.reason += " An update found it needs the game's new mappings (USMAP) before it can be rebuilt whole.";
                     true
                 }
                 _ => true,
             }
         });
+        // a waiting one with no verdict of its own (updated from All mods, or Add .utoc): it waits all the same
+        for p in &mod_paths {
+            let utoc = Path::new(p).with_extension("utoc");
+            if verdicts.iter().any(|v| v.path == *p && v.kind == "vfx") { continue; }
+            if outcomes.get(&checked_key(&utoc)).is_some_and(|o| o.status == "waiting" && outcome_holds(o, file_stamp(&utoc), game_updated, &usmap_now)) {
+                verdicts.retain(|v| v.path != *p || v.kind == "broken" || v.kind == "risky");
+                verdicts.push(Verdict { path: p.clone(), kind: "vfx", reason: "An update found it needs the game's new mappings (USMAP) before it can be rebuilt whole.".into(), stale_niagara: 0, usmap_wait: 1, off_only: false });
+            }
+        }
         // textures the game cannot read, from the preview kit's texture check (xtra_viewer.rs): Broken, over a weaker verdict
         for (path, reason) in crate::xtra_viewer::texcheck_reasons(&mod_paths) {
             match verdicts.iter_mut().find(|v| v.path == path) {

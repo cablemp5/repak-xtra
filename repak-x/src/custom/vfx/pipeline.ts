@@ -45,17 +45,12 @@ export const unsupportedFailure = (r: Pick<VfxReport, 'status' | 'error'>) =>
   r.status === 'failed' && (/without the game's class names/.test(r.error ?? '') // that extract was already read again one-shot (xtra_uat_cli.rs)
     || !/^(Not updated yet|Stopped on an unexpected problem|Not decrypted|Could not turn it off)|internet|game updated|could not be encrypted|layout could not be checked/i.test(r.error ?? ''))
 
-/** A failure that may pass on another try (a tool that stopped, a layout check that threw): the mod keeps Try again
- *  once, and the same mod failing this way a second time counts as unsupported (the Mod Updater keeps the count). */
-export const repeatableFailure = (r: Pick<VfxReport, 'status' | 'error'>) =>
-  r.status === 'failed' && /^Stopped on an unexpected problem|layout could not be checked/i.test(r.error ?? '')
-
 export const repairOutcome = (r: VfxReport) => (r.status === 'mappings' ? 'Waiting for mappings' : r.status !== 'fixed' ? 'Failed' : incompleteAssets(r) ? 'Partially updated' : 'Updated')
 
 /** What a Failed row offers: Retry in Best effort for a rejection only Strict makes, Try again for a problem another try
  *  may pass, else a newer copy of the mod (its page, when one is known). */
 export const failedNext = (r: Pick<VfxReport, 'status' | 'error' | 'strictOnly'>): 'best' | 'again' | 'page' =>
-  r.strictOnly ? 'best' : unsupportedFailure(r) ? 'page' : 'again'
+  r.strictOnly ? 'best' : unsupportedFailure(r) && !/try again|update it again/i.test(r.error ?? '') ? 'page' : 'again'
 
 export type Placed = { fixed: string; source: string; original: string; turnedOff: boolean; replaced: boolean; trashed?: boolean; warning?: string | null }
 export type VfxReport = {
@@ -192,8 +187,9 @@ export async function fixVfxMod(o: FixOptions): Promise<VfxReport> {
     log(`Decrypted ${stem(o.modPath)}: the game's Season 11 check can read it now. The encrypted copy is in Recently deleted.`, 'success')
   } catch (e) {
     report.status = 'failed'
-    report.error = `Not decrypted: ${String(e).replace(/[.!]?\s*$/, '')}. The mod was not changed.`
+    report.error = `Not decrypted: ${String(e).replace(/[.!]?\s*$/, '')}. The mod was not changed. Try again later.`
     log(report.error, 'warning')
+    await invoke('xtra_vfx_outcome', { modPath: o.modPath, status: 'failed', error: report.error, next: 'again', usmap: o.usmapPath }).catch(() => {})
   }
   // only a decrypt that worked says how long it took: a failed one never counts as a rebuild's time (ms 0 is never recorded)
   if (direct && report.decrypted) report.ms = performance.now() - t0
@@ -436,15 +432,16 @@ async function rebuild(o: FixOptions): Promise<VfxReport> {
         log(report.error, 'warning')
         return
       }
-      if (strict && (missing || report.warnings.length)) {
-        report.strictOnly = !uncheckedAssets(report)
-        report.error = `Not updated: Strict repair found ${[missing && plural(missing, 'incomplete asset'), report.warnings.length && plural(report.warnings.length, 'warning')].filter(Boolean).join(' and ')}. The mod was not changed. ${changePolicy}`
-        log(report.error, 'warning')
-        return
-      }
+      // waiting for the game's mappings first, under either policy: never a failure
       if (wait && missing) {
         report.status = 'mappings'
         report.error = `Not updated yet. With the saved USMAP (game build ${wait.usmap}) ${plural(missing, 'file')} of it could not be rebuilt, so the update would not look the same in the game. It can be updated once the USMAP for game build ${wait.game} is out.`
+        log(report.error, 'warning')
+        return
+      }
+      if (strict && (missing || report.warnings.length)) {
+        report.strictOnly = !uncheckedAssets(report)
+        report.error = `Not updated: Strict repair found ${[missing && plural(missing, 'incomplete asset'), report.warnings.length && plural(report.warnings.length, 'warning')].filter(Boolean).join(' and ')}. The mod was not changed.${report.strictOnly ? ` ${changePolicy}` : ''}`
         log(report.error, 'warning')
         return
       }
@@ -486,11 +483,13 @@ async function rebuild(o: FixOptions): Promise<VfxReport> {
       }
       const unchecked = uncheckedAssets(report)
       if (o.policy === 'bestEffort' && !o.outputDir && unchecked) {
-        report.error = `Not updated: ${plural(unchecked, 'material or blueprint', 'materials and blueprints')} could not be rebuilt or read, and the game can crash on ${unchecked === 1 ? 'it' : 'them'}. The mod was not changed.`
+        report.error = `Not updated: ${plural(unchecked, 'material or blueprint', 'materials and blueprints')} could not be rebuilt or read, and the game can crash on ${unchecked === 1 ? 'it' : 'them'}. The mod was not changed.${report.assets.some(a => /game's copy could not be read/.test(a.detail)) ? " Try again: the game's files are read again." : ''}`
         log(report.error, 'warning')
         return // failed: the mod stays as it was
       }
       check()
+      const packedBuild = await invoke<{ updated: number }>('xtra_game_build').then(b => b.updated)
+      if (buildAt && packedBuild !== buildAt) { report.error = 'Not updated: the game updated while this ran, so the update was made from old game files. Update it again.'; log(report.error, 'warning'); return }
       if (o.outputDir) report.output = utoc
       else {
         // turned off earlier because it could crash: the safe update goes in on, as the mod was before
@@ -665,9 +664,10 @@ async function rebuild(o: FixOptions): Promise<VfxReport> {
     // an incomplete rebuild is not placed: one failed or unread asset may be the one that broke, so the mod stays as it was
     const failedN = report.assets.filter(a => a.kind === 'failed').length
     if ((failedN || report.counts.unreadable || report.warnings.length) && strict) {
-      report.strictOnly = !failedN && !report.counts.unreadable
-      const why = [failedN && plural(failedN, 'material or blueprint', 'materials and blueprints') + ' could not be rebuilt', report.counts.unreadable && plural(report.counts.unreadable, 'asset') + ' could not be read', report.warnings.length && plural(report.warnings.length, 'warning') + ` require${report.warnings.length === 1 ? 's' : ''} review`].filter(Boolean).join(', and ')
-      report.error = `Not updated: ${why}. The mod was not changed. ${report.warnings.length ? changePolicy : 'Check the USMAP in Advanced, then try again.'}`
+      // only when Best effort would install it: something rebuilt, its own, or files to rebuild or rewrite (a match alone is not)
+      report.strictOnly = !failedN && !report.counts.unreadable && Boolean(report.counts.updated || report.counts.added || staleFiles.length || relaid.size)
+      const why = [failedN && plural(failedN, 'material or blueprint', 'materials and blueprints') + ' could not be rebuilt', report.counts.unreadable && plural(report.counts.unreadable, 'asset') + ' could not be read', report.warnings.length && `Strict found ${plural(report.warnings.length, 'warning')}`].filter(Boolean).join(', and ')
+      report.error = `Not updated: ${why}. The mod was not changed. ${report.strictOnly ? changePolicy : failedN || report.counts.unreadable ? 'Check the USMAP in Advanced, then try again.' : 'Its creator edits could not be proven preserved.'}`
       log(report.error, 'warning')
       return report // failed: Try again stays
     }
@@ -737,8 +737,8 @@ async function rebuild(o: FixOptions): Promise<VfxReport> {
     if (!o.outputDir && report.status !== 'cancelled') {
       const failed = report.status === 'failed'
       await invoke('xtra_vfx_outcome', failed || report.status === 'mappings'
-        ? { modPath: o.modPath, status: failed ? 'failed' : 'waiting', error: report.error ?? null, next: failed ? failedNext(report) : null }
-        : { modPath: o.modPath, status: null, error: null, next: null }).catch(e => log(`Could not save how the update ended: ${e}`, 'warning'))
+        ? { modPath: o.modPath, status: failed ? 'failed' : 'waiting', error: report.error ?? null, next: failed ? failedNext(report) : null, usmap: o.usmapPath }
+        : { modPath: o.modPath, status: null, error: null, next: null, usmap: null }).catch(e => log(`Could not save how the update ended: ${e}`, 'warning'))
     }
     // A failed or cancelled run is the updater falling short, not news about the mod: it stays exactly as it was, flag and
     // all. Only a run that proved the original crashes the game (every file matches the game, but in the old layout) takes
@@ -769,9 +769,8 @@ if (import.meta.env.DEV) {
     && failedNext({ status: 'failed', error: 'Not updated: none of its materials or blueprints could be rebuilt.' }) === 'page', 'what a Failed row offers')
   console.assert(unsupportedFailure({ status: 'failed', error: 'Not updated: none of its materials or blueprints could be rebuilt. Check the USMAP in Advanced, then try again.' })
     && !unsupportedFailure({ status: 'failed', error: 'Stopped on an unexpected problem: x.' }) && !unsupportedFailure({ status: 'failed', error: 'Not updated yet. Waits.' })
-    && !unsupportedFailure({ status: 'failed', error: 'Not updated: x. Check the internet connection, then try again.' }) && !unsupportedFailure({ status: 'cancelled' }) && repeatableFailure({ status: 'failed', error: 'Stopped on an unexpected problem: x.' })
+    && !unsupportedFailure({ status: 'failed', error: 'Not updated: x. Check the internet connection, then try again.' }) && !unsupportedFailure({ status: 'cancelled' })
 
-    && !repeatableFailure({ status: 'failed', error: 'Not updated yet. Waits.' }) && !repeatableFailure({ status: 'failed', error: 'Not updated: x. Check the internet connection, then try again.' })
     && !unsupportedFailure({ status: 'failed', error: 'Not updated: its material layout could not be checked. The mod was not changed. Check the USMAP in Advanced, then try again.' }), 'only a lasting failure is unsupported')
   console.assert(assetKey('A/MI_Body.uasset') !== assetKey('B/MI_Body.uasset'), 'same basename keeps distinct repair identities')
   console.assert(fixedName('C:/m/BlueColoredVFX_9999999_P.utoc') === 'BlueColoredVFX_UPDATED_9999999_P', 'fixed name drops the priority')
