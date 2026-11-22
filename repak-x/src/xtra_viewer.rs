@@ -188,7 +188,14 @@ fn run_kit(who: &'static str, extra: &str, jobs: &[(String, String)], set: Optio
     if let Some(bad) = jobs.iter().map(|(_, k)| k.as_str()).chain(set).find(|k| !valid_key(k)) {
         return Err(format!("Invalid preview key: {bad}"));
     }
-    let _hold = reserve_waiting(who).map_err(busy_text)?;
+    let _hold = reserve_waiting(who).map_err(|busy| {
+        if who == "texcheck" && crate::xtra_vfx::xtra_vfx_lock().is_some() { crate::xtra_vfx::note_stopped(); }
+        busy_text(busy)
+    })?;
+    if who == "texcheck" && crate::xtra_vfx::xtra_vfx_lock().is_some() {
+        crate::xtra_vfx::note_stopped();
+        return Err("Mod update in progress".into());
+    }
     let mut cmd = generator_command(paks, false)?;
     cmd.arg("--out").arg(previews_dir()).arg(extra);
     let mut dirs: Vec<&String> = jobs.iter().map(|(d, _)| d).collect();
@@ -211,6 +218,7 @@ fn run_kit(who: &'static str, extra: &str, jobs: &[(String, String)], set: Optio
     let logger = child.stderr.take().map(|err| std::thread::spawn(move || log_generator(err, None)));
     if let Some(out) = child.stdout.take() {
         for l in BufReader::new(out).lines().map_while(Result::ok) {
+            if who == "texcheck" { crate::xtra_previews::signal_texture_stop(); }
             line(l.trim_end());
         }
     }

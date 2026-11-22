@@ -236,10 +236,13 @@ export function useBrokenWatch(mods: { path: string; modified_date?: number; fil
     let lastResume = 0
     const resume = () => { if (unfinished && !scanHeld() && Date.now() - lastResume > 30_000) { lastResume = Date.now(); stoppedScope.forEach(p => forced.add(norm(p))); void full() } }
     window.addEventListener('focus', resume)
+    const unlocked = listen('vfx_lock_changed', e => {
+      if (live && e.payload == null && !scanHeld() && (whole || scope.size || forced.size)) void full()
+    })
     const again = listen(VERDICTS_CHANGED, () => { void check() })
     // a Refresh list or Resume: checks the header paused or cancelled run again
     const rescan = listen<string[] | null>(VERDICTS_RESCAN, e => { for (const p of e.payload ?? []) { forced.add(norm(p)); fresh.add(norm(p)) } if (e.payload && !e.payload.length) whole = asked = true; void releaseScan().then(() => full()) })
-    return () => { live = false; window.removeEventListener('focus', resume); if (runFull === full) runFull = null; clearTimeout(t); void again.then(f => f()); void rescan.then(f => f()) }
+    return () => { live = false; window.removeEventListener('focus', resume); if (runFull === full) runFull = null; clearTimeout(t); void unlocked.then(f => f()); void again.then(f => f()); void rescan.then(f => f()) }
   }, [key]) // eslint-disable-line react-hooks/exhaustive-deps
 }
 

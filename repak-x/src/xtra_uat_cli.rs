@@ -150,19 +150,51 @@ pub(crate) fn class_marks(utoc: &Path, paks: &Path) -> Option<Vec<(String, Strin
     Some(listing(utoc, paks)?.into_iter().filter(|(_, _, mark)| !mark.is_empty()).map(|(p, _, mark)| (p, mark)).collect())
 }
 
-/// (path, class, mark) of each package. The last listing is kept while its file stands: an update asks for the
-/// classes and the marks of the same mod one after the other.
-pub(crate) fn listing(utoc: &Path, paks: &Path) -> Option<Vec<(String, String, String)>> {
-    type Kept = (std::path::PathBuf, Option<std::time::SystemTime>, u64, Vec<(String, String, String)>);
-    static LAST: std::sync::Mutex<Option<Kept>> = std::sync::Mutex::new(None);
-    let meta = std::fs::metadata(utoc).ok()?;
-    let (at, len) = (meta.modified().ok(), meta.len());
-    if let Some((p, t, l, lines)) = &*LAST.lock().unwrap_or_else(|e| e.into_inner()) {
-        if p == utoc && *t == at && *l == len {
-            return Some(lines.clone());
+type Listing = Vec<(String, String, String)>;
+
+#[derive(serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+struct ListingKey {
+    files: Vec<(PathBuf, u64, SystemTime)>,
+    parser: String,
+    game: String,
+}
+
+fn listing_key(utoc: &Path, paks: &Path, exe: &Path) -> Option<ListingKey> {
+    let mut files = Vec::new();
+    let mut stamp = |path: &Path| -> Option<()> {
+        let m = path.metadata().ok()?;
+        files.push((path.to_owned(), m.len(), m.modified().ok()?));
+        Some(())
+    };
+    stamp(exe)?;
+    stamp(utoc)?;
+    stamp(&utoc.with_extension("ucas"))?;
+    let stem = utoc.file_stem()?.to_str()?;
+    for i in 1.. {
+        let part = utoc.with_file_name(format!("{stem}_s{i}.ucas"));
+        if !part.try_exists().ok()? { break; }
+        stamp(&part)?;
+    }
+    let containers = crate::xtra_broken::game_containers(paks);
+    if containers.is_empty() { return None; }
+    Some(ListingKey { files, parser: crate::xtra_vfx::parser_id().into(), game: crate::xtra_broken::build_key(&containers) })
+}
+
+pub(crate) fn listing(utoc: &Path, paks: &Path) -> Option<Listing> {
+    use std::hash::{Hash, Hasher};
+    let exe = cli()?;
+    let key = listing_key(utoc, paks, &exe);
+    let mut hash = std::collections::hash_map::DefaultHasher::new();
+    utoc.hash(&mut hash);
+    let dir = crate::app_dir().join("mod-class-listings");
+    let file = dir.join(format!("{:016x}.json", hash.finish()));
+    if let Some(key) = &key {
+        if let Some((saved, lines)) = std::fs::read(&file).ok()
+            .and_then(|data| serde_json::from_slice::<(ListingKey, Listing)>(&data).ok()) {
+            if saved == *key { return Some(lines); }
         }
     }
-    let mut cmd = std::process::Command::new(cli()?);
+    let mut cmd = std::process::Command::new(&exe);
     cmd.arg("list_iostore").arg(utoc).arg("--types").arg("--class-marks").arg("--game-paks").arg(paks);
     #[cfg(windows)]
     {
@@ -171,7 +203,17 @@ pub(crate) fn listing(utoc: &Path, paks: &Path) -> Option<Vec<(String, String, S
     }
     let out = cmd.output().ok().filter(|o| o.status.success())?;
     let lines: Vec<_> = String::from_utf8_lossy(&out.stdout).lines().filter_map(class_line).collect();
-    *LAST.lock().unwrap_or_else(|e| e.into_inner()) = Some((utoc.to_path_buf(), at, len, lines.clone()));
+    if !lines.is_empty() && lines.iter().all(|(_, class, _)| !class.is_empty() && !class.to_ascii_lowercase().contains("unknown")) {
+        if let Some(key) = key.filter(|k| listing_key(utoc, paks, &exe).as_ref() == Some(k)) {
+            if std::fs::create_dir_all(&dir).is_ok() {
+                if let Ok(mut tmp) = tempfile::NamedTempFile::new_in(dir) {
+                    if serde_json::to_writer(tmp.as_file_mut(), &(&key, &lines)).is_ok() {
+                        let _ = tmp.persist(file);
+                    }
+                }
+            }
+        }
+    }
     Some(lines)
 }
 
@@ -290,6 +332,24 @@ fn uniq() -> u64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn listing_key_changes_with_companion_files() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        let utoc = root.join("mod.utoc");
+        let data = utoc.with_extension("ucas");
+        let cli = root.join(EXE);
+        for path in [&utoc, &data, &cli, &root.join("global.utoc")] {
+            std::fs::write(path, b"original").unwrap();
+        }
+        let original = listing_key(&utoc, root, &cli).unwrap();
+        std::fs::write(&data, b"replacement").unwrap();
+        let replaced = listing_key(&utoc, root, &cli).unwrap();
+        assert!(original != replaced);
+        std::fs::write(root.join("mod_s1.ucas"), b"partition").unwrap();
+        assert!(Some(replaced) != listing_key(&utoc, root, &cli));
+    }
 
     #[test]
     fn a_listing_line_gives_the_package_and_its_class() {

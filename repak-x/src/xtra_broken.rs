@@ -112,21 +112,8 @@ pub(crate) fn class_marks(paks: &Path, utoc: &Path) -> Option<(usize, usize)> {
 }
 
 /// The material instances in the container `utoc` by their class, and its marked packages as "!<mark>:<key>"
-/// (xtra_uat_cli::listing), kept per file (its size and time written) and decoder, in memory and in
-/// repakxtra-mod-classes.json: each listing runs a process (about 0.3 s), and every launch asked again for every mod
-/// an update touched.
+/// from the shared container listing.
 fn listed(paks: &Path, utoc: &Path) -> Option<Vec<String>> {
-    static SEEN: Mutex<Option<HashMap<String, ((u64, u64), Vec<String>)>>> = Mutex::new(None);
-    let file = crate::app_dir().join("repakxtra-mod-classes.json");
-    // (the game's build too: the marks say what this game lacks or moved, which its next update can change)
-    let key = format!("{}|{}", decoder_key(utoc, crate::xtra_vfx::parser_id()), crate::xtra_vfx::game_cl(paks).unwrap_or(0));
-    let stamp = file_stamp(utoc);
-    let known = |m: &mut Option<HashMap<String, ((u64, u64), Vec<String>)>>| {
-        m.get_or_insert_with(|| std::fs::read_to_string(&file).ok().and_then(|t| serde_json::from_str(&t).ok()).unwrap_or_default()).get(&key).filter(|(s, _)| Some(*s) == stamp).map(|(_, f)| f.clone())
-    };
-    if let Some(found) = known(&mut SEEN.lock().unwrap_or_else(|e| e.into_inner())) {
-        return Some(found);
-    }
     let listed = crate::xtra_uat_cli::listing(utoc, paks)?;
     // a class it could not name (no script objects): not known, and asked again next time. A marked package says its
     // own: a class the game moved reads as unknown when it is the package's own
@@ -136,13 +123,6 @@ fn listed(paks: &Path, utoc: &Path) -> Option<Vec<String>> {
     let found: Vec<String> = listed.iter().filter(|(_, c, _)| c.starts_with("MaterialInstance")).map(|(p, _, _)| match_key(p))
         .chain(listed.iter().filter(|(_, _, mark)| !mark.is_empty()).map(|(p, _, mark)| format!("!{mark}:{}", match_key(p))))
         .collect();
-    if let Some(s) = stamp {
-        let mut seen = SEEN.lock().unwrap_or_else(|e| e.into_inner());
-        let all = seen.get_or_insert_with(HashMap::new);
-        all.insert(key, (s, found.clone()));
-        // shortcut: written whole on each new listing (a few hundred mods, a few KB). Trim entries of removed mods if it ever grows large
-        let _ = std::fs::write(&file, serde_json::to_string(&*all).unwrap_or_default());
-    }
     Some(found)
 }
 

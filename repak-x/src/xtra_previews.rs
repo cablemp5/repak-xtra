@@ -16,9 +16,42 @@ static OWNER: Mutex<Option<&'static str>> = Mutex::new(None);
 
 /// The reservation: whoever holds it owns the kit's folders until it is dropped (on every path, panics included).
 pub struct Hold(());
+static UPDATE_INTERRUPTED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+static UPDATE_CANCEL: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+static KIT_IDLE: std::sync::Condvar = std::sync::Condvar::new();
+
+pub(crate) fn interrupt_texture_check() -> bool {
+    let owner = OWNER.lock().unwrap_or_else(|e| e.into_inner());
+    if *owner == Some("texcheck") {
+        crate::xtra_vfx::note_stopped();
+        UPDATE_INTERRUPTED.store(true, std::sync::atomic::Ordering::Release);
+        signal_texture_stop();
+        // Startup may clear the signal. The updater begins only once the kit releases its reservation.
+        let (owner, _) = KIT_IDLE.wait_timeout_while(owner, std::time::Duration::from_secs(180), |o| *o == Some("texcheck"))
+            .unwrap_or_else(|e| e.into_inner());
+        return *owner != Some("texcheck");
+    }
+    true
+}
+
+// The generator removes a stale cancel file at startup. Reassert this run's request on its output.
+pub(crate) fn signal_texture_stop() {
+    if UPDATE_INTERRUPTED.load(std::sync::atomic::Ordering::Acquire)
+        && std::fs::File::create_new(previews_dir().join("cancel")).is_ok() {
+        UPDATE_CANCEL.store(true, std::sync::atomic::Ordering::Relaxed);
+    }
+}
+
 impl Drop for Hold {
     fn drop(&mut self) {
-        *OWNER.lock().unwrap_or_else(|e| e.into_inner()) = None;
+        let mut owner = OWNER.lock().unwrap_or_else(|e| e.into_inner());
+        UPDATE_INTERRUPTED.store(false, std::sync::atomic::Ordering::Release);
+        if UPDATE_CANCEL.swap(false, std::sync::atomic::Ordering::Relaxed) {
+            let _ = std::fs::remove_file(previews_dir().join("cancel"));
+        }
+        *owner = None;
+        KIT_IDLE.notify_all();
     }
 }
 

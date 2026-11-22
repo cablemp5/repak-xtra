@@ -30,3 +30,6 @@
 - Fixed the first launch after each daily character database check reading every mod again (4 to 5 seconds at 350 mods), and the check saving a new backup file every day when nothing was new
 - Fixed folders, the game check, and the folder watcher waiting for every mod's details at launch
 - Fixed an install listing the mods folder 5 times: it now lists it 3 times
+- Reduced repeated progress updates and work-folder cleanup delays in Mod Updater batches
+- Cached mod class listings across restarts and refreshed them when companion files changed
+- Deferred background texture checks until the Mod Updater finished its batch
