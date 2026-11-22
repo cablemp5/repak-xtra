@@ -391,8 +391,8 @@ function App() {
   const [foundGamePath, setFoundGamePath] = useState<string | null>(null) // repakxtra: Auto-detect's find, asked before it replaces a saved folder
   useEffect(() => setModsRoot(gamePath), [gamePath]) // repakxtra: loadout member keys are relative to the mods folder
   const [mods, setMods] = useState<ModRecord[]>([])
-  const modsRef = useRef(mods) // repakxtra: the list on screen, for the install flow's last step
-  modsRef.current = mods
+  // repakxtra: the listing on screen, while no row was changed since (a switch or a delete changes its row at once)
+  const shownList = useRef<ModRecord[] | null>(null)
   const [folders, setFolders] = useState<FolderRecord[]>([])
   const [loading, setLoading] = useState(false)
   const [status, setStatus] = useState('')
@@ -1918,7 +1918,7 @@ function App() {
       console.log('Loaded mods:', modList)
       if (mine !== loadModsSeq.current) return modList as ModRecord[] // a newer load is on its way, with the newer list
       syncLoadoutKeys(modList) // repakxtra: loadout members follow moved mods and old saves migrate, before the list shows
-      modsRef.current = modList // repakxtra: at once, the render that follows sets the same
+      shownList.current = modList // repakxtra
       setMods(modList)
       requestAnimationFrame(hideSplash) // repakxtra: after the list paints
       setStatus(`Loading details for ${plural(modList.length, 'mod')}...`)
@@ -1956,10 +1956,17 @@ function App() {
   // Preload details for all mods using the new Mod Detection API
   // repakxtra: one details pass at a time. Two side by side read 8 paks at once and each new pak twice, and the older
   // could finish last and put back details of mods the newer list no longer has (the folder watcher now runs while a
-  // launch reads details). The newer pass waits its turn
+  // launch reads details). A newer list's pass takes over: the older stops after the reads it has out and shows
+  // nothing more, and the newer gets what was read so far from the backend's cache in one call
   const detailsPass = useRef<Promise<void>>(Promise.resolve())
-  const preloadModDetails = (modList: ModRecord[]) => (detailsPass.current = detailsPass.current.then(() => readModDetails(modList), () => readModDetails(modList)))
-  const readModDetails = async (modList: ModRecord[]) => {
+  const detailsAsked = useRef(0)
+  const preloadModDetails = (modList: ModRecord[]) => {
+    const mine = ++detailsAsked.current
+    const turn = () => readModDetails(modList, () => mine === detailsAsked.current)
+    return (detailsPass.current = detailsPass.current.then(turn, turn))
+  }
+  const readModDetails = async (modList: ModRecord[], newest: () => boolean) => {
+    if (!newest()) return
     if (!Array.isArray(modList) || modList.length === 0) {
       setAvailableCharacters([])
       setAvailableCategories([])
@@ -2027,7 +2034,7 @@ function App() {
       const missing = pathsToFetch.map((_, i) => i).filter(i => !results[i])
       let next = 0
       await Promise.all(Array.from({ length: Math.min(4, missing.length) }, async () => {
-        while (next < missing.length) {
+        while (next < missing.length && newest()) { // repakxtra
           const i = missing[next++]
           results[i] = await invoke('get_mod_details', { modPath: pathsToFetch[i] })
             .then(value => ({ status: 'fulfilled' as const, value }), reason => ({ status: 'rejected' as const, reason }))
@@ -2036,6 +2043,7 @@ function App() {
         }
       }))
 
+      if (!newest()) return // repakxtra
       const newMap = { ...modDetailsRef.current }
       results.forEach((res, idx) => {
         const path = pathsToFetch[idx]
@@ -2249,6 +2257,7 @@ function App() {
       const trashId = crypto.randomUUID() // repakxtra
       if (!(await runOp('delete this mod', () => invoke('delete_mod', { path: modPath, trashId }), { modes: false }))) return false // repakxtra: game open or file in use asks
       // repakxtra: close the row's gap when deletion succeeds, without waiting for the library rescan.
+      shownList.current = null // repakxtra
       setMods(current => current.filter(mod => mod.path !== modPath))
       setSelectedMods(current => { const next = new Set(current); next.delete(modPath); return next })
       setStatus('Mod deleted')
@@ -2290,6 +2299,7 @@ function App() {
       // delayed safety refresh, and the watcher. The fallback reload runs only when no watcher event comes.
       const newPath = modPath.replace(/\.[^.\\/]+$/, newState ? '.pak' : '.bak_repak')
       const moved = (m: ModRecord): ModRecord => (m.path === modPath ? { ...m, path: newPath, enabled: Boolean(newState) } : m)
+      shownList.current = null // repakxtra
       setMods(prev => prev.map(moved))
       if (modDetailsRef.current[modPath]) {
         const { [modPath]: d, ...rest } = modDetailsRef.current
@@ -3451,13 +3461,15 @@ function App() {
         // repakxtra: Save as a loadout, the copies already installed included
         const kept = modsWithSettings.flatMap(m => { const s = sameOf(m); return s ? [{ path: s.path, loadouts: m.loadouts }] : [] })
         const listed = listAfterInstall(request, tagged) // repakxtra: one listing for the loadout step and the reload below
+        if (tagged) void showMods(listed) // repakxtra: a listing made for the tags, which nothing has shown yet
         if (fresh.length || kept.length) await finishInstallLoadout(fresh, alert, kept, listed)
         await recordSources(fresh) // repakxtra: Nexus source from the archive name
 
         // Reload in background so alert shows success immediately
         // repakxtra: no second walk while that listing is still the newest asked for and still the list on screen (a
-        // mod switched meanwhile changes its row at once and lists later)
-        if (newestListing.current === listed && modsRef.current === await listed.catch(() => null)) void showMods(listed)
+        // mod switched meanwhile changes its row at once and lists later). A failed listing is tried again
+        const list = await listed.catch(() => null)
+        if (list && newestListing.current === listed && shownList.current === list) void showMods(listed)
         else loadMods()
         loadFolders()
         loadTags()
