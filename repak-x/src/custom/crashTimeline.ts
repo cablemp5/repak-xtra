@@ -58,7 +58,7 @@ export function timelineRows(t: Timeline): TimelineRow[] {
       merged[merged.length - 1] = { ...last, kind: 'switch', t: e.t, ok: [...last.ok, ...e.ok], failed: [], n_ok: undefined, detail: `${on(last) + on(e)}/${off(last) + off(e)}` }
       continue
     }
-    if (last && (e.kind === 'enable' || e.kind === 'disable' || e.kind === 'delete' || e.kind === 'switch') && last.kind === e.kind && e.t - last.t <= 60) {
+    if (last && (e.kind === 'enable' || e.kind === 'disable' || e.kind === 'delete') && last.kind === e.kind && e.t - last.t <= 60) {
       merged[merged.length - 1] = { ...last, t: e.t, ok: [...last.ok, ...e.ok], failed: [...last.failed, ...e.failed],
         n_ok: Math.max(last.n_ok ?? 0, last.ok.length) + Math.max(e.n_ok ?? 0, e.ok.length), n_failed: Math.max(last.n_failed ?? 0, last.failed.length) + Math.max(e.n_failed ?? 0, e.failed.length) }
     } else merged.push(e)

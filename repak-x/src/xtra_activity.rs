@@ -142,6 +142,9 @@ fn plain(text: &str) -> String {
     static DIRS: std::sync::OnceLock<Option<(regex_lite::Regex, regex_lite::Regex)>> = std::sync::OnceLock::new();
     let no_dirs = DIRS.get_or_init(|| Some((regex_lite::Regex::new(r"[\\/]{2}[^\\/\s][^\\/\r\n]*(?:[\\/][^\r\n]*)?").ok()?, regex_lite::Regex::new(r"[A-Za-z]:[\\/](?:[^\\/\r\n]*[\\/])*").ok()?))).as_ref()
         .map_or_else(|| text.to_string(), |(unc, drive)| drive.replace_all(&unc.replace_all(text, ""), "").into_owned());
+    // and a path from the root of a drive (\Private\Client\Skin.pak): two separators or more, only its last part stays
+    static ROOTED: std::sync::OnceLock<Option<regex_lite::Regex>> = std::sync::OnceLock::new();
+    let no_dirs = ROOTED.get_or_init(|| regex_lite::Regex::new(r"[\\/](?:[^\\/\r\n]+[\\/])+").ok()).as_ref().map_or(no_dirs.clone(), |re| re.replace_all(&no_dirs, "").into_owned());
     crate::xtra_crash::redact(&no_dirs, &crate::xtra_crash::user_names())
 }
 
@@ -200,7 +203,7 @@ pub(crate) fn note_versions(mods_dir: &Path, start: u64, fresh: bool) {
         if !s.game.is_empty() && !game.is_empty() && s.game != game { push_into(s, event(before, "game_update", &[], &[], &game, 0)); changed = true; }
         if !s.app.is_empty() && s.app != app { push_into(s, event(app_t, "app_update", &[], &[], &app, 0)); changed = true; }
         changed |= s.app != app || (!game.is_empty() && s.game != game) || s.since == 0;
-        if s.since == 0 { s.since = before; }
+        if s.since == 0 { s.since = now(); } // recording begins now, not at a launch the app may not have seen
         s.app = app;
         if !game.is_empty() { s.game = game; }
         changed
@@ -234,7 +237,8 @@ fn timeline_of(crash: u64, starts: &[(u64, Option<u64>)], since: u64, events: &[
     let from = starts.iter().map(|(s, _)| *s).filter(|s| *s < session.unwrap_or(crash)).max();
     let coverage = if since == 0 || since > crash { "none" } else if seen && from.is_some_and(|f| since <= f) { "full" } else { "partial" };
     // strictly before the crash second: one finished in the same second may have come after it
-    let events = if coverage == "none" { Vec::new() } else { events.iter().filter(|e| from.is_none_or(|f| e.t > f) && e.t < crash).cloned().collect() };
+    let mut events: Vec<Event> = if coverage == "none" { Vec::new() } else { events.iter().filter(|e| from.is_none_or(|f| e.t > f) && e.t < crash).cloned().collect() };
+    events.sort_by_key(|e| e.t); // oldest first: an update is stored dated before its launch, after newer events
     Timeline { crash, from, started: session, coverage, events }
 }
 
@@ -303,6 +307,7 @@ mod tests {
         assert_eq!(plain(r"Mine \\server\Private Share\Draft"), "Mine ", "a network path goes whole, spaces too");
         assert_eq!(plain(r"\\server\PrivateShare"), "", "a share root too");
         assert_eq!(plain("Skins // Ranked on"), "Skins // Ranked on", "a double slash between words is a name");
+        assert_eq!(plain(r"Mine \Private\Paid Client\Skin.pak"), "Mine Skin.pak", "a path from a drive's root too");
         assert_eq!(mod_name(r"C:\Games\Paks\~mods\Purple VFX_9999999_P.pak"), "Purple VFX");
         assert_eq!(mod_name("D:/x/Cool_P.bak_repak"), "Cool");
         assert_eq!(mod_name("Plain"), "Plain");

@@ -2137,7 +2137,10 @@ async fn quick_organize(
         target_folder.clone()
     };
 
-    quick_organize_impl(paths, output_dir, location_label, selections, renames, flatten, &|m| { let _ = window.emit("install_log", m); })
+    let dropped = paths.clone();
+    let r = quick_organize_impl(paths, output_dir, location_label, selections, renames, flatten, &|m| { let _ = window.emit("install_log", m); });
+    if matches!(r, Ok(n) if n > 0) { xtra_activity::record("install", &dropped, &[], ""); } // repakxtra: What changed? (a drop on a Library folder)
+    r
 }
 
 /// Locks the destination to wherever `existing_mod_path` currently lives instead of a
@@ -2177,6 +2180,7 @@ async fn quick_organize_locked(
     };
 
     let location_label = format!("Project Galacta's current location ({})", output_dir.display());
+    let dropped = paths.clone();
     let count = quick_organize_impl(
         paths,
         output_dir.clone(),
@@ -2186,6 +2190,7 @@ async fn quick_organize_locked(
         flatten,
         &|m| { let _ = window.emit("install_log", m); },
     )?;
+    if count > 0 { xtra_activity::record("install", &dropped, &[], ""); } // repakxtra: What changed?
 
     // The shared copy step above always installs enabled; restore the disabled state the
     // replaced mod had, since nothing else here has a reason to flip it back off.
@@ -5435,15 +5440,26 @@ async fn check_game_running(state: State<'_, Arc<Mutex<AppState>>>) -> Result<bo
     // closed and started again between two polls is a new one
     static STARTED: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
     let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_secs());
-    let start = if running { game_started_at().unwrap_or(now) } else { 0 };
+    // the start time needs a handle to the game process, which its anti-cheat may refuse: then the launch keeps the time
+    // it was first seen, and no relaunch is told from it
+    let real = if running { game_started_at() } else { None };
+    let before = STARTED.load(std::sync::atomic::Ordering::Relaxed);
+    let start = if !running { 0 } else { real.unwrap_or(if before != 0 { before } else { now }) };
+    STARTED.store(start, std::sync::atomic::Ordering::Relaxed);
     let was = WAS.swap(running, std::sync::atomic::Ordering::Relaxed);
-    let before = STARTED.swap(start, std::sync::atomic::Ordering::Relaxed);
-    let relaunched = was && running && before != 0 && before.abs_diff(start) > 2;
+    let relaunched = was && running && real.is_some() && before != 0 && before.abs_diff(start) > 2;
     if was != running || relaunched {
         let mods = state.lock().unwrap().game_path.clone();
+        // the end is noted at once: a start still listing the mods folder closes its session if the game ended meanwhile
+        static ENDED: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+        if !running || relaunched { ENDED.store(now, std::sync::atomic::Ordering::SeqCst); }
         std::thread::spawn(move || {
-            if relaunched || !running { xtra_crash::remember_end(now) }
-            if running { let fresh = xtra_crash::remember_on(&mods, start); xtra_activity::note_versions(&mods, start, fresh) }
+            if relaunched { xtra_crash::remember_end(start.saturating_sub(1)) } else if !running { xtra_crash::remember_end(now) }
+            if running {
+                let fresh = xtra_crash::remember_on(&mods, start);
+                if ENDED.load(std::sync::atomic::Ordering::SeqCst) > start.max(now) { xtra_crash::remember_end(ENDED.load(std::sync::atomic::Ordering::SeqCst)) }
+                xtra_activity::note_versions(&mods, start, fresh)
+            }
         });
     }
     if running {

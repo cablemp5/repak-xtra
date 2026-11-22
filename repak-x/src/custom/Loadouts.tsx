@@ -167,7 +167,7 @@ export async function runChanges(p: LoadoutProps, l: Loadout, changes: Mod[], ve
     const flipped = new Set(changes.filter(m => !failed.includes(m)).map(m => m.path))
     const after = p.mods.map(m => (flipped.has(m.path) ? { ...m, enabled: !m.enabled } : m))
     const stuck = failed.filter(m => !failed.keptOff?.some(k => k.path === m.path)) // kept off: its own toast above
-    void recordActivity('loadout', [...flipped], stuck.map(m => m.path), `${l.name || 'a loadout'} ${verb}`, started) // What changed? (crashTimeline.ts)
+    void recordActivity('loadout', [...flipped], failed.map(m => m.path), `${l.name || 'a loadout'} ${verb}`, started) // What changed? (crashTimeline.ts): kept off for safety counts as not switched
     if (stuck.length) {
       p.alert.warning(`${l.name} partly ${verb}`, failed.reason ?? `Could not switch ${stuck.map(m => nameKey(m.path)).join(', ')}. Close anything using those files, then try again.`)
     } else {
