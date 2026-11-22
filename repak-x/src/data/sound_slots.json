@@ -671,6 +671,22 @@
    ]
   },
   {
+   "id": "ult-1062-team",
+   "group": "ult-team",
+   "name": "Devil Dino",
+   "banks": [
+    "wwiseaudio/english(us)/bnk_vo_1062001.bnk",
+    "wwiseaudio/japanese(jp)/bnk_vo_1062001.bnk",
+    "wwiseaudio/chinese(cn)/bnk_vo_1062001.bnk"
+   ],
+   "sounds": [
+    788226552
+   ],
+   "silence": [
+    855945573
+   ]
+  },
+  {
    "id": "ult-1018-team",
    "group": "ult-team",
    "name": "Doctor Strange",
@@ -960,9 +976,9 @@
    ]
   },
   {
-   "id": "ult-1011-monster-hulk-team",
+   "id": "ult-1011-monster-hulk-both",
    "group": "ult-team",
-   "name": "Monster Hulk",
+   "name": "Monster Hulk, both sides",
    "banks": [
     "wwiseaudio/english(us)/bnk_vo_1011001.bnk",
     "wwiseaudio/japanese(jp)/bnk_vo_1011001.bnk",
@@ -971,7 +987,10 @@
    "sounds": [
     84452986,
     622488374,
-    783000307
+    783000307,
+    88730981,
+    261078031,
+    301780530
    ]
   },
   {
@@ -1399,6 +1418,22 @@
    ]
   },
   {
+   "id": "ult-1062-enemy",
+   "group": "ult-enemy",
+   "name": "Devil Dino",
+   "banks": [
+    "wwiseaudio/english(us)/bnk_vo_1062001.bnk",
+    "wwiseaudio/japanese(jp)/bnk_vo_1062001.bnk",
+    "wwiseaudio/chinese(cn)/bnk_vo_1062001.bnk"
+   ],
+   "sounds": [
+    1003091450
+   ],
+   "silence": [
+    955985047
+   ]
+  },
+  {
    "id": "ult-1018-enemy",
    "group": "ult-enemy",
    "name": "Doctor Strange",
@@ -1684,21 +1719,6 @@
    ],
    "sounds": [
     366979892
-   ]
-  },
-  {
-   "id": "ult-1011-monster-hulk-enemy",
-   "group": "ult-enemy",
-   "name": "Monster Hulk",
-   "banks": [
-    "wwiseaudio/english(us)/bnk_vo_1011001.bnk",
-    "wwiseaudio/japanese(jp)/bnk_vo_1011001.bnk",
-    "wwiseaudio/chinese(cn)/bnk_vo_1011001.bnk"
-   ],
-   "sounds": [
-    88730981,
-    261078031,
-    301780530
    ]
   },
   {

@@ -388,7 +388,7 @@ mod tests {
     #[test]
     fn slot_table_is_whole() {
         let s = slots();
-        assert_eq!(s.len(), 148);
+        assert_eq!(s.len(), 149);
         assert!(s.iter().all(|s| !s.sounds.is_empty() && !s.banks.is_empty()));
     }
 }
