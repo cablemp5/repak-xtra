@@ -29,8 +29,11 @@ export default function BisectPanel({ deps, mods }: { deps: KeepDeps; mods: Mod[
   const [busy, setBusy] = useState(false)
   // what went wrong stays in the dialog, next to the controls it is about, not in a toast behind or over it
   const [note, setNote] = useState<{ title: string; text: string } | null>(null)
+  // open now: a warning from a step that ends after it closed (Turn it off's Undo) is the app's toast instead
+  const shown = useRef(false)
+  shown.current = Boolean(view)
   const d: KeepDeps = useMemo(() => {
-    const say = (title: string, text?: string) => { cue('warning'); setNote({ title, text: text ?? '' }); return -1 }
+    const say = (title: string, text?: string) => { if (!shown.current) return deps.alert.warning(title, text); cue('warning'); setNote({ title, text: text ?? '' }); return -1 }
     return { ...deps, alert: { ...deps.alert, warning: say, error: say } }
   }, [deps])
   // Esc closes it only where nothing is switched (before the start, and at the end with every mod back)
@@ -44,8 +47,9 @@ export default function BisectPanel({ deps, mods }: { deps: KeepDeps; mods: Mod[
     let live = true
     setHint(undefined)
     const onNow = suspects(mods).map(m => m.path)
-    // the newest crash only: an older one is likely about something since fixed
-    invoke<Listed[]>('xtra_recent_crashes').then(([c]) => c?.asset_path ? recentCrashes(onNow, onNow, [c]) : []).then(([c]) => {
+    // the newest crash only: an older one is likely about something since fixed. At most 4 s: then plain halves
+    const read = invoke<Listed[]>('xtra_recent_crashes').then(([c]) => c?.asset_path ? recentCrashes(onNow, onNow, [c]) : [])
+    Promise.race([read, new Promise<never>((_, no) => setTimeout(() => no(new Error('slow')), 4000))]).then(([c]) => {
       const likely = likelyIn(onNow, onNow.filter(p => c?.held?.some(h => stem(h) === stem(p))))
       if (live) setHint(c?.asset && likely.length ? { time: c.time, asset: c.asset, likely } : null)
     }).catch(() => { if (live) setHint(null) })
@@ -119,7 +123,7 @@ export default function BisectPanel({ deps, mods }: { deps: KeepDeps; mods: Mod[
             <button type="button" className="lo-text-btn" disabled={busy} onClick={close}>Not now</button>
             <button type="button" className="btn-primary" disabled={busy || on.length === 0 || hint === undefined}
               onClick={() => work(async () => { cue('tap'); const r = await startBisect(d, mods, hint?.likely); if (r) cue('toggle'); return r && { step: 'test', run: r } })}>
-              {busy ? 'Switching mods…' : 'Start testing'}
+              {busy ? 'Switching mods…' : hint === undefined ? 'Reading your crash report…' : 'Start testing'}
             </button>
           </div>
         </>}
@@ -147,8 +151,7 @@ export default function BisectPanel({ deps, mods }: { deps: KeepDeps; mods: Mod[
             const off = mods.filter(m => culprits.some(c => stem(c) === stem(m.path)))
             if (await gameOpen(d)) return null
             const text = off.length === 1 ? `Turned off ${nameKey(off[0].path)}.` : `Turned off ${plural(off.length, 'mod')}.`
-            // the app's own toasts: its Undo runs after this dialog closed
-            if (off.length && await turnOffWithUndo(deps, off, off.length === 1 ? 'Crashing mod off' : 'Crashing mods off', text)) setView(null)
+            if (off.length && await turnOffWithUndo(d, off, off.length === 1 ? 'Crashing mod off' : 'Crashing mods off', text)) setView(null)
             return null
           })} />}
       </motion.div>
@@ -188,7 +191,7 @@ function Test({ run, resumed, busy, deps, loader, answer, undo, stop }: {
       if (!live) return
       if (r.refused) { setStuck(true); deps.alert.warning('Mods not set for this test', r.refused) }
       // files had to switch: a game closed while this waited ran other mods, so only a new launch counts
-      else { setStuck(false); setFixed(r.changed); setReady(true); if (r.changed) { setPlayed(false); setLaunched(false); since.current = null } }
+      else { setStuck(false); setFixed(r.changed); setReady(true); if (r.changed) { setPlayed(false); setLaunched(false); since.current = null; setAttempt(a => a + 1) } }
     })
     return () => { live = false }
   }, [resumeTry])
@@ -201,8 +204,8 @@ function Test({ run, resumed, busy, deps, loader, answer, undo, stop }: {
       if (!live) return
       setRunning(r)
       // a new run of the game (Launch again, or started outside the app) is a new try: its answer and crash report
-      // count, not the last one's. Seen up to 1.5 s after it started: 2 s back from when Launch did not set it
-      if (r && !seen) { seen = true; setStarting(false); setPlayed(false); if (closed || since.current === null) since.current = Math.floor(Date.now() / 1000) - 2 }
+      // count, not the last one's. Seen up to 1.5 s after it started: 2 s back, never before the Launch click
+      if (r && !seen) { seen = true; setStarting(false); setPlayed(false); if (closed || since.current === null) since.current = Math.max(since.current ?? 0, Math.floor(Date.now() / 1000) - 2) }
       else if (!r && seen) { seen = false; closed = true; cue('ready'); setPlayed(true) }
     }
     void check()

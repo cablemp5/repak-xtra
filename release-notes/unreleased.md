@@ -8,3 +8,7 @@
 - Fixed app updates failing when repakxtra was started from a PowerShell 7 window
 - Added Open in KO Editor to a KO prompt mod's right-click menu in the Library: the editor opens its hero with the mod's colors and name, ready to change and install over it
 - Fixed the KO Editor's Replace installing a numbered copy beside the mod instead of replacing it
+- Fixed the Game crashed toast only showing the next time repakxtra started: it now shows seconds after the game crashes
+- Added crash report hints to Find the crashing mod: the newest crash's mods are tested first, and each launch says whether the game wrote a crash report
+- Fixed Find the crashing mod naming a mod when the crash never came back: the last test turns it back on first
+- Fixed Find the crashing mod repeating a launch it had just made, and its launch count growing during a test
