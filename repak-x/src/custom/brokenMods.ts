@@ -215,7 +215,7 @@ export function useBrokenWatch(mods: { path: string; modified_date?: number; fil
       // the new list's own run follows
       // a run that stopped first (the game, a held scan, an old USMAP) keeps a manual Check's mods for the next one
       .then(finished => {
-        if (finished && !idle) { (ticked.length ? mine : paths).forEach(p => scope.delete(norm(p))); if (!ticked.length) whole = false }
+        if (finished && !idle) { (ticked.length ? mine : paths).forEach(p => scope.delete(norm(p))); if (!ticked.length && !asked) whole = false } // a Refresh asked meanwhile still wants its own
         unfinished = !finished; stoppedScope = finished ? [] : wasForced; scanEnded(finished || !live, finished); void invoke('xtra_scan_release').catch(() => {}); return finished })
     let unfinished = false
     // one run waiting its turn is enough: a focus, a Rescan and the game update notice asking meanwhile all get that one
@@ -235,7 +235,7 @@ export function useBrokenWatch(mods: { path: string; modified_date?: number; fil
     window.addEventListener('focus', resume)
     const again = listen(VERDICTS_CHANGED, () => { void check() })
     // a Refresh list or Resume: checks the header paused or cancelled run again
-    const rescan = listen<string[] | null>(VERDICTS_RESCAN, e => { for (const p of e.payload ?? []) { forced.add(norm(p)); fresh.add(norm(p)) } if (e.payload && !e.payload.length && !forced.size) whole = asked = true; void releaseScan().then(() => full()) })
+    const rescan = listen<string[] | null>(VERDICTS_RESCAN, e => { for (const p of e.payload ?? []) { forced.add(norm(p)); fresh.add(norm(p)) } if (e.payload && !e.payload.length) whole = asked = true; void releaseScan().then(() => full()) })
     return () => { live = false; window.removeEventListener('focus', resume); if (runFull === full) runFull = null; clearTimeout(t); void again.then(f => f()); void rescan.then(f => f()) }
   }, [key]) // eslint-disable-line react-hooks/exhaustive-deps
 }
