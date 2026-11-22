@@ -8,7 +8,7 @@
 export const normText = (s: string) => s.normalize('NFKD').replace(/\p{M}/gu, '').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim()
 
 /** Exact match's own spelling: case and spaces only, the phrase's punctuation counts. Pure. */
-const exactText = (s: string) => s.toLowerCase().replace(/[\s_]+/g, ' ').trim() // a file name's underscores are its spaces
+const exactText = (s: string) => s.toLowerCase().replace(/[\s_]+/g, ' ').trim() // each _ in a file name is a space
 
 /** Whether `name` matches `query` as typed: every word (in any order), or with `exact` the phrase in order, ignoring
  *  only case and extra spaces. A blank query matches everything, one of punctuation alone is matched as typed. Pure. */
@@ -81,7 +81,7 @@ if (import.meta.env.DEV) {
   console.assert(directMatch(bp, 'purple  vfx', true) && !directMatch('VFX Purple', 'purple vfx', true), 'exact: the phrase in order, extra spaces ignored')
   console.assert(directMatch('Café Mods', 'cafe') && directMatch('Spider-Man', 'spider man'), 'accents and punctuation ignored')
   console.assert(!directMatch('Spider Man', 'spider-man', true) && directMatch('Spider-Man', 'SPIDER-man', true), 'exact: only case and spaces are ignored')
-  console.assert(directMatch('Black_Panther_Purple_VFX_9999999_P', 'purple vfx', true), "exact: a file name's underscores are spaces")
+  console.assert(directMatch('Black_Panther_Purple_VFX_9999999_P', 'purple vfx', true), "exact: each _ in a file name is a space")
   console.assert(directMatch('A - B', '-') && !directMatch('AB', '-'), 'a query of punctuation alone matches as typed')
   console.assert(directMatch(bp, '   ') && closeMatch(bp, ' ') === null, 'a blank query matches everything and guesses nothing')
   console.assert(closeMatches([spidey, bp, 'Purple Pnather Mod'], n => [n], 'purpel panther').join() === bp, 'only close matches, ranked')
