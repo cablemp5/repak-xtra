@@ -7,7 +7,6 @@ import { Check, ClipboardCopy } from 'lucide-react'
 import type { useAlert } from '../components/AlertHandler'
 import { DISCORD_LIMIT, gatherReport, type ReportStage } from './setupReport'
 import { useShownBusy } from './shownBusy'
-import { reportNotes } from './ReportNotes'
 
 type Alert = ReturnType<typeof useAlert>
 
@@ -35,7 +34,7 @@ export default function CopySetupReport({ alert, className = 'action-btn' }: { a
     if (busy) return // one report at a time: a second click never races the first to the clipboard
     setBusy(true)
     try {
-      const text = await gatherReport(setStage, reportNotes)
+      const text = await gatherReport(setStage)
       await copyText(text)
       setCopied(true); setTimeout(() => setCopied(false), 3000)
       if (text.length <= DISCORD_LIMIT) {
