@@ -147,14 +147,19 @@ export default function LogDrawer({
     if (problems > 0) setUnseenProblems(n => n + problems)
   }, [logs, isOpen])
 
-  // Auto-scroll to bottom when new logs arrive (repakxtra: or to the line a toast asked for)
+  // Auto-scroll to bottom when new logs arrive (repakxtra: not while a toast's line is marked, and not when the mark
+  // clears, so the drawer stays on that line)
+  const targetRef = useRef(target)
+  targetRef.current = target
   useEffect(() => {
-    if (logScrollRef.current && isOpen) {
-      const line = target && logScrollRef.current.querySelector<HTMLElement>(`[data-log-id="${CSS.escape(target)}"]`)
-      if (line) line.scrollIntoView({ block: 'center' })
-      else logScrollRef.current.scrollTop = logScrollRef.current.scrollHeight
+    if (logScrollRef.current && isOpen && !targetRef.current) {
+      logScrollRef.current.scrollTop = logScrollRef.current.scrollHeight
     }
-  }, [visibleLogs, isOpen, target])
+  }, [visibleLogs, isOpen])
+  useEffect(() => {
+    if (!target || !isOpen) return
+    logScrollRef.current?.querySelector<HTMLElement>(`[data-log-id="${CSS.escape(target)}"]`)?.scrollIntoView({ block: 'center' })
+  }, [target, isOpen, visibleLogs])
 
   // Handle resize drag
   useEffect(() => {

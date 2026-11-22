@@ -21,8 +21,12 @@ export const scrub = (text: string) => text
   // ids and secrets a log line can carry: an email, a Steam id, a login token
   .replace(/[\w.+-]+@[\w-]+(\.[\w-]+)+/g, '<email>')
   .replace(/\b7656119\d{10}\b/g, '<account id>')
+  .replace(/\b[0-9a-f]{32}\b/gi, '<account id>') // an Epic account id (any other 32-character hex value goes too)
   .replace(/\b(bearer)\s+[\w.~+/=-]{8,}/gi, '$1 <hidden>')
-  .replace(/\b(token|access_token|refresh_token|password|secret|api_?key|auth)(["']?\s*[=:]\s*["']?)[^\s"'&,;]+/gi, '$1$2<hidden>')
+  .replace(/\beyJ[\w-]{6,}\.[\w-]{6,}\.[\w-]+/g, '<hidden>') // a JWT
+  .replace(/\b(authorization)(["']?\s*[=:]\s*)(?:(?:basic|bearer)\s+)?[^\s"'&,;]+/gi, '$1$2<hidden>')
+  // a keyed value: accessToken=, account_id:, username="First Last" (a quoted value goes whole)
+  .replace(/\b(\w*?(?:token|password|passwd|secret|api[-_]?key|account_?id|client_?id|user_?id|user_?name|authorization))(["']?\s*[=:]\s*)("[^"]*"|'[^']*'|[^\s"'&,;]+)/gi, '$1$2<hidden>')
 
 if (import.meta.env.DEV) {
   console.assert(scrub('C:\\Users\\someone\\Desktop\\x and D:/Games/MarvelRivals/~mods/a.pak') === '%USERPROFILE%\\…\\x and ~mods/a.pak', 'no user name, no drive paths', scrub('C:\\Users\\someone\\Desktop\\x and D:/Games/MarvelRivals/~mods/a.pak'))
@@ -37,5 +41,9 @@ if (import.meta.env.DEV) {
   console.assert(scrub('C:/Program Files (x86)/Steam/MarvelRivals/~mods/a.pak') === '~mods/a.pak', 'a mods folder under a spaced path', scrub('C:/Program Files (x86)/Steam/MarvelRivals/~mods/a.pak'))
   console.assert(scrub('C:/a/b.pak and D:/c d/e.pak') === 'b.pak and e.pak', 'two paths on a line keep both file names', scrub('C:/a/b.pak and D:/c d/e.pak'))
   const ids = 'mail me@x.com, steam 76561198000000000, Bearer abcdefgh123, token=abc123&x=1'
-  console.assert(scrub(ids) === 'mail <email>, steam <account id>, Bearer <hidden>, token=<hidden>&x=1', 'ids and tokens', scrub(ids))
+  const keyed = 'accountId=123456789 username="Jane Doe" accessToken=abc123xyz author: Someone'
+  const more = 'Authorization: Basic dXNlcjpwYXNz x-api-key=k1 jwt eyJhbGciOi.eyJzdWIiOi.sig github_token=abc'
+  console.assert(scrub(more) === 'Authorization: <hidden> x-api-key=<hidden> jwt <hidden> github_token=<hidden>', 'headers, dashed keys, JWTs, prefixed tokens', scrub(more))
+  console.assert(scrub(keyed) === 'accountId=<hidden> username=<hidden> accessToken=<hidden> author: Someone', 'keyed ids, quoted names, camelCase tokens', scrub(keyed))
+  console.assert(scrub(ids) ==='mail <email>, steam <account id>, Bearer <hidden>, token=<hidden>&x=1', 'ids and tokens', scrub(ids))
 }

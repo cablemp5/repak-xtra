@@ -162,6 +162,7 @@ export function AlertProvider({ children, placement = DEFAULT_CONFIG.placement }
     const dismissAlert = useCallback((id: number) => {
         // repakxtra: a toast's own `onDismiss` hears it was closed (custom/scanProgress.ts stops showing it)
         const t = toastsNow.current.find(toast => toast.id === id);
+        toastsNow.current = toastsNow.current.filter(toast => toast.id !== id); // repakxtra: the same problem right after shows again
         setToasts(prev => prev.filter(toast => toast.id !== id));
         if (typeof t?.onDismiss === 'function') (t.onDismiss as () => void)();
     }, []);
@@ -169,6 +170,7 @@ export function AlertProvider({ children, placement = DEFAULT_CONFIG.placement }
     // Dismiss all toasts
     const dismissAllAlerts = useCallback(() => {
         const all = toastsNow.current; // repakxtra: Clear all tells each toast too
+        toastsNow.current = [];
         setToasts([]);
         for (const t of all) if (typeof t.onDismiss === 'function') (t.onDismiss as () => void)();
     }, []);
@@ -180,7 +182,15 @@ export function AlertProvider({ children, placement = DEFAULT_CONFIG.placement }
         if (updates.color) alertSound(updates.color, updates.isLoading); // repakxtra: a loading toast that finished
         // repakxtra: a loading toast that ends as a problem lands in Logs once (outside the updater, which may run twice)
         const was = toastsNow.current.find(toast => toast.id === id);
+        // repakxtra: a loading toast that ends as the same problem another toast already shows goes away (an install's
+        // failure toast from the backend and the install's own result)
+        const end = was && { ...was, ...updates };
+        if (end && updates.color && (end.color === 'danger' || end.color === 'warning') && toastsNow.current.some(t => t.id !== id && t.color === end.color
+            && t.title === end.title && (t.fullText ?? t.description) === end.description)) {
+            setToasts(prev => prev.filter(toast => toast.id !== id)); return;
+        }
         const logged = updates.color && was && !was.logId ? logProblem({ ...was, ...updates }, () => dismissAlert(id)) : null;
+        toastsNow.current = toastsNow.current.map(toast => toast.id === id ? { ...toast, ...updates, ...logged } : toast); // repakxtra: in step for a same-tick call
         setToasts(prev => prev.map(toast =>
             toast.id === id ? { ...toast, ...updates, ...logged } : toast
         ));

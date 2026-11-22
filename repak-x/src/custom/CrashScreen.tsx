@@ -7,7 +7,7 @@ import { scrub } from './scrub'
 import { invoke } from '@tauri-apps/api/core'
 
 // CopySetupReport's copyText, without its imports: the crash may have come from one of them
-const copyText = (text: string) => navigator.clipboard.writeText(text).catch(() => invoke('copy_to_clipboard', { text }))
+const copyText = (text: string) => Promise.resolve().then(() => navigator.clipboard.writeText(text)).catch(() => invoke('copy_to_clipboard', { text }))
 
 /** What Copy error details copies. Pure. */
 export const errorDetails = (error: Error, where = '') => scrub([

@@ -40,7 +40,7 @@ export function SnapshotCard({ alert }: { alert: Alert }) {
     const after = drops.length ? await invoke<Snapshot[]>('snapshot_list').catch(() => null) : []
     const kept = after ? drops.filter(d => after.some(x => x.id === d.id)).length : 0
     const pruned = !drops.length ? '' : !after ? ' Could not check that the older ones were removed.' : kept ? ` Could not remove ${plural(kept, 'older backup')}. Delete ${kept === 1 ? 'it' : 'them'} below.` : ` Removed ${dropText}.`
-    alert.success('Backup saved', `${plural(s.files, 'file')}, ${size(s.bytes)}.${pruned} You can verify game files in Steam now.`)
+    alert[kept || (drops.length && !after) ? 'warning' : 'success']('Backup saved', `${plural(s.files, 'file')}, ${size(s.bytes)}.${pruned} You can verify game files in Steam now.`)
   })
   // a .zip of a snapshot or of mod files becomes the newest snapshot (snapshot_import keeps only mod files)
   const importZip = async () => {

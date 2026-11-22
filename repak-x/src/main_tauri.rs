@@ -3265,7 +3265,8 @@ async fn install_mods(
             install_results
         }));
 
-        let mut partly_failed: Vec<String> = Vec::new(); // repakxtra: install_complete names them, the frontend says it
+        let mut all_failed = false; // repakxtra: a failure toast went out, nothing installed
+        let mut partly_failed: Vec<serde_json::Value> = Vec::new(); // repakxtra: install_complete names them (and their source), the frontend says it
         match result {
             Ok(install_results) => {
                 let total = install_results.len();
@@ -3278,6 +3279,7 @@ async fn install_mods(
                     let msg = "No mods were processed.".to_string();
                     window_for_logs.emit("install_log", &msg).ok();
                     toast_events::emit_installation_failed(&window_for_logs, &msg);
+                    all_failed = true;
                 } else if failed_count == total {
                     // All failed
                     let first_err = failed
@@ -3290,6 +3292,7 @@ async fn install_mods(
                     );
                     window_for_logs.emit("install_log", &msg).ok();
                     toast_events::emit_installation_failed(&window_for_logs, &msg);
+                    all_failed = true;
                 } else if failed_count > 0 {
                     // Partial. repakxtra: no failure toast, install_complete names them: the mods that did install keep
                     // their tags and loadouts, and the one toast says how many went in
@@ -3301,7 +3304,7 @@ async fn install_mods(
                         names.join(", ")
                     );
                     window_for_logs.emit("install_log", &msg).ok();
-                    partly_failed = names;
+                    partly_failed = failed.iter().map(|r| serde_json::json!({ "name": r.mod_name, "source": r.source.to_string_lossy() })).collect();
                 } else {
                     window_for_logs
                         .emit("install_log", "Installation completed successfully!")
@@ -3318,11 +3321,12 @@ async fn install_mods(
                 };
                 window_for_logs.emit("install_log", &msg).ok();
                 toast_events::emit_installation_failed(&window_for_logs, &msg);
+                    all_failed = true;
                 error!("Installation thread panicked!");
             }
         }
         // repakxtra: after any failure toast above (events reach the window in order), with the mods that failed
-        window_for_logs.emit("install_complete", serde_json::json!({ "failed": partly_failed })).ok();
+        window_for_logs.emit("install_complete", serde_json::json!({ "failed": partly_failed, "all_failed": all_failed })).ok();
         reported_by_install.store(true, std::sync::atomic::Ordering::SeqCst);
 
         // --- CLEANUP TEMP HYBRID FOLDERS ---
@@ -3360,7 +3364,7 @@ async fn install_mods(
             if reported.load(std::sync::atomic::Ordering::SeqCst) {
                 break; // repakxtra: the install thread sent install_complete itself, after its results
             }
-            if current != last {
+            if current != last && current >= 0 { // repakxtra: -255 is the done mark, never a percent
                 last = current;
                 let progress = (current as f32 / total as f32) * 100.0;
                 window_clone.emit("install_progress", progress).ok();

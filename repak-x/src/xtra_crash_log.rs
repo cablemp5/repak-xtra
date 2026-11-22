@@ -117,7 +117,8 @@ fn crash_dir(id: &str) -> Result<PathBuf, String> {
 /// Why a crash folder gave no log text, as a stable code (CrashLog.tsx and setupReport.ts say it in words): no .log file,
 /// one that could not be read (in use, too big), or one that read but did not decode.
 fn log_status(dir: &Path) -> &'static str {
-    let logs: Vec<PathBuf> = std::fs::read_dir(dir).into_iter().flatten().flatten().map(|e| e.path())
+    let Ok(entries) = std::fs::read_dir(dir) else { return "log_unreadable" }; // the folder itself could not be listed
+    let logs: Vec<PathBuf> = entries.flatten().map(|e| e.path())
         .filter(|p| p.extension().is_some_and(|x| x.eq_ignore_ascii_case("log")))
         .filter(|p| std::fs::symlink_metadata(p).is_ok_and(|m| m.is_file())).collect();
     if logs.is_empty() { "log_missing" }
