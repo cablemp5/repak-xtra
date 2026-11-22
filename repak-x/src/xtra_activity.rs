@@ -252,6 +252,18 @@ fn timeline_of(crash: u64, starts: &[(u64, Option<u64>)], since: u64, events: &[
     Timeline { crash, from, started: session, coverage, events }
 }
 
+/// Copy setup report's Recent activity when there is no crash: the newest 30 events, oldest first, and `since` (0: nothing
+/// recorded yet), in a Timeline with no crash or session.
+#[tauri::command(async)]
+pub fn xtra_recent_activity() -> Result<Timeline, String> {
+    with_store(|s| {
+        let mut events = s.events.clone();
+        events.sort_by_key(|e| e.t);
+        let events = events.split_off(events.len().saturating_sub(30));
+        Timeline { crash: now(), from: None, started: None, coverage: if s.since == 0 { "none" } else { "full" }, events }
+    }).ok_or_else(|| "The history could not be read.".to_string())
+}
+
 /// The timeline of the crash whose folder is `id` (xtra_recent_crashes' id): its own time, never another crash's.
 #[tauri::command(async)]
 pub fn xtra_crash_timeline(id: String) -> Result<Timeline, String> {

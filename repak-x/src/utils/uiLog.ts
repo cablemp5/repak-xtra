@@ -94,14 +94,16 @@ export function clearLogs() {
 }
 
 /** Record a frontend-originated entry. */
-export function log(level: LogLevel, scope: string, message: string) {
+export function log(level: LogLevel, scope: string, message: string): string {
+  const id = `f${++localSeq}` // repakxtra: returned, so a toast can open the drawer on its line (custom/toastLog.ts)
   push({
-    id: `f${++localSeq}`,
+    id,
     ts: Date.now(),
     level,
     scope,
     message
   })
+  return id
 }
 
 export const uiLog = {

@@ -41,6 +41,7 @@ export function WhyNotWorking({ alert, onSetPriority }: { alert: ReturnType<type
   const [found, setFound] = useState<Finding[] | null>(null)
   const [others, setOthers] = useState<Finding[] | null>(null) // the second pass
   const [error, setError] = useState<string | null>(null)
+  const [othersFailed, setOthersFailed] = useState(false) // the second pass could not run: never "should be working" then
   const [busy, setBusy] = useState(false)
   const req = useRef(0) // only the newest opening's answers paint: reopening on another mod drops the older ones
   const spinFirst = useShownBusy(Boolean(target) && !found && !error)
@@ -49,7 +50,7 @@ export function WhyNotWorking({ alert, onSetPriority }: { alert: ReturnType<type
   const path = target?.path ?? null
   const close = () => setTarget(null)
   useEffect(() => {
-    const show = (e: Event) => { setTarget((e as CustomEvent<Target>).detail); setFound(null); setOthers(null); setError(null) }
+    const show = (e: Event) => { setTarget((e as CustomEvent<Target>).detail); setFound(null); setOthers(null); setError(null); setOthersFailed(false) }
     window.addEventListener(EVENT, show)
     return () => window.removeEventListener(EVENT, show)
   }, [])
@@ -67,8 +68,8 @@ export function WhyNotWorking({ alert, onSetPriority }: { alert: ReturnType<type
       ]
       setFound([...r, ...extra])
     }).catch(e => live() && setError(String(e)))
-    // a failed second pass shows nothing extra: the first pass already answered
-    invoke<Finding[]>('xtra_why_overrides', { modPath: path }).then(r => live() && setOthers(r), () => live() && setOthers([]))
+    // a failed second pass says so: without it the mod is not known to be working
+    invoke<Finding[]>('xtra_why_overrides', { modPath: path }).then(r => live() && setOthers(r), () => { if (live()) { setOthers([]); setOthersFailed(true) } })
     return () => { req.current++ }
   }, [target]) // each opening checks again, the same mod too
   if (!target || !path) return null
@@ -113,7 +114,9 @@ export function WhyNotWorking({ alert, onSetPriority }: { alert: ReturnType<type
                 ))}
                 {spinOthers && <li className="why-item why-more"><LoaderCircle size={16} className="scan-status-spin" aria-hidden="true" />
                   <div><span>Checking other mods that share its files…</span></div></li>}
-                {!problems && !pending && <li className="why-item is-ok"><CircleCheck size={16} aria-hidden="true" />
+                {othersFailed && <li className="why-item is-info"><Info size={16} aria-hidden="true" />
+                  <div><b>Could not check the other mods</b><span>Mods that share its files were not checked, so one may still replace it. Close this and open it again to check again.</span></div></li>}
+                {!problems && !pending && !othersFailed && <li className="why-item is-ok"><CircleCheck size={16} aria-hidden="true" />
                   <div><b>This mod should be working</b><span>Still not showing? Restart the game: mods load at launch. A mod made for another skin or hero only shows on that one.</span></div></li>}
               </ul>
             </>

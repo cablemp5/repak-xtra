@@ -8,6 +8,7 @@ import { quietToast } from '../custom/uiPrefs' // repakxtra
 import { ToastAnnouncer, clockElapsed, holdClock, survivor, type ToastClock } from '../custom/toastA11y' // repakxtra
 import { focusInto, topModal } from '../custom/dialogFocus' // repakxtra
 import { useToastExit } from '../custom/toastExit' // repakxtra: retain the faded frame until removal
+import { logProblem } from '../custom/toastLog' // repakxtra: problem toasts land in Logs, with Details
 
 // Toast Icons
 type ToastColor = 'success' | 'danger' | 'warning' | 'info' | 'default' | 'crash' | 'primary' | 'secondary';
@@ -134,18 +135,24 @@ export function AlertProvider({ children, placement = DEFAULT_CONFIG.placement }
     // Add a new toast
     const showAlert = useCallback((alertConfig: AlertOptions) => {
         if (quietToast(alertConfig)) return -1; // repakxtra: Minimal toasts skips everyday confirmations
+        // repakxtra: the same problem again while its toast is up (a retry loop, two listeners) is one notice
+        const same = toastsNow.current.find(t => (t.color === 'danger' || t.color === 'warning') && t.color === alertConfig.color
+            && t.title === alertConfig.title && (t.fullText ?? t.description) === alertConfig.description && !t.isLoading);
+        if (same) return same.id;
         const id = Date.now() + Math.random();
         const toast: Toast = {
             id,
             color: 'default',
             variant: 'flat',
             ...alertConfig,
+            ...logProblem(alertConfig, () => dismissAlert(id)), // repakxtra
             duration: typeof alertConfig.duration === 'number'
                 ? alertConfig.duration
                 : DEFAULT_CONFIG.defaultDuration,
             createdAt: Date.now()
         };
 
+        toastsNow.current = [...toastsNow.current, toast]; // repakxtra: a second call in the same tick sees it
         setToasts(prev => [...prev, toast]);
         alertSound(toast.color, toast.isLoading); // repakxtra
         return id;
@@ -171,8 +178,11 @@ export function AlertProvider({ children, placement = DEFAULT_CONFIG.placement }
         // repakxtra: Minimal toasts: a progress toast that finished as an everyday success goes away instead
         if (updates.color && quietToast(updates)) { setToasts(prev => prev.filter(toast => toast.id !== id)); return; }
         if (updates.color) alertSound(updates.color, updates.isLoading); // repakxtra: a loading toast that finished
+        // repakxtra: a loading toast that ends as a problem lands in Logs once (outside the updater, which may run twice)
+        const was = toastsNow.current.find(toast => toast.id === id);
+        const logged = updates.color && was && !was.logId ? logProblem({ ...was, ...updates }, () => dismissAlert(id)) : null;
         setToasts(prev => prev.map(toast =>
-            toast.id === id ? { ...toast, ...updates } : toast
+            toast.id === id ? { ...toast, ...updates, ...logged } : toast
         ));
     }, []);
 
@@ -232,8 +242,8 @@ export function AlertProvider({ children, placement = DEFAULT_CONFIG.placement }
                     ? successConfig(result)
                     : successConfig;
                 updateToast(id, {
-                    ...successOptions,
                     color: 'success',
+                    ...successOptions, // repakxtra: after the color, so a partial result can end as a warning
                     isLoading: false,
                     duration: DEFAULT_CONFIG.defaultDuration
                 });

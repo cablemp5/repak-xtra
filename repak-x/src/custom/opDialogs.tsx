@@ -4,7 +4,7 @@
 // mod there goes to Recently deleted), and Cancel. One blue action per dialog (Hick), Windows' own words for the same
 // situations (Jakob), and the words describe the PC, never the app. One dialog at a time: a second request waits.
 // The same dialog asks before a preview kit installs from a file (confirmKitFile): it holds programs the app runs.
-import { useEffect, useSyncExternalStore } from 'react'
+import { useEffect, useState, useSyncExternalStore } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { motion } from 'framer-motion'
 import { LoaderCircle, ShieldCheck, ShieldAlert } from 'lucide-react'
@@ -20,6 +20,12 @@ const TAG = /\[(game_running|locked|collision)\]\s*/
 export const opKind = (e: unknown) => (String(e).match(TAG)?.[1] as OpKind | undefined) ?? null
 /** A refusal's words without its tag (and whatever a caller put before it). */
 export const opText = (e: unknown) => { const s = String(e); const m = s.match(TAG); return m ? s.slice((m.index ?? 0) + m[0].length) : s }
+
+/** A refusal that comes back with no toast of its own (xtra_mutation.rs edit, xtra_identity.rs upstream_guard,
+ *  xtra_builtins.rs fixed_place): the caller says it. Every other failed mod change already has the backend's toast.
+ *  shortcut: matched by the start of their sentences, give the three guards a tag like [busy] (and strip it in opText)
+ *  when another guard is added. */
+export const silentRefusal = (e: unknown) => /^(A backup or a storage cleanup is running|Repak X is open too|This mod keeps the name and folder)/.test(opText(e))
 
 /** kit: the file's size and whether it is the newest published kit (matches null: GitHub could not be asked) */
 type KitInfo = { size: number; published: string | null; matches: boolean | null }
@@ -64,13 +70,16 @@ export function OpDialogs() {
 function OpDialog({ a }: { a: Ask }) {
   const { ref, onKeyDown } = useDialogFocus(true, () => answer(null))
   useEffect(() => { cue(a.kind === 'game_running' ? 'open' : 'warning') }, [])
-  // Game open: checks every 1.5 s and goes on by itself once the game is gone
+  // Game open: checks every 1.5 s and goes on by itself once the game is gone. repakxtra: three failed checks in a row
+  // say so and offer Retry, instead of waiting for ever
+  const [unsure, setUnsure] = useState(false)
   useEffect(() => {
     if (a.kind !== 'game_running') return
-    let live = true
+    let live = true, failed = 0
     const check = async () => {
-      const running = await invoke<boolean>('check_game_running').catch(() => true)
+      const running = await invoke<boolean>('check_game_running').then(r => { failed = 0; return r }, () => { failed++; return true })
       if (!live) return
+      setUnsure(failed >= 3)
       if (!running) { cue('success', { emphasis: 'subtle' }); answer('retry') } else timer = setTimeout(check, 1500)
     }
     let timer = setTimeout(check, 1500)
@@ -90,11 +99,12 @@ function OpDialog({ a }: { a: Ask }) {
         <h2 id="op-title" className="op-title">{title}</h2>
         <p id="op-body" className="op-body">{body}</p>
         {a.kind === 'game_running' && (
-          <p className="op-wait" role="status"><LoaderCircle size={14} className="scan-status-spin" aria-hidden="true" />Waiting for the game to close</p>
+          <p className="op-wait" role="status"><LoaderCircle size={14} className="scan-status-spin" aria-hidden="true" />
+            {unsure ? 'Could not check whether the game is running. Close it, then press Retry.' : 'Waiting for the game to close'}</p>
         )}
         <div className="op-actions">
           <button type="button" className="lo-text-btn" onClick={() => answer(null)}>Cancel</button>
-          {a.kind === 'locked' && <button type="button" className="btn-primary" onClick={() => answer('retry')}>Retry</button>}
+          {(a.kind === 'locked' || unsure) && <button type="button" className="btn-primary" onClick={() => answer('retry')}>Retry</button>}
           {a.kind === 'collision' && a.modes && <>
             <button type="button" className="lo-text-btn" onClick={() => answer('replace')}>Replace</button>
             <button type="button" className="btn-primary" onClick={() => answer('keep_both')}>Keep both</button>
@@ -108,6 +118,7 @@ function OpDialog({ a }: { a: Ask }) {
 if (import.meta.env.DEV) {
   console.assert(opKind('Restored 0 file(s); failed: [collision] M is back.') === 'collision' && opKind('plain') === null, 'opKind finds a tag anywhere')
   console.assert(opText('Failed to rename file: [locked] Another program is using it.') === 'Another program is using it.', 'opText drops the tag and what came before')
+  console.assert(silentRefusal('Repak X is open too. Close it.') && !silentRefusal('Mod file does not exist'), 'only the guards that send no toast')
 }
 
 /** For a change that already failed elsewhere (an install, which runs in the background): asks as runOp would, and is

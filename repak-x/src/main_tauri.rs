@@ -520,10 +520,17 @@ async fn set_game_path(
 
     {
         let mut state = state.lock().unwrap();
-        state.game_path = mods_path.clone();
-        save_state(&state).map_err(|e| e.to_string())?;
+        // repakxtra: a folder that could not be saved is not used either, so this run and the next agree
+        let old = std::mem::replace(&mut state.game_path, mods_path.clone());
+        if let Err(e) = save_state(&state) {
+            state.game_path = old;
+            return Err(format!("The game folder could not be saved, so it was not changed: {e}"));
+        }
     }
-    let _ = watch_mods_folder(&window, &mods_path, &watcher_state); // repakxtra: the watcher follows the new folder
+    // repakxtra: the watcher follows the new folder. Without it the list does not refresh by itself, which the Logs say
+    if let Err(e) = watch_mods_folder(&window, &mods_path, &watcher_state) {
+        ui_log::warn("GamePath", format!("The mods folder is not watched, so changes made outside the app show after a refresh: {e}"));
+    }
     Ok(mods_path.to_string_lossy().to_string()) // repakxtra: the folder actually stored
 }
 
@@ -3132,6 +3139,9 @@ async fn install_mods(
     let counter_clone = installed_counter.clone();
     let _stop_clone = stop_flag.clone();
     let window_clone = window.clone();
+    // repakxtra: set once the results are reported, so install_complete never comes before a failure toast
+    let reported = StdArc::new(AtomicBool::new(false));
+    let reported_by_install = reported.clone();
 
     // Spawn installation thread
     let window_for_logs = window.clone();
@@ -3255,6 +3265,7 @@ async fn install_mods(
             install_results
         }));
 
+        let mut partly_failed: Vec<String> = Vec::new(); // repakxtra: install_complete names them, the frontend says it
         match result {
             Ok(install_results) => {
                 let total = install_results.len();
@@ -3280,7 +3291,8 @@ async fn install_mods(
                     window_for_logs.emit("install_log", &msg).ok();
                     toast_events::emit_installation_failed(&window_for_logs, &msg);
                 } else if failed_count > 0 {
-                    // Partial
+                    // Partial. repakxtra: no failure toast, install_complete names them: the mods that did install keep
+                    // their tags and loadouts, and the one toast says how many went in
                     let names: Vec<String> = failed.iter().map(|r| r.mod_name.clone()).collect();
                     let msg = format!(
                         "Partial install: {} of {} mod(s) failed: {}",
@@ -3289,7 +3301,7 @@ async fn install_mods(
                         names.join(", ")
                     );
                     window_for_logs.emit("install_log", &msg).ok();
-                    toast_events::emit_installation_failed(&window_for_logs, &msg);
+                    partly_failed = names;
                 } else {
                     window_for_logs
                         .emit("install_log", "Installation completed successfully!")
@@ -3309,6 +3321,9 @@ async fn install_mods(
                 error!("Installation thread panicked!");
             }
         }
+        // repakxtra: after any failure toast above (events reach the window in order), with the mods that failed
+        window_for_logs.emit("install_complete", serde_json::json!({ "failed": partly_failed })).ok();
+        reported_by_install.store(true, std::sync::atomic::Ordering::SeqCst);
 
         // --- CLEANUP TEMP HYBRID FOLDERS ---
         // Only our own merge folders: a user's folder with the same prefix must survive
@@ -3342,9 +3357,8 @@ async fn install_mods(
         let mut last = i32::MIN;
         loop {
             let current = counter_clone.load(std::sync::atomic::Ordering::SeqCst);
-            if current == -255 {
-                window_clone.emit("install_complete", ()).ok();
-                break;
+            if reported.load(std::sync::atomic::Ordering::SeqCst) {
+                break; // repakxtra: the install thread sent install_complete itself, after its results
             }
             if current != last {
                 last = current;
@@ -8881,6 +8895,7 @@ fn main() {
             xtra_broken::xtra_vfx_no_update, // repakxtra: Nothing to update stops the Needs VFX update flag
             xtra_activity::xtra_activity_record, // repakxtra: What changed?
             xtra_activity::xtra_crash_timeline,
+            xtra_activity::xtra_recent_activity,
             xtra_broken::xtra_vfx_outcome, // repakxtra: the Mod Updater's Failed or Waiting outcome, kept
             xtra_broken::xtra_vfx_outcomes,
             xtra_broken::xtra_scan_forget, // repakxtra: the Mod Updater's Scan checks the ticked mods fresh

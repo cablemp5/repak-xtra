@@ -67,7 +67,7 @@ import SoundsScreen from './custom/SoundsScreen' // repakxtra: the Sounds tab, a
 import ViewModeMenu from './custom/ViewModeMenu' // repakxtra: view buttons folded into one when narrow
 import { loadoutable, modKey, nameKey, renameModKey, setView, syncLoadoutKeys } from './custom/loadoutStore' // repakxtra
 import { setModsRoot } from './custom/loadoutIdentity' // repakxtra
-import { OpDialogs, gameClosed, opText, retryAfter, runOp } from './custom/opDialogs' // repakxtra: game open, file in use, name taken
+import { OpDialogs, gameClosed, opText, retryAfter, runOp, silentRefusal } from './custom/opDialogs' // repakxtra: game open, file in use, name taken
 
 // repakxtra: a quick install asks when the game or another program holds a file, and nothing installed never reads as installed
 const quickInstall = async (args: Record<string, unknown>) => {
@@ -600,7 +600,7 @@ function App() {
 
   // repakxtra: the VFX Updater window (custom/vfx/), a mod handed over when given
   const openVfxUpdaterWindow = (modUtocPath?: string | null) =>
-    fixInVfxWindow(modUtocPath ? [modUtocPath] : [], false).catch(e => console.error('[VFX] Window error:', e))
+    fixInVfxWindow(modUtocPath ? [modUtocPath] : [], false).catch(e => { console.error('[VFX] Window error:', e); alert.error('Mod Updater did not open', String(e), { action: { label: 'Try again', onClick: () => openVfxUpdaterWindow(modUtocPath) } }) }) // repakxtra: said, not only logged
 
   const openAssetExplorerWindow = async () => {
     try {
@@ -625,9 +625,11 @@ function App() {
 
       explorerWindow.once('tauri://error', (e) => {
         console.error('[AssetExplorer] Failed to create window:', e)
+        alert.error('Asset Explorer did not open', String(e.payload ?? e), { action: { label: 'Try again', onClick: () => { void openAssetExplorerWindow() } } }) // repakxtra
       })
     } catch (e) {
       console.error('[AssetExplorer] Window error:', e)
+      alert.error('Asset Explorer did not open', String(e), { action: { label: 'Try again', onClick: () => { void openAssetExplorerWindow() } } }) // repakxtra
     }
   }
 
@@ -1281,6 +1283,8 @@ function App() {
         targetCount: targetMods.length
       })
 
+      const switchFailed: string[] = [] // repakxtra
+      let silentBulk = false // a refusal the backend sends no toast for: one summary says it
       for (const mod of targetMods) {
         try {
           if (!(await runOp(`turn ${enable ? 'on' : 'off'} this mod`, () => invoke('toggle_mod', { modPath: mod.path }), { modes: false }))) break // repakxtra: game open or file in use asks, Cancel stops the rest
@@ -1288,12 +1292,14 @@ function App() {
         } catch (e) {
           const why = blockedReason(e) // repakxtra: turned off because it can crash the game
           if (why) keptOff.push({ path: mod.path, reason: why })
-          else console.error(`Failed to toggle ${mod.path}:`, e)
+          else { console.error(`Failed to toggle ${mod.path}:`, e); switchFailed.push(nameKey(mod.path)); silentBulk ||= silentRefusal(e); uiLog.error('Mods', `Could not turn ${enable ? 'on' : 'off'} ${nameKey(mod.path)}: ${e}`) }
         }
       }
       showKeptOff(alert, keptOff, loadMods) // repakxtra
+      // repakxtra: a switch that failed for another reason is said, not only logged (stopped, not attempted, is the rest)
+      if (switchFailed.length && silentBulk) alert.error(`${plural(switchFailed.length, 'mod')} not turned ${enable ? 'on' : 'off'}`, `${switchFailed.slice(0, 3).join(', ')}${switchFailed.length > 3 ? ` and ${switchFailed.length - 3} more` : ''}. Details are in Logs.`)
 
-      setStatus(`Turned ${enable ? 'on' : 'off'} ${count} mods.`)
+      setStatus(`Turned ${enable ? 'on' : 'off'} ${count} of ${plural(targetMods.length, 'mod')}.`)
       const refreshedMods = await loadMods()
 
       // Re-map selection to new paths (extension changes on toggle)
@@ -2136,6 +2142,9 @@ function App() {
         setStatus('Game path set: ' + stored)
         await loadMods()
         await loadFolders()
+        // repakxtra: a folder with no game files next to it is kept (a mods folder can live anywhere), but said
+        const build = await invoke<{ updated: number }>('xtra_game_build').catch(() => null)
+        if (build && !build.updated) alert.warning('Not the game folder?', 'No Marvel Rivals files were found with this folder, so mods put here may not load.', { action: { label: 'Choose again', onClick: () => { void handleBrowseGamePath() } } })
       }
     } catch (error) {
       setStatus('Error setting game path: ' + error)
@@ -2216,6 +2225,7 @@ function App() {
       return true
     } catch (error) {
       setStatus('Error deleting mod: ' + error)
+      if (silentRefusal(error)) alert.error('Mod not deleted', opText(error)) // repakxtra: the backend toasts every other failure
       return false
     }
   }
@@ -2256,7 +2266,7 @@ function App() {
     } catch (error) {
       const why = blockedReason(error) // repakxtra: turned off because it can crash the game
       if (why) showKeptOff(alert, [{ path: modPath, reason: why }], loadMods)
-      else setStatus('Error toggling mod: ' + error)
+      else { setStatus('Error toggling mod: ' + error); if (silentRefusal(error)) alert.error('Mod not switched', opText(error)) } // repakxtra: the backend toasts every other failure
     } finally {
       togglingModsRef.current.delete(toggleKey)
     }
@@ -2589,16 +2599,21 @@ function App() {
     // Clear the mod details panel to prevent stale reference crashes
     setSelectedMod(null)
 
+    let moved = 0 // repakxtra: what really moved, after a Cancel or a failure too
     try {
       for (const modPath of selectedFiles) {
         if (!(await moveMod(modPath, effectiveFolderId, 'move mods'))) break // repakxtra: game open, file in use, or name taken asks
+        moved++
       }
-      setStatus(`Moved ${plural(selectedFiles.size, 'mod')} to folder!`)
+      setStatus(moved === selectedFiles.size ? `Moved ${plural(moved, 'mod')} to folder!` : `Moved ${moved} of ${plural(selectedFiles.size, 'mod')}. The rest stayed where they were.`)
       setSelectedMods(new Set())
       await loadMods()
       await loadFolders()
     } catch (error) {
       setStatus(`Error: ${error}`)
+      // repakxtra: how far it got, always (the backend's toast, when it sends one, only names the one that failed)
+      alert.error(moved ? `Moved ${moved} of ${plural(selectedFiles.size, 'mod')}` : 'Mods not moved', `${silentRefusal(error) ? `${opText(error)} ` : ''}The rest stayed where they were.`)
+      void loadMods()
     }
   }
 
@@ -2630,6 +2645,7 @@ function App() {
       await loadFolders()
     } catch (error) {
       setStatus('Error moving mod: ' + error)
+      if (silentRefusal(error)) alert.error('Mod not moved', opText(error)) // repakxtra: the backend toasts every other failure
     }
   }
 
@@ -2760,6 +2776,7 @@ function App() {
     } catch (error) {
       setStatus(`Error renaming mod: ${error}`)
       console.error('Error renaming mod:', error)
+      if (silentRefusal(error)) alert.error('Mod not renamed', opText(error)) // repakxtra: the backend toasts every other failure
     }
   }
 
@@ -3259,7 +3276,7 @@ function App() {
     })
     const installed = (async () => {
         // Create a promise that resolves when install_complete event fires
-        const installCompletePromise = new Promise<void>((resolve, reject) => {
+        const installCompletePromise = new Promise<string[]>((resolve, reject) => { // repakxtra: the names that failed in a partial install
           let unlistenComplete: UnlistenFn | null = null
           let unlistenError: UnlistenFn | null = null
           let unlistenRefused: UnlistenFn | null = null // repakxtra
@@ -3274,12 +3291,12 @@ function App() {
           }, 10 * 60 * 1000)
 
           // Listen for success
-          listen('install_complete', () => {
+          listen('install_complete', (event: any) => {
             if (timeoutId) clearTimeout(timeoutId)
             if (unlistenComplete) unlistenComplete()
             if (unlistenError) unlistenError()
             if (unlistenRefused) unlistenRefused() // repakxtra
-            resolve()
+            resolve(Array.isArray(event.payload?.failed) ? event.payload.failed : [])
           }).then(unlisten => { unlistenComplete = unlisten })
 
           // repakxtra: a failure the shared dialog explains (game open, file in use) comes without a toast
@@ -3310,8 +3327,9 @@ function App() {
         await invoke('install_mods', { mods: sent }) // repakxtra: with the left-out ones
 
         // Wait for the actual installation to complete
-        await installCompletePromise
-        return { count: modsWithSettings.filter(isNew).length } // repakxtra: without the ones already installed
+        const failedNames = new Set(await installCompletePromise)
+        const failed = modsWithSettings.filter(m => isNew(m) && failedNames.has(m.customName || m.mod_name || '')) // repakxtra: the result's name
+        return { count: modsWithSettings.filter(isNew).length - failed.length, failed } // repakxtra: without the ones already installed
       })().finally(() => { ended = true; unlistenToastProgress.then(u => u()) })
     installToast = alert.promise(installed, {
         loading: {
@@ -3319,21 +3337,28 @@ function App() {
           description: plural(modCount, 'mod'),
           progressValue: 0,
         },
-        success: (result) => ({
+        success: (result) => result.failed.length ? { // repakxtra: a partial install is a warning that names what is missing
+          color: 'warning',
+          title: `Installed ${result.count} of ${plural(result.count + result.failed.length, 'mod')}`,
+          description: `Not installed: ${result.failed.map((m: InstallModPayload) => m.customName || m.mod_name).slice(0, 3).join(', ')}${result.failed.length > 3 ? ` and ${result.failed.length - 3} more` : ''}. Details are in Logs.`,
+          progressValue: undefined,
+        } : {
           title: 'Installation Complete',
           description: result.count ? `Successfully installed ${plural(result.count, 'mod')}` : 'Nothing new. Every mod was already installed.', // repakxtra
           progressValue: undefined, // repakxtra: back to the auto-dismiss bar
-        }),
+        },
         error: (err) => ({
           title: 'Installation Failed',
           description: opText(err), // repakxtra: without the shared dialog's tag
           progressValue: undefined,
         })
       })
-    installed.then(async () => {
+    installed.then(async ({ failed }) => {
+        const done = (m: InstallModPayload) => isNew(m) && !failed.includes(m) // repakxtra: a mod that failed gets no tags, loadout or source
         // Mirror tag assignment flow used by the main list/context menu
         const typeTracker: Record<string, number> = {}
-        for (const mod of modsWithSettings.filter(isNew)) { // repakxtra: no tags for a mod left out as already installed
+        let tagsFailed = 0 // repakxtra: said once, not only in the console
+        for (const mod of modsWithSettings.filter(done)) { // repakxtra: no tags for a mod left out as already installed
           const modType = mod.mod_type || 'Unknown'
           const count = typeTracker[modType] || 0
           const minNines = 7 + count
@@ -3349,6 +3374,7 @@ function App() {
                 await invoke('add_custom_tag', { modPath: fullPath, tag })
               } catch (e) {
                 console.error(`Failed to add tag ${tag} to ${fullPath}:`, e)
+                tagsFailed++
               }
             }
           }
@@ -3356,7 +3382,8 @@ function App() {
           typeTracker[modType] = count + 1
         }
 
-        const fresh = modsWithSettings.filter(isNew) // repakxtra: a mod left out as already installed has no new file to save or source
+        if (tagsFailed) alert.warning('Tags not added', `${plural(tagsFailed, 'tag')} could not be added to the new mods. Add them from the mod's details.`)
+        const fresh = modsWithSettings.filter(done) // repakxtra: a mod left out as already installed has no new file to save or source
         // repakxtra: Save as a loadout, the copies already installed included
         const kept = modsWithSettings.flatMap(m => { const s = sameOf(m); return s ? [{ path: s.path, loadouts: m.loadouts }] : [] })
         if (fresh.length || kept.length) await finishInstallLoadout(fresh, alert, kept)
@@ -3366,7 +3393,7 @@ function App() {
         loadMods()
         loadFolders()
         loadTags()
-        setStatus('Mods installed successfully!')
+        setStatus(failed.length ? `Installed ${plural(modsWithSettings.filter(done).length, 'mod')}, ${failed.length} failed` : 'Mods installed successfully!') // repakxtra
 
         // Reset DRP status to Idle (or effective mod count if we could easily get it)
         // For now, Idle is safe and functionally correct
@@ -3381,6 +3408,7 @@ function App() {
           )
         }
     }, e => { // the failure is the toast's. repakxtra: game open or file in use also asks, and Retry installs again
+      setIsModsLoading(false); setModLoadingProgress(0) // repakxtra: a refused install never sends install_complete, so the bar stops here
       void retryAfter(e, 'install these mods').then(again => { if (again) void handleInstallMods(sent) })
     }).catch(e => console.error('[install] after the install', e))
   }

@@ -7,6 +7,8 @@ import { FiDownload, FiSearch, FiX } from 'react-icons/fi'
 import { invoke } from '@tauri-apps/api/core'
 import { formatLogLine, formatLogTime, type LogEntry, type LogLevel } from '../utils/uiLog'
 import './LogDrawer.css'
+import { scrub } from '../custom/scrub' // repakxtra: copies and the saved file leave the app without paths or ids
+import { SHOW_LOG } from '../custom/toastLog' // repakxtra: a toast's Details opens the drawer on its line
 
 type CopyFeedback = {
   id: string
@@ -84,6 +86,23 @@ export default function LogDrawer({
   // entries start rolling off the front an index would silently point at the
   // wrong place and the badge would miss problems.
   const lastSeenIdRef = useRef<string | null>(logs.length ? logs[logs.length - 1].id : null)
+  // repakxtra: the line a toast's Details asked for: shown whatever the filter, scrolled to, and marked for a moment
+  const [target, setTarget] = useState<string | null>(null)
+  const openRef = useRef({ isOpen, onToggle })
+  openRef.current = { isOpen, onToggle }
+  useEffect(() => {
+    const show = (e: Event) => {
+      setLevelFilter('normal'); setSearch(''); setTarget((e as CustomEvent<string>).detail)
+      if (!openRef.current.isOpen) openRef.current.onToggle()
+    }
+    window.addEventListener(SHOW_LOG, show)
+    return () => window.removeEventListener(SHOW_LOG, show)
+  }, [])
+  useEffect(() => {
+    if (!target) return
+    const t = setTimeout(() => setTarget(null), 2400)
+    return () => clearTimeout(t)
+  }, [target])
 
   const activeLevels = useMemo(
     () => new Set(LEVEL_FILTERS.find(f => f.id === levelFilter)?.levels ?? []),
@@ -128,12 +147,14 @@ export default function LogDrawer({
     if (problems > 0) setUnseenProblems(n => n + problems)
   }, [logs, isOpen])
 
-  // Auto-scroll to bottom when new logs arrive
+  // Auto-scroll to bottom when new logs arrive (repakxtra: or to the line a toast asked for)
   useEffect(() => {
     if (logScrollRef.current && isOpen) {
-      logScrollRef.current.scrollTop = logScrollRef.current.scrollHeight
+      const line = target && logScrollRef.current.querySelector<HTMLElement>(`[data-log-id="${CSS.escape(target)}"]`)
+      if (line) line.scrollIntoView({ block: 'center' })
+      else logScrollRef.current.scrollTop = logScrollRef.current.scrollHeight
     }
-  }, [visibleLogs, isOpen])
+  }, [visibleLogs, isOpen, target])
 
   // Handle resize drag
   useEffect(() => {
@@ -165,7 +186,7 @@ export default function LogDrawer({
   const handleCopyLine = async (entry: LogEntry, e: React.MouseEvent<HTMLDivElement>) => {
     e.preventDefault()
     try {
-      await navigator.clipboard.writeText(formatLogLine(entry))
+      await navigator.clipboard.writeText(scrub(formatLogLine(entry)))
       showFeedback(entry.id, 'Copied!')
     } catch (err) {
       console.error('Failed to copy to clipboard:', err)
@@ -175,7 +196,7 @@ export default function LogDrawer({
   const handleCopyAll = async () => {
     if (visibleLogs.length === 0) return
     try {
-      await navigator.clipboard.writeText(visibleLogs.map(formatLogLine).join('\n'))
+      await navigator.clipboard.writeText(scrub(visibleLogs.map(formatLogLine).join('\n')))
       showFeedback('all', `${visibleLogs.length} ${visibleLogs.length === 1 ? 'line' : 'lines'} copied` /* repakxtra */)
     } catch (err) {
       console.error('Failed to copy all logs:', err)
@@ -188,7 +209,7 @@ export default function LogDrawer({
     setIsExporting(true)
     try {
       const path = await invoke<string>('export_ui_logs', {
-        lines: visibleLogs.map(formatLogLine)
+        lines: visibleLogs.map(e => scrub(formatLogLine(e)))
       })
       showFeedback('all', 'Saved to file')
       // Revealing it is a convenience, not the point of the export.
@@ -358,7 +379,8 @@ export default function LogDrawer({
                   {visibleLogs.map((entry, i) => (
                     <div
                       key={entry.id}
-                      className={`log-drawer-line ${entry.level}`}
+                      className={`log-drawer-line ${entry.level}${entry.id === target ? ' is-target' : ''}`}
+                      data-log-id={entry.id}
                       onContextMenu={(e) => handleCopyLine(entry, e)}
                       title="Right-click to copy line"
                     >

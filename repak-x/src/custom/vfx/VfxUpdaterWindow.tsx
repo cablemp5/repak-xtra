@@ -607,9 +607,12 @@ export function VfxUpdaterPanel() {
     const { open: choose } = await import('@tauri-apps/plugin-dialog')
     const p = await choose({ multiple: false, filters: [{ name: 'USMAP', extensions: ['usmap'] }] })
     if (typeof p !== 'string') return
-    setUsmapInfo(null) // its version, date and Up to date described the downloaded file, not this one
     const current = await invoke<Record<string, unknown>>('vfx_get_settings').catch(() => ({}))
-    await invoke('vfx_save_settings', { settings: { ...current, usmapPath: p } }).catch(() => {}) // keeps the auto-update bookkeeping
+    // keeps the auto-update bookkeeping. repakxtra: a failed save leaves the old USMAP in place and says so
+    try { await invoke('vfx_save_settings', { settings: { ...current, usmapPath: p } }) } catch (e) {
+      addLog(`The USMAP was not saved, the old one is still used: ${e}`, 'error'); return
+    }
+    setUsmapInfo(null) // its version, date and Up to date described the downloaded file, not this one
     setUsmap(p) // after the save: the checks it starts read the saved USMAP
     setReload(n => n + 1); void verdictsChanged() // the same path, or a first one, can hold new mappings too
   }
@@ -681,7 +684,7 @@ export function VfxUpdaterPanel() {
         const from = fixedFile
         fixedFile = await invoke<string>('rename_mod', { modPath: from, newName: unsupportedName(from, false), mode: REFUSE }).catch(e => { addLog(`Its update keeps the _UNSUPPORTED name: ${e}`, 'warning'); return from })
       }
-      if (r.placed) await emitTo('main', FIXED_EVENT, { from: r.placed.source, to: fixedFile!, swap: true, original: r.placed.original } satisfies Fixed).catch(() => {})
+      if (r.placed) await emitTo('main', FIXED_EVENT, { from: r.placed.source, to: fixedFile!, swap: true, original: r.placed.original } satisfies Fixed).catch(e => addLog(`Loadouts may still point at the old copy. Re-add the updated mod to them: ${e}`, 'warning')) // repakxtra: said, not swallowed
       // an update named _UPDATED is a new file and its original leaves the list: its result moves with it
       const moveTo = (file: string) => {
         const moved = norm(utocOf(file))

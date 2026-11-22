@@ -18,3 +18,12 @@
 - Fixed Needs update coming back after a failed or partial update, until the game, the mod, or the mappings change
 - Added What changed? to each crash in Settings > Crash reports: the installs, updates, mods turned on or off, loadout switches, and app or game updates since the game launch before the crash, also in Copy setup report
 - Added smarter search to the Library and Loadouts: words match in any order, close matches show when a typo finds nothing, and a loadout shows when its name or one of its mods matches (no longer its collection's name), with Exact match and Search inside loadouts in Settings > Interface > Search
+- Changed Copy setup report to start with What to check next, then why mods might not load, what the newest crash shows, recent activity, and that crash's game log with names and ids taken out
+- Added optional notes to Copy setup report in Settings > Help & Community: what you were trying to do and what happened instead
+- Added Details to error toasts: it opens Logs on that line, and copies from Logs leave out folder paths, user names, account ids, and tokens
+- Added Copy error details to the screen shown when a window breaks
+- Fixed a partial install showing Installation Complete and giving the mods that did install no tags or loadout
+- Fixed the progress bar spinning after an install was refused
+- Fixed failures with no message: a backup or cleanup running, Repak X open, Why isn't it working's second check, the Mod Updater's USMAP save, Setup's loader check, Sounds, and opening the Mod Updater or Asset Explorer
+- Fixed Moved N mods and Backup saved claiming more than was done, and the game-close wait waiting for ever when the game could not be checked
+- Fixed a game folder that could not be saved still being used until restart

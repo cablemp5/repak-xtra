@@ -114,6 +114,17 @@ fn crash_dir(id: &str) -> Result<PathBuf, String> {
     if std::fs::symlink_metadata(&dir).is_ok_and(|m| m.is_dir()) { Ok(dir) } else { Err("That crash folder is gone".into()) }
 }
 
+/// Why a crash folder gave no log text, as a stable code (CrashLog.tsx and setupReport.ts say it in words): no .log file,
+/// one that could not be read (in use, too big), or one that read but did not decode.
+fn log_status(dir: &Path) -> &'static str {
+    let logs: Vec<PathBuf> = std::fs::read_dir(dir).into_iter().flatten().flatten().map(|e| e.path())
+        .filter(|p| p.extension().is_some_and(|x| x.eq_ignore_ascii_case("log")))
+        .filter(|p| std::fs::symlink_metadata(p).is_ok_and(|m| m.is_file())).collect();
+    if logs.is_empty() { "log_missing" }
+    else if logs.iter().all(|p| crate::xtra_crash::read_capped(p, MAX_LOG).is_empty()) { "log_unreadable" }
+    else { "log_undecodable" }
+}
+
 /// The decoded engine log of a crash folder, None when it has none.
 fn read_log(dir: &Path) -> Option<String> {
     std::fs::read_dir(dir).ok()?.flatten()
@@ -405,7 +416,8 @@ pub async fn xtra_crash_log_summary(id: String) -> Result<Option<LogSummary>, St
 #[tauri::command]
 pub async fn xtra_crash_log_text(id: String) -> Result<String, String> {
     tauri::async_runtime::spawn_blocking(move || {
-        let text = read_log(&crash_dir(&id)?).ok_or("This crash has no engine log")?;
+        let dir = crash_dir(&id).map_err(|_| "log_gone".to_string())?;
+        let text = read_log(&dir).ok_or_else(|| log_status(&dir).to_string())?;
         redact_log(&text, &crate::xtra_crash::user_names(), &learned_ids(&text))
     }).await.map_err(|e| e.to_string())?
 }
@@ -447,6 +459,18 @@ mod tests {
         assert_eq!(decode(&with_trailer).unwrap(), "a\n\n----- shared memory log -----\nring text");
         assert_eq!(decode(b"not a log"), None);
         assert_eq!(decode(MAGIC).unwrap(), "", "no records");
+    }
+
+    #[test]
+    fn a_log_that_gives_no_text_says_why() {
+        let dir = std::env::temp_dir().join(format!("repakxtra-logstatus-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        assert_eq!(log_status(&dir), "log_missing");
+        std::fs::write(dir.join("Marvel.log"), b"not an engine log").unwrap();
+        assert_eq!((read_log(&dir), log_status(&dir)), (None, "log_undecodable"));
+        std::fs::write(dir.join("Marvel.log"), b"").unwrap();
+        assert_eq!(log_status(&dir), "log_unreadable", "an empty file reads as nothing");
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 
     #[test]

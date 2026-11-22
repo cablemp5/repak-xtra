@@ -215,6 +215,7 @@ const withLastCheck = (g: Galacta): Galacta => lastCheck && !g.latest && lastChe
 export function SetupPanel({ alert, onClose, focus }: { alert: Alert; onClose: () => void; focus?: string | null }) {
   const [bypass, setBypass] = useState<Bypass | null>(null)
   const [galacta, setGalacta] = useState<Galacta | null>(lastCheck)
+  const [galactaError, setGalactaError] = useState<string | null>(null) // repakxtra: its state could not be read
   const [folders, setFolders] = useState<string[]>([])
   const [folder, setFolder] = useState(savedItem(FOLDER_KEY) || HERE)
   const [auto, setAuto] = useState(autoCheck())
@@ -238,7 +239,7 @@ export function SetupPanel({ alert, onClose, focus }: { alert: Alert; onClose: (
       const known = withLastCheck(g)
       setGalacta(known)
       if (!known.latest && autoCheck()) invoke<Galacta>('setup_galacta_status', { online: true }).then(o => { if (acted.current === at) setGalacta(remember(o)) }).catch(() => {})
-    }).catch(() => {})
+    }).catch(e => setGalactaError(String(e))) // repakxtra: never Checking… for ever
     invoke<{ id: string; depth: number }[]>('get_folders')   // subfolders by their path below ~mods ("A/B")
       .then(fs => setFolders((fs ?? []).filter(f => f.depth > 0).map(f => f.id))).catch(() => {})
   }, [])
@@ -363,7 +364,7 @@ export function SetupPanel({ alert, onClose, focus }: { alert: Alert; onClose: (
                 <h3>{LOADER_NAME}</h3>
                 <p>{<>Loads more types of mods and lets you toggle mods in game. By <a onClick={() => open(GALACTA)}>0xSaturno</a>.</>}</p>
               </div>
-              <span className={`su-chip ${g?.up_to_date === false ? 'is-update' : g?.installed ? 'is-installed' : 'is-missing'}`}>{g ? galactaState : 'Checking…'}</span>
+              <span className={`su-chip ${g?.up_to_date === false ? 'is-update' : g?.installed ? 'is-installed' : 'is-missing'}`}>{g ? galactaState : galactaError ? 'Not read' : 'Checking…'}</span>
             </div>
             {/* One part row, the same as the preview kit's: state, where it is and the newest release, links on the right */}
             <ul className="su-parts">
@@ -373,7 +374,7 @@ export function SetupPanel({ alert, onClose, focus }: { alert: Alert; onClose: (
                   <b>{GALACTA_PAK}</b>
                   {/* like the preview kit's line: its version (known once a check finds it matches), where, then What's new */}
                   <span>
-                    {!g ? 'Checking…' : [g.installed && g.up_to_date && g.latest, g.installed ? `in ${where}${g.disabled ? ', switched off' : ''}` : 'Not installed'].filter(Boolean).join(' · ')}
+                    {!g ? (galactaError ? 'Could not read it. Close and reopen Setup to check again.' : 'Checking…') : [g.installed && g.up_to_date && g.latest, g.installed ? `in ${where}${g.disabled ? ', switched off' : ''}` : 'Not installed'].filter(Boolean).join(' · ')}
                     {g?.latest && <> · <button type="button" className="su-link" onClick={() => setNotes("What's new")}>{g.up_to_date === false ? `${g.latest} on GitHub` : `What's new in ${g.latest}`}</button></>}
                   </span>
                 </div>

@@ -127,7 +127,8 @@ export default function SoundsScreen({ alert, blocked, onInstall }: SoundsProps)
   const playToken = useRef(0) // a play still loading when another starts (or Stop) never starts after it
 
   const asked = useRef(0) // only the newest state read lands: a slower, older one never overwrites it
-  const refresh = () => { const n = ++asked.current; return invoke<State>('sounds_state').then(v => { if (n === asked.current) setSt(v) }).catch(() => undefined) }
+  // repakxtra: a failed read says so once (slots would look empty, as if nothing was saved)
+  const refresh = () => { const n = ++asked.current; return invoke<State>('sounds_state').then(v => { if (n === asked.current) setSt(v) }).catch(e => { if (n === asked.current) alert.warning('Could not read your sounds', `The slots may look empty. ${String(e)}`, { action: { label: 'Try again', onClick: () => { void refresh() } } }) }) }
   useEffect(() => { if (shown) void refresh() }, [shown])
   useEffect(() => { // the preview kit installed in Setup turns the Game buttons on
     window.addEventListener('preview-kit-changed', refresh)
