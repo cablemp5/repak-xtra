@@ -589,13 +589,14 @@ pub(crate) enum CrashSave {
 
 /// What to save after the check: a fresh folder once told, once it is an older crash, or once watched 2 minutes with
 /// no report (`watched`: seconds, never written, or too old for the 24 hour check). Until then it stays unknown, so a
-/// report written late is still told. A time that cannot be read never replaces a good one. Pure.
-pub(crate) fn crash_save(fresh: bool, older: bool, told: bool, watched: Option<u64>, known_at: Option<u64>, created: Option<u64>) -> CrashSave {
+/// report written late is still told. A time that cannot be read never replaces a good one, and a time ahead of `now`
+/// is never saved as the known folder's time (it would be dropped and saved again every call). Pure.
+pub(crate) fn crash_save(fresh: bool, older: bool, told: bool, watched: Option<u64>, known_at: Option<u64>, created: Option<u64>, now: u64) -> CrashSave {
     if fresh && (told || older || watched.is_some_and(|s| s >= 120)) {
         return CrashSave::Known(if older { known_at } else { created.or(known_at) });
     }
     match (fresh, known_at, created) {
-        (false, None, Some(c)) => CrashSave::Time(c),
+        (false, None, Some(c)) if c <= now => CrashSave::Time(c),
         _ => CrashSave::Nothing,
     }
 }
@@ -630,25 +631,27 @@ mod tests {
         let now = 10_000;
         // the same folder: nothing new, nothing saved
         assert_eq!(crash_news(Some("a"), Some(500), Some("a"), Some(500), now), (false, false, Some(500)));
-        assert_eq!(crash_save(false, false, false, None, Some(500), Some(500)), CrashSave::Nothing);
+        assert_eq!(crash_save(false, false, false, None, Some(500), Some(500), now), CrashSave::Nothing);
         // a new crash, told: known with its time
         assert_eq!(crash_news(Some("a"), Some(500), Some("b"), Some(900), now), (true, false, Some(500)));
-        assert_eq!(crash_save(true, false, true, None, Some(500), Some(900)), CrashSave::Known(Some(900)));
+        assert_eq!(crash_save(true, false, true, None, Some(500), Some(900), now), CrashSave::Known(Some(900)));
         // its report not written yet: unknown while watched under 2 minutes, then settled
-        assert_eq!(crash_save(true, false, false, None, Some(500), Some(900)), CrashSave::Nothing);
-        assert_eq!(crash_save(true, false, false, Some(119), Some(500), Some(900)), CrashSave::Nothing);
-        assert_eq!(crash_save(true, false, false, Some(120), Some(500), Some(900)), CrashSave::Known(Some(900)));
+        assert_eq!(crash_save(true, false, false, None, Some(500), Some(900), now), CrashSave::Nothing);
+        assert_eq!(crash_save(true, false, false, Some(119), Some(500), Some(900), now), CrashSave::Nothing);
+        assert_eq!(crash_save(true, false, false, Some(120), Some(500), Some(900), now), CrashSave::Known(Some(900)));
         // the newest folder deleted: the one before it is older, known without a toast, the known time kept
         assert_eq!(crash_news(Some("b"), Some(900), Some("a"), Some(500), now), (true, true, Some(900)));
-        assert_eq!(crash_save(true, true, false, None, Some(900), Some(500)), CrashSave::Known(Some(900)));
+        assert_eq!(crash_save(true, true, false, None, Some(900), Some(500), now), CrashSave::Known(Some(900)));
         // first run: nothing known, the folder is news (told when under 24 hours, else settled after 2 minutes)
         assert_eq!(crash_news(None, None, Some("a"), Some(500), now), (true, false, None));
         // a state from before times were kept: the known folder's time once
-        assert_eq!(crash_save(false, false, false, None, None, Some(500)), CrashSave::Time(500));
+        assert_eq!(crash_save(false, false, false, None, None, Some(500), now), CrashSave::Time(500));
         // a time saved while the clock ran ahead is no cutoff
         assert_eq!(crash_news(Some("b"), Some(99_999), Some("c"), Some(900), now), (true, false, None));
         // an unreadable created time never replaces a good one
-        assert_eq!(crash_save(true, false, true, None, Some(500), None), CrashSave::Known(Some(500)));
+        assert_eq!(crash_save(true, false, true, None, Some(500), None, now), CrashSave::Known(Some(500)));
+        // the known folder made while the clock ran ahead: its time is not saved until the clock passes it
+        assert_eq!(crash_save(false, false, false, None, None, Some(99_999), now), CrashSave::Nothing);
         // no crash folder at all
         assert_eq!(crash_news(Some("a"), Some(500), None, None, now), (false, false, Some(500)));
     }

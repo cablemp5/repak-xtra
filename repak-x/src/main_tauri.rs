@@ -7183,7 +7183,7 @@ async fn check_for_previous_crash(
             _ => { *w = Some((name, std::time::Instant::now())); None }
         }
     }).flatten();
-    match (xtra_crash::crash_save(fresh, older, crash_info.is_some(), watched, known_at, created), newest) {
+    match (xtra_crash::crash_save(fresh, older, crash_info.is_some(), watched, known_at, created, now), newest) {
         (xtra_crash::CrashSave::Known(time), Some((name, _))) => {
             let mut state_guard = state.lock().unwrap();
             state_guard.last_known_crash_folder = Some(name);
