@@ -60,7 +60,6 @@ export function relativeToMods(path: string, gamePath: string) {
   return p.split('/').pop() || p
 }
 
-/** One line of what the player typed: on one line, at most 400 characters. Pure. */
 const LOG_LINES = 120
 
 /** The report text: inside a code block, so Discord keeps underscores and lines as they are. */
