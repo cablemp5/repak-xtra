@@ -20,7 +20,7 @@ const subscribe = (f: () => void) => { subs.add(f); return () => { subs.delete(f
 
 /** The mod's file name as the editor's Name field: its Install then finds the mod and offers to replace it. */
 /** A mod file's extension, on or off (a dot inside the name stays: Flaming.preview_P.pak). */
-export const MOD_EXT = /\.(pak|utoc|ucas|bak_repak|pak_disabled)$/i
+export const MOD_EXT = /(\.pak)?\.(pak|utoc|ucas|bak_repak|pak_disabled)$/i // .pak.bak_repak too
 export const koModName = (path: string) => (path.split(/[\\/]/).pop() ?? '').replace(MOD_EXT, '').replace(/(_\d+)?_P$/i, '').replace(/_/g, ' ').trim()
 
 export function openInKoEditor(path: string) {
@@ -32,5 +32,5 @@ export const useKoOpen = () => useSyncExternalStore(subscribe, () => request)
 export const takeKoOpen = () => { const r = request; request = null; subs.forEach(f => f()); return r }
 
 if (import.meta.env.DEV) {
-  console.assert(koModName('C:/g/~mods/Hela_Gold_KO_9999999_P.utoc') === 'Hela Gold KO' && koModName('D:\\m\\Red_P.pak') === 'Red' && koModName('x/Flaming.preview_9999999_P.pak') === 'Flaming.preview', 'koModName')
+  console.assert(koModName('C:/g/~mods/Hela_Gold_KO_9999999_P.utoc') === 'Hela Gold KO' && koModName('D:\\m\\Red_P.pak') === 'Red' && koModName('x/Flaming.preview_9999999_P.pak') === 'Flaming.preview' && koModName('x/Flaming_9999999_P.pak.bak_repak') === 'Flaming', 'koModName')
 }

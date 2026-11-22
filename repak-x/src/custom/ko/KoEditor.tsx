@@ -281,6 +281,7 @@ function Editor({ onInstall, onReplace, alert, blocked, shown }: KoEditorProps &
       // the mod this hero was opened from while the name is still its own, else any mod with that exact file stem
       const stem = koStem(name).toLowerCase()
       const installed = replace ? [] : await invoke<{ path: string }[]>('get_pak_files').catch(() => [])
+      if (heroNow.current !== hero.id) return // another hero picked while the mods were listed: this question is not its own
       const from = source.current[hero.id]
       const stemOf = (p: string) => (p.split(/[\\/]/).pop() ?? '').replace(MOD_EXT, '').replace(/(_\d+)?_P$/i, '').toLowerCase()
       const hit = installed.find(m => from?.stem === stem && m.path === from.path) ?? installed.find(m => stemOf(m.path) === stem)
