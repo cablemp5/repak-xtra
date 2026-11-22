@@ -413,7 +413,7 @@ export function SearchSection() {
           <Checkbox checked={isOn('search-in-loadouts')} onChange={(checked: boolean) => update(storageKey('search-in-loadouts'), checked ? '1' : '0')}>
             <span>Search inside loadouts</span>
           </Checkbox>
-          <p className="setting-subtext">A loadout also shows when its collection or one of its mods matches. Off: only its own name does.</p>
+          <p className="setting-subtext">A loadout also shows when one of its mods matches. Off: only its own name does.</p>
         </div>
       </div>
     </div>

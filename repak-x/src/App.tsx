@@ -2997,11 +2997,16 @@ function App() {
   // labeled as such, never below real matches. Exact match never guesses
   // from every filter but the search, read only when nothing matches. Never the built-in rows: they keep their own
   // switch, out of reach of the arrow keys and Delete
-  const closeMods = useMemo(() => (!searchQuery.trim() || exactSearch || libraryMods.length ? []
-    : ((inState: (m: ModRecord) => boolean) => closeMatches(mods.filter(m => keepMod(m, false) && inFolder(m) && inState(m)), m => [libraryName(m)], searchQuery))(matchesState(modState, isEncrypted))),
-  [searchQuery, exactSearch, libraryMods.length, mods, keepMod, inFolder, modState, isEncrypted, brokenVersion])
+  // closePool: every close match whatever On / Off / Problems says, which those tabs count while it shows; closeMods: the
+  // ones the chosen tab keeps (built-in rows too, as the Library would list them, but never under the arrow keys)
+  const closePool = useMemo(() => (!searchQuery.trim() || exactSearch || libraryMods.length ? null
+    : closeMatches([...(selectedCharacters.size || selectedCategories.size || filterTag || selectedFolderId !== 'all' ? [] : builtinRows as ModRecord[]),
+      ...mods.filter(m => keepMod(m, false) && inFolder(m))], m => [libraryName(m)], searchQuery, Infinity)),
+  [searchQuery, exactSearch, libraryMods.length, mods, keepMod, inFolder, builtinRows, selectedCharacters, selectedCategories, filterTag, selectedFolderId])
+  const closeMods = useMemo(() => (closePool ?? []).filter(matchesState(modState, isEncrypted)).slice(0, 20), [closePool, modState, isEncrypted, brokenVersion])
   const shownMods = closeMods.length ? closeMods : libraryMods
-  const navMods = closeMods.length ? closeMods : filteredMods // the arrow keys walk the rows shown (close matches too)
+  const builtinPaths = useMemo(() => new Set(builtinRows.map(r => r.path)), [builtinRows])
+  const navMods = closeMods.length ? closeMods.filter(m => !builtinPaths.has(m.path)) : filteredMods // the arrow keys walk the mods shown, never a built-in
 
   // Keep filteredModsRef in sync for Shift+click range selection (repakxtra: the rows shown, built-ins too)
   filteredModsRef.current = shownMods
@@ -4114,7 +4119,7 @@ function App() {
                     <button type="button" className="btn-ghost lib-show-all" onClick={showAll}
                       title="Every mod again: all folders, no hero, type, or tag filter, no search. Checked mods stay checked">Show all</button>
                   )}
-                  <ModStateFilter value={modState} onChange={setModState} mods={folderMods} encrypted={isEncrypted} searching={Boolean(searchQuery.trim())} />
+                  <ModStateFilter value={modState} onChange={setModState} mods={closePool ?? folderMods} encrypted={isEncrypted} searching={Boolean(searchQuery.trim())} />
                 </div>
                 <div className="header-actions" data-tour="header-actions">
                   {/* repakxtra: no Asset Explorer button and no dividers here: it opens from Tools, a mod's menu, and its details */}
