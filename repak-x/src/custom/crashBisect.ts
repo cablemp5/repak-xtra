@@ -251,11 +251,18 @@ export const returnTo = serial(async (d: KeepDeps, from: Bisect | null, to: Bise
   return goTo(d, from, to)
 })
 
-/** When the last test ended (ms): App keeps a crash toast quiet for 30 s after, as the test's own crash can be found
- *  by the game poll only after the answer put every mod back. A new run of the game ends that early (gameSeen). */
+/** When the last test ended (ms). The game poll can find a test's own crash only after the answer put every mod back. */
 let ended = 0
-export const testRecent = () => readBisect() !== null || Date.now() - ended < 30_000
-export const gameSeen = () => { ended = 0 }
+type Listed = { id?: string; time: number }
+/** Is this crash (its folder) one a test asked about: while a test runs, or made before the last one ended? App keeps
+ *  its toast quiet then, the test already asked whether it crashed. */
+export async function crashOfTest(folder?: string | null) {
+  if (readBisect()) return true
+  if (Date.now() - ended > 120_000) return false
+  const id = folder?.split(/[\\/]/).pop()
+  const c = (await invoke<Listed[]>('xtra_recent_crashes').catch(() => [] as Listed[])).find(x => x.id === id)
+  return !c || c.time * 1000 <= ended   // shortcut: a crash that cannot be looked up stays quiet, as during the test
+}
 
 /** Every start mod on again (mods off at the start were never touched). The run stays saved until this works. */
 export const restoreBisect = serial((d: KeepDeps, b: Bisect) => restore(d, b))
