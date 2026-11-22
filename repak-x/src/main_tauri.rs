@@ -5431,12 +5431,20 @@ async fn check_game_running(state: State<'_, Arc<Mutex<AppState>>>) -> Result<bo
     // repakxtra: the mods on as the game starts, and when it ends, so a crash report names only those (xtra_crash.rs).
     // This is the app's game poll (App.tsx, every 5 s)
     static WAS: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
-    if WAS.swap(running, std::sync::atomic::Ordering::Relaxed) != running {
-        let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_secs());
+    // when the game process itself started: the app opened again during a game is the same launch, and a game that
+    // closed and started again between two polls is a new one
+    static STARTED: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_secs());
+    let start = if running { game_started_at().unwrap_or(now) } else { 0 };
+    let was = WAS.swap(running, std::sync::atomic::Ordering::Relaxed);
+    let before = STARTED.swap(start, std::sync::atomic::Ordering::Relaxed);
+    let relaunched = was && running && before != 0 && before.abs_diff(start) > 2;
+    if was != running || relaunched {
         let mods = state.lock().unwrap().game_path.clone();
-        // when the game process itself started: the app opened again during a game is the same launch, not a new one
-        let start = if running { game_started_at().unwrap_or(now) } else { now };
-        std::thread::spawn(move || if running { xtra_activity::note_versions(&mods, start); xtra_crash::remember_on(&mods, start) } else { xtra_crash::remember_end(now) });
+        std::thread::spawn(move || {
+            if relaunched || !running { xtra_crash::remember_end(now) }
+            if running { let fresh = xtra_crash::remember_on(&mods, start); xtra_activity::note_versions(&mods, start, fresh) }
+        });
     }
     if running {
         crate::xtra_previews::stop_kept(false); // repakxtra: a game started outside the app (Steam) gets the kept preview helpers' memory too

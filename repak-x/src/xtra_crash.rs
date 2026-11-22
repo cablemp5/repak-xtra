@@ -37,8 +37,9 @@ pub(crate) fn on_key(path: &std::path::Path) -> String {
     [".pak", ".bak_repak", ".utoc", ".ucas"].iter().find_map(|x| p.strip_suffix(x)).unwrap_or(&p).to_string()
 }
 
-/// main_tauri.rs: the game started (`start`, Unix seconds): which mods are on now.
-pub(crate) fn remember_on(mods_dir: &std::path::Path, start: u64) {
+/// main_tauri.rs: the game started (`start`, Unix seconds): which mods are on now. False when that launch was already
+/// saved (the app opened again during it).
+pub(crate) fn remember_on(mods_dir: &std::path::Path, start: u64) -> bool {
     let on: Vec<String> = walkdir::WalkDir::new(mods_dir)
         .into_iter()
         .filter_entry(crate::xtra_bundle::library_walk)
@@ -50,13 +51,14 @@ pub(crate) fn remember_on(mods_dir: &std::path::Path, start: u64) {
     // the same game process seen again (the app reopened during it, or one poll missed it): one launch, running again
     if let Some(s) = all.iter_mut().find(|s| s.start.abs_diff(start) <= 2) {
         if s.end.take().is_some() { let _ = std::fs::write(sessions_store(), serde_json::to_vec(&all).unwrap_or_default()); }
-        return;
+        return false;
     }
     all.push(Session { start, end: None, on });
     all.sort_by_key(|s| s.start);
     let skip = all.len().saturating_sub(10);
     all.drain(..skip);
     let _ = std::fs::write(sessions_store(), serde_json::to_vec(&all).unwrap_or_default());
+    true
 }
 
 /// main_tauri.rs: the game is gone (`end`, Unix seconds): the newest session still open ends then.

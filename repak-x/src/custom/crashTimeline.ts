@@ -30,6 +30,7 @@ function words(e: ActivityEvent): string {
     case 'replace': return e.detail === 'kept' ? `Installed a new copy of ${subject(e.ok, nOk)}, but the old copy could not be moved and is still there` : `Replaced ${subject(e.ok, nOk)} with a new copy`
     case 'enable': return `Turned on ${subject(e.ok, nOk)}`
     case 'disable': return `Turned off ${subject(e.ok, nOk)}`
+    case 'switch': { const [on, off] = e.detail.split('/').map(Number); return `Turned on ${count(on, 'mod')} and off ${count(off, 'mod')}` }
     case 'delete': return `Moved ${subject(e.ok, nOk)} to Recently deleted`
     case 'update': return `${e.detail === 'partial' ? 'Partly updated' : e.detail === 'decrypted' ? 'Decrypted' : 'Updated'} ${subject(e.ok, nOk)} in the Mod Updater`
     case 'update_failed': return `Mod Updater could not update ${subject(e.failed, nFailed)}, which stayed as ${nFailed === 1 ? 'it was' : 'they were'}`
@@ -47,9 +48,17 @@ export function timelineRows(t: Timeline): TimelineRow[] {
   // a loadout's own switches (recorded by each toggle) are its row, not rows of their own
   const own = (e: ActivityEvent) => (e.kind === 'enable' || e.kind === 'disable') && loadouts.some(l => l.t >= e.t && e.t >= (l.from || l.t - 120) && ((l.n_ok ?? 0) > l.ok.length || e.ok.every(n => l.ok.includes(n))))
   const merged: ActivityEvent[] = []
+  const flip = (k: string) => k === 'enable' || k === 'disable' || k === 'switch'
   for (const e of t.events.filter(e => !own(e))) {
     const last = merged[merged.length - 1]
-    if (last && (e.kind === 'enable' || e.kind === 'disable' || e.kind === 'delete') && last.kind === e.kind && e.t - last.t <= 60) {
+    // on and off within a minute of each other (a switch a crash cut short comes mixed): one "Switched" row
+    if (last && flip(e.kind) && flip(last.kind) && last.kind !== e.kind && e.t - last.t <= 60) {
+      const on = (x: ActivityEvent) => x.kind === 'switch' ? Number(x.detail.split('/')[0]) : x.kind === 'enable' ? Math.max(x.n_ok ?? 0, x.ok.length) : 0
+      const off = (x: ActivityEvent) => x.kind === 'switch' ? Number(x.detail.split('/')[1]) : x.kind === 'disable' ? Math.max(x.n_ok ?? 0, x.ok.length) : 0
+      merged[merged.length - 1] = { ...last, kind: 'switch', t: e.t, ok: [...last.ok, ...e.ok], failed: [], n_ok: undefined, detail: `${on(last) + on(e)}/${off(last) + off(e)}` }
+      continue
+    }
+    if (last && (e.kind === 'enable' || e.kind === 'disable' || e.kind === 'delete' || e.kind === 'switch') && last.kind === e.kind && e.t - last.t <= 60) {
       merged[merged.length - 1] = { ...last, t: e.t, ok: [...last.ok, ...e.ok], failed: [...last.failed, ...e.failed],
         n_ok: Math.max(last.n_ok ?? 0, last.ok.length) + Math.max(e.n_ok ?? 0, e.ok.length), n_failed: Math.max(last.n_failed ?? 0, last.failed.length) + Math.max(e.n_failed ?? 0, e.failed.length) }
     } else merged.push(e)
@@ -93,6 +102,11 @@ if (import.meta.env.DEV) {
   console.assert(rows.includes('Installed 3 of 5 mods (2 failed: F, G)') && rows.includes('Turned Panther looks on (2 mods switched)') && !rows.includes('Turned off X'), 'partial batches stay distinct, a loadout holds its switches', rows)
   console.assert(coverageText({ ...tl, coverage: 'none' }, 0) === 'No history available for this crash.' && coverageText({ ...tl, events: [] }, 1) === 'No changes recorded.', 'empty states')
   console.assert(coverageText({ ...tl, from: null, coverage: 'partial' }, 2)!.startsWith('No earlier game launch') && coverageText(null, 0) === UNREADABLE, 'no earlier launch said, unreadable apart from no history')
+  // a crash during a loadout switch (the loadout row came after it): only the toggles before it, as one row
+  const mid = timelineRows({ ...tl, started: null, events: [e(600, 'enable', ['P']), e(601, 'disable', ['Q']), e(602, 'enable', ['R'])] }).map(r => r.text)
+  console.assert(mid.length === 1 && mid[0] === 'Turned on 2 mods and off 1 mod', 'a cut-short switch is one row', mid)
+  const folded = timelineRows({ ...tl, started: null, events: [e(700, 'enable', ['M']), e(800, 'enable', ['P']), e(801, 'disable', ['Q']), { ...e(805, 'loadout', ['P', 'Q'], [], 'Look on'), from: 799 }] }).map(r => r.text)
+  console.assert(folded.includes('Turned on M') && folded.includes('Turned Look on (2 mods switched)') && folded.length === 2, 'a switch folds only its own toggles in its window', folded)
   const capped = timelineRows({ ...tl, started: null, events: [e(10, 'install', ['A', 'B'], ['C'], ''), e(20, 'loadout', [], ['Z'], 'Mine on')].map(x => (x.kind === 'install' ? { ...x, n_ok: 120, n_failed: 3 } : x)) }).map(r => r.text)
   console.assert(capped.includes('Installed 120 of 123 mods (3 failed: C and 2 more)') && capped.includes('Could not turn Mine on (1 failed: Z)'), 'full counts beyond the capped names, a loadout that switched nothing', capped)
 }

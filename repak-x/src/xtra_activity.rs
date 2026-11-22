@@ -12,6 +12,8 @@ use std::sync::Mutex;
 
 const MAX_EVENTS: usize = 5000; // every mod a loadout switch turns on or off is its own event
 const MAX_NAMES: usize = 50;
+/// A loadout switch keeps every name it switched (up to this), so the timeline folds exactly its own toggles into it.
+const MAX_LOADOUT_NAMES: usize = 1000;
 
 /// One finished operation. `ok`: the mods it changed, `failed`: the ones it tried and could not (a partial batch has
 /// both), at most MAX_NAMES each, with `n_ok`/`n_failed` the full counts. `detail`: a loadout's name, a version, a game
@@ -138,7 +140,7 @@ fn plain(text: &str) -> String {
     if text.is_empty() { return String::new(); }
     // a network path (\\server\share\...) goes whole to the end of the line, spaces too, and a drive path keeps only its last part
     static DIRS: std::sync::OnceLock<Option<(regex_lite::Regex, regex_lite::Regex)>> = std::sync::OnceLock::new();
-    let no_dirs = DIRS.get_or_init(|| Some((regex_lite::Regex::new(r"[\\/]{2}[^\\/\r\n]+(?:[\\/][^\r\n]*)?").ok()?, regex_lite::Regex::new(r"[A-Za-z]:[\\/](?:[^\\/\r\n]*[\\/])*").ok()?))).as_ref()
+    let no_dirs = DIRS.get_or_init(|| Some((regex_lite::Regex::new(r"[\\/]{2}[^\\/\s][^\\/\r\n]*(?:[\\/][^\r\n]*)?").ok()?, regex_lite::Regex::new(r"[A-Za-z]:[\\/](?:[^\\/\r\n]*[\\/])*").ok()?))).as_ref()
         .map_or_else(|| text.to_string(), |(unc, drive)| drive.replace_all(&unc.replace_all(text, ""), "").into_owned());
     crate::xtra_crash::redact(&no_dirs, &crate::xtra_crash::user_names())
 }
@@ -155,7 +157,8 @@ pub(crate) fn mod_name(path: &str) -> String {
 }
 
 fn event(t: u64, kind: &str, ok: &[String], failed: &[String], detail: &str, from: u64) -> Event {
-    let names = |v: &[String]| v.iter().take(MAX_NAMES).map(|p| mod_name(p)).collect::<Vec<_>>();
+    let cap = if kind == "loadout" { MAX_LOADOUT_NAMES } else { MAX_NAMES };
+    let names = |v: &[String]| v.iter().take(cap).map(|p| mod_name(p)).collect::<Vec<_>>();
     Event { t, kind: kind.into(), ok: names(ok), failed: names(failed), n_ok: ok.len(), n_failed: failed.len(), detail: plain(detail), from }
 }
 
@@ -183,21 +186,21 @@ pub fn xtra_activity_record(kind: String, ok: Vec<String>, failed: Vec<String>, 
     Ok(())
 }
 
-/// The game started at `start`: an app or game update since the last start is recorded just before it, so it shows
-/// before that launch.
-pub(crate) fn note_versions(mods_dir: &Path, start: u64) {
+/// The game started at `start` (`fresh`: a new launch, not the app opening again during one): a game update since the
+/// last start is recorded just before it (a game only updates before it runs), an app update just before a new launch,
+/// or when it is noticed during one.
+pub(crate) fn note_versions(mods_dir: &Path, start: u64, fresh: bool) {
     let app = crate::xtra_update::version().to_string();
     let game = crate::xtra_broken::paks_dir(mods_dir).and_then(|p| crate::xtra_vfx::game_cl(&p)).map(|c| c.to_string()).unwrap_or_default();
-    // just before the launch that saw it, unless the app opened again during that game (then now: it may have updated meanwhile)
-    let at = now();
-    let t = if at.saturating_sub(start) > 60 { at } else { start.saturating_sub(1) };
+    let before = start.saturating_sub(1);
+    let app_t = if fresh { before } else { now() };
     let changed = with_store(|s| {
         // the first start only learns them: an update is a change from a version seen before
         let mut changed = false;
-        if !s.app.is_empty() && s.app != app { push_into(s, event(t, "app_update", &[], &[], &app, 0)); changed = true; }
-        if !s.game.is_empty() && !game.is_empty() && s.game != game { push_into(s, event(t, "game_update", &[], &[], &game, 0)); changed = true; }
+        if !s.game.is_empty() && !game.is_empty() && s.game != game { push_into(s, event(before, "game_update", &[], &[], &game, 0)); changed = true; }
+        if !s.app.is_empty() && s.app != app { push_into(s, event(app_t, "app_update", &[], &[], &app, 0)); changed = true; }
         changed |= s.app != app || (!game.is_empty() && s.game != game) || s.since == 0;
-        if s.since == 0 { s.since = t; }
+        if s.since == 0 { s.since = before; }
         s.app = app;
         if !game.is_empty() { s.game = game; }
         changed
@@ -299,6 +302,7 @@ mod tests {
     fn names_carry_no_folder_or_priority() {
         assert_eq!(plain(r"Mine \\server\Private Share\Draft"), "Mine ", "a network path goes whole, spaces too");
         assert_eq!(plain(r"\\server\PrivateShare"), "", "a share root too");
+        assert_eq!(plain("Skins // Ranked on"), "Skins // Ranked on", "a double slash between words is a name");
         assert_eq!(mod_name(r"C:\Games\Paks\~mods\Purple VFX_9999999_P.pak"), "Purple VFX");
         assert_eq!(mod_name("D:/x/Cool_P.bak_repak"), "Cool");
         assert_eq!(mod_name("Plain"), "Plain");
