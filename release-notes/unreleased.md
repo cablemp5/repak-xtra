@@ -5,3 +5,4 @@
 - Fixed the header's scan reading every mod after an install instead of only the new ones
 - Fixed a name typed on the install card being ignored for a .zip, .rar, or .7z holding one mod
 - Fixed mods already installed being left out of a loadout made by the install
+- Fixed app updates failing when repakxtra was started from a PowerShell 7 window

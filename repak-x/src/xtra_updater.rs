@@ -226,6 +226,9 @@ Remove-Item -LiteralPath $env:RX_INSTALLER -Force -ErrorAction SilentlyContinue
 fn powershell(script: &str) -> std::process::Command {
     let mut cmd = std::process::Command::new("powershell");
     cmd.args(["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", script]);
+    // started from PowerShell 7 (a pwsh terminal, CI), 5.1 would load 7's modules and fail on Get-FileHash. Without the
+    // variable 5.1 builds its own module path
+    cmd.env_remove("PSModulePath");
     #[cfg(windows)]
     {
         use std::os::windows::process::CommandExt;
