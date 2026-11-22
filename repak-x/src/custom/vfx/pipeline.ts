@@ -227,6 +227,9 @@ async function rebuild(o: FixOptions): Promise<VfxReport> {
   try {
     // ---- 1: extract and sort ----
     enter(1)
+    // the game as it is now, before anything is judged: an update that lands mid-run makes this one stale, so placing
+    // and the outcome check it again
+    buildAt = await invoke<{ updated: number }>('xtra_game_build').then(b => b.updated)
 
     // an earlier update starts again from the original beside it (_BROKEN, _ORIGINAL, or the one an _UPDATED copy was
     // named after): it can lack what it left out, or carry what an older updater got wrong
@@ -259,8 +262,6 @@ async function rebuild(o: FixOptions): Promise<VfxReport> {
     const wait = await invoke<UsmapWait | null>('xtra_vfx_usmap_wait', { modPath: from, gamePaks: o.gamePaksPath, usmapPath: o.usmapPath })
     // not a policy refusal: the flagged mod cannot be made safe yet, so it still follows Safety and can turn off
     if (wait?.changed) { report.status = 'mappings'; report.error = `Not updated yet. ${usmapWaitText(wait)}`; return report }
-    // the game as it is now: an update that lands mid-run makes this one stale, so placing checks it again
-    buildAt = await invoke<{ updated: number }>('xtra_game_build').then(b => b.updated)
     runId = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
     const dirs = await invoke<Dirs>('xtra_vfx_dirs', { gamePaks: o.gamePaksPath, runId, usmapPath: o.usmapPath }) // the game files' cache is per USMAP too
     const extracted = await invoke<string[]>('vfx_extract_mod_assets', { gamePaks: o.gamePaksPath, modPath: from, outputDir: dirs.modExtract })
@@ -516,9 +517,9 @@ async function rebuild(o: FixOptions): Promise<VfxReport> {
 
     if (!editable.length) {
       if (report.counts.unreadable && strict) {
-        if (wait) { report.status = 'mappings'; report.error = `Not updated yet. With the saved USMAP (game build ${wait.usmap}) ${plural(report.counts.unreadable, 'asset')} of it could not be read. It can be updated once the USMAP for game build ${wait.game} is out.`; return report }
+        if (wait) { report.status = 'mappings'; report.error = `Not updated yet. With the saved USMAP (game build ${wait.usmap}) ${plural(report.counts.unreadable, 'asset')} could not be read. It can be updated once the USMAP for game build ${wait.game} is out.`; log(report.error, 'warning'); return report }
         report.error = `${plural(report.counts.unreadable, 'asset')} could not be read, so it is not known whether ${report.counts.unreadable === 1 ? 'it needs' : 'they need'} rebuilding. If the USMAP in Advanced is current, a newer copy of the mod may be needed.`
-        return report // failed: Try again stays
+        return report // failed: the mod stays as it was
       }
       if (report.counts.left || report.counts.ownGame || report.counts.relaid || tablesUpdated || (o.policy === 'bestEffort' && report.counts.unreadable)) {
         await rebuildNiagara()
@@ -677,7 +678,7 @@ async function rebuild(o: FixOptions): Promise<VfxReport> {
       const why = [failedN && plural(failedN, 'material or blueprint', 'materials and blueprints') + ' could not be rebuilt', report.counts.unreadable && plural(report.counts.unreadable, 'asset') + ' could not be read', report.warnings.length && `Strict found ${plural(report.warnings.length, 'warning')}`].filter(Boolean).join(', and ')
       report.error = `Not updated: ${why}. The mod was not changed. ${report.strictOnly ? changePolicy : failedN || report.counts.unreadable ? 'If the USMAP in Advanced is current, a newer copy of the mod may be needed.' : 'Its creator edits could not be proven preserved.'}`
       log(report.error, 'warning')
-      return report // failed: Try again stays
+      return report // failed: the mod stays as it was
     }
 
     await rebuildNiagara()
@@ -729,9 +730,15 @@ async function rebuild(o: FixOptions): Promise<VfxReport> {
     // a run that stopped before step 7 (a cancel, a failure): its early Niagara rebuild still writes in the work folder
     await niagaraEarly?.catch(() => {})
     if (runId) await invoke('xtra_vfx_run_done', { runId }).catch(() => {})
+    // a run that saw the game update says nothing about the new build: nothing is recorded, and a failure or a wait says
+    // to update it again
+    const sameBuild = !buildAt || await invoke<{ updated: number }>('xtra_game_build').then(b => b.updated === buildAt, () => false)
+    if (!sameBuild && (report.status === 'failed' || report.status === 'mappings' || report.status === 'nothing')) {
+      report.status = 'failed'; report.error = 'Not updated: the game updated while this ran, so what it found was for the old game files. Update it again.'
+    }
     // here, where the early returns pass too: Needs VFX update stops flagging it until the mod or the game changes (xtra_broken.rs)
     // not when its materials were rewritten: the original stays installed in the old layout and still needs turning off
-    if (report.status === 'nothing' && !report.counts.relaid) await invoke('xtra_vfx_no_update', { modPath: o.modPath, animsTold: layoutsTold }).catch(e => log(`Could not note that it needs nothing: ${e}`, 'warning'))
+    if (sameBuild && report.status === 'nothing' && !report.counts.relaid) await invoke('xtra_vfx_no_update', { modPath: o.modPath, animsTold: layoutsTold }).catch(e => log(`Could not note that it needs nothing: ${e}`, 'warning'))
     for (const modPath of repairedPaths(report)) {
       // the original: kept off by xtra_safe_off.rs first (Turn on anyway still works), so a later switch-on warns
       if (modPath !== report.placed!.fixed && !await invoke('xtra_vfx_turn_off', { modPath, reason: 'Its update replaced it. It was made for an older game build and can crash the game.' }).then(() => true, () => false)) continue
@@ -742,13 +749,11 @@ async function rebuild(o: FixOptions): Promise<VfxReport> {
     }
     // a finished attempt that left the mod as it was, kept until the mod, the game or the mappings change (xtra_broken.rs
     // Outcome): Failed stops Needs update, Waiting reads Waiting for mappings. Any other result forgets the last one
-    // a run that saw the game update says nothing about the new build: no outcome
-    const sameBuild = !buildAt || await invoke<{ updated: number }>('xtra_game_build').then(b => b.updated === buildAt, () => false)
     if (!o.outputDir && report.status !== 'cancelled' && sameBuild && !/game updated (while|during)/.test(report.error ?? '')) {
       const failed = report.status === 'failed'
       await invoke('xtra_vfx_outcome', failed || report.status === 'mappings'
-        ? { modPath: o.modPath, status: failed ? 'failed' : 'waiting', error: report.error ?? null, next: failed ? failedNext(report) : null, usmap: o.usmapPath }
-        : { modPath: o.modPath, status: null, error: null, next: null, usmap: null }).catch(e => log(`Could not save how the update ended: ${e}`, 'warning'))
+        ? { modPath: o.modPath, status: failed ? 'failed' : 'waiting', error: report.error ?? null, next: failed ? failedNext(report) : null, usmap: o.usmapPath, game: buildAt || null }
+        : { modPath: o.modPath, status: null, error: null, next: null, usmap: null, game: null }).catch(e => log(`Could not save how the update ended: ${e}`, 'warning'))
     }
     // A failed or cancelled run is the updater falling short, not news about the mod: it stays exactly as it was, flag and
     // all. Only a run that proved the original crashes the game (every file matches the game, but in the old layout) takes

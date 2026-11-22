@@ -929,8 +929,9 @@ static OUTCOMES_WRITING: Mutex<()> = Mutex::new(());
 
 /// Records (or with no `status`, forgets) the Mod Updater's outcome for `mod_path` (pipeline.ts, when a run ends).
 #[tauri::command(async)]
-/// `usmap`: the mappings the run read with (else the saved ones now): a run that ends after a new download keeps its own.
-pub fn xtra_vfx_outcome(mod_path: String, status: Option<String>, error: Option<String>, next: Option<String>, usmap: Option<String>, state: State<'_, Arc<Mutex<AppState>>>) -> Result<(), String> {
+/// `usmap` and `game`: the mappings and game build the run read (else the ones now): a run that ends after a new download
+/// or a game patch keeps its own, so its outcome does not hold for the new ones.
+pub fn xtra_vfx_outcome(mod_path: String, status: Option<String>, error: Option<String>, next: Option<String>, usmap: Option<String>, game: Option<u64>, state: State<'_, Arc<Mutex<AppState>>>) -> Result<(), String> {
     let mods_dir = state.lock().unwrap().game_path.clone();
     let utoc = Path::new(&mod_path).with_extension("utoc");
     let _one = OUTCOMES_WRITING.lock().unwrap_or_else(|e| e.into_inner());
@@ -940,7 +941,7 @@ pub fn xtra_vfx_outcome(mod_path: String, status: Option<String>, error: Option<
         None => { if all.remove(&checked_key(&utoc)).is_none() { return Ok(()); } }
         Some(status) => {
             let (size, modified) = file_stamp(&utoc).ok_or_else(|| format!("{} is not there", utoc.display()))?;
-            all.insert(checked_key(&utoc), Outcome { status, error: error.unwrap_or_default(), next: next.unwrap_or_default(), size, modified, game: game_updated(&mods_dir),
+            all.insert(checked_key(&utoc), Outcome { status, error: error.unwrap_or_default(), next: next.unwrap_or_default(), size, modified, game: game.unwrap_or_else(|| game_updated(&mods_dir)),
                 usmap: usmap.and_then(|u| Path::new(&u).file_name().map(|n| n.to_string_lossy().into_owned())).unwrap_or_else(usmap_name) });
         }
     }

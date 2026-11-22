@@ -718,7 +718,8 @@ export function VfxUpdaterPanel() {
       const r = await fixVfxMod({
         // Retry in Best effort: that mod alone, this once
         policy: policy ?? repairPolicy,
-        modPath: mod.utoc, usmapPath: usmapRef.current ?? usmap, gamePaksPath: paks, // new mappings mid-run: the next mod reads them turnOffOriginal: originals !== 'keep', trashOriginal: originals === 'trash', keepName, filter,
+        // new mappings mid-run: the next mod reads them
+        modPath: mod.utoc, usmapPath: usmapRef.current ?? usmap, gamePaksPath: paks, turnOffOriginal: originals !== 'keep', trashOriginal: originals === 'trash', keepName, filter,
         safeOff: safeOff && needs.has(norm(mod.path)), // a flagged mod a run proves crashes the game: a failed run leaves every mod as it was
         keepEncrypted, decryptOnly: needs.get(norm(mod.path))?.startsWith(ENCRYPTED),
         log: addLog, cancelled: () => cancel.current,
