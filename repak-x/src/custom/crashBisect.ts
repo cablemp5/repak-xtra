@@ -252,9 +252,10 @@ export const returnTo = serial(async (d: KeepDeps, from: Bisect | null, to: Bise
 })
 
 /** When the last test ended (ms): App keeps a crash toast quiet for 30 s after, as the test's own crash can be found
- *  by the game poll only after the answer put every mod back. */
+ *  by the game poll only after the answer put every mod back. A new run of the game ends that early (gameSeen). */
 let ended = 0
 export const testRecent = () => readBisect() !== null || Date.now() - ended < 30_000
+export const gameSeen = () => { ended = 0 }
 
 /** Every start mod on again (mods off at the start were never touched). The run stays saved until this works. */
 export const restoreBisect = serial((d: KeepDeps, b: Bisect) => restore(d, b))
