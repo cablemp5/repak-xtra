@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { AnimatedThemeToggler } from './ui/AnimatedThemeToggler'
 import Checkbox from './ui/Checkbox'
-import { UiScaleSection, MotionSection, InstallingSection, HeaderButtonsSection, ModPrefs, WarningPrefs, NewStripPref, BuiltinsPref, AutoUpdatePref, resetUiPrefs } from '../custom/uiPrefs' // repakxtra
+import { UiScaleSection, MotionSection, InstallingSection, HeaderButtonsSection, SearchSection, ModPrefs, WarningPrefs, NewStripPref, BuiltinsPref, AutoUpdatePref, resetUiPrefs } from '../custom/uiPrefs' // repakxtra
 import RecentlyDeleted from '../custom/RecentlyDeleted' // repakxtra: Settings > Recently deleted
 import CrashReports from '../custom/CrashReports' // repakxtra: Settings > Crash reports
 import { TriangleAlert } from 'lucide-react' // repakxtra: setting warnings
@@ -388,6 +388,7 @@ export default function SettingsPanel({ settings, onSave, onClose, theme, setThe
                   </div>
                 } />
                 <HeaderButtonsSection />
+                <SearchSection />{/* repakxtra */}
                 {resetSection}
               </>
             )}

@@ -17,3 +17,4 @@
 - Fixed a failed update renaming the mod _UNSUPPORTED and turning it off: the mod keeps its name, loadouts, and on or off state, and its row offers Retry in Best effort, Try again, or the mod's page
 - Fixed Needs update coming back after a failed or partial update, until the game, the mod, or the mappings change
 - Added What changed? to each crash in Settings > Crash reports: the installs, updates, mods turned on or off, loadout switches, and app or game updates since the game launch before the crash, also in Copy setup report
+- Added smarter search to the Library and Loadouts: words match in any order, close matches show when a typo finds nothing, and a loadout shows when its name or one of its mods matches (no longer its collection's name), with Exact match and Search inside loadouts in Settings > Interface > Search

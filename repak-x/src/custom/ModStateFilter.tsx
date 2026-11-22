@@ -17,6 +17,8 @@ export const matchesState = (state: ModState, encrypted?: (path: string) => bool
 type Props = {
   value: ModState
   onChange: (state: ModState) => void
+  /** repakxtra: a search is typed: its empty Problems or Encrypted is the search's doing, so the tab stays */
+  searching?: boolean
   mods: { path: string; enabled?: boolean }[]
   encrypted?: (path: string) => boolean // repakxtra: the Encrypted tab, shown while any mod is encrypted
 }
@@ -79,20 +81,23 @@ export function OnOffFilter({ value, onChange, on, total, label, titles, classNa
   )
 }
 
-export default function ModStateFilter({ value, onChange, mods, encrypted }: Props) {
+export default function ModStateFilter({ value, onChange, mods, encrypted, searching = false }: Props) {
   useBrokenVersion()
   const enabled = mods.filter(m => m.enabled).length
   const shown = useUiPref('broken') // Settings can hide the Problems tab and badges
   const broken = shown ? mods.filter(m => verdictOf(m.path)).length : 0
   const locked = useUiPref('encrypted') && encrypted ? mods.filter(m => encrypted(m.path)).length : 0 // Settings hides the lock and this tab
   // the last broken (or encrypted) mod fixed or removed: back to every mod rather than an empty list
-  useEffect(() => { if ((value === 'broken' && broken === 0) || (value === 'encrypted' && locked === 0)) onChange('all') }, [value, broken, locked]) // eslint-disable-line react-hooks/exhaustive-deps
+  // (while a search is typed only when Settings hid the tab: an empty one is the search's doing)
+  const lockedShown = useUiPref('encrypted') && Boolean(encrypted)
+  useEffect(() => { if ((value === 'broken' && broken === 0 && (!searching || !shown)) || (value === 'encrypted' && locked === 0 && (!searching || !lockedShown))) onChange('all') }, [value, broken, locked, searching, shown, lockedShown]) // eslint-disable-line react-hooks/exhaustive-deps
   const options: [ModState, string, number][] = [
     ['all', 'All', mods.length],
     ['enabled', 'On', enabled],
     ['disabled', 'Off', mods.length - enabled],
-    ...(broken ? [['broken', 'Problems', broken] as [ModState, string, number]] : []),
-    ...(locked ? [['encrypted', 'Encrypted', locked] as [ModState, string, number]] : []),
+    // the chosen one stays while a search is typed, at 0 if none match: the list is still narrowed to it
+    ...(broken || (searching && shown && value === 'broken') ? [['broken', 'Problems', broken] as [ModState, string, number]] : []),
+    ...(locked || (searching && lockedShown && value === 'encrypted') ? [['encrypted', 'Encrypted', locked] as [ModState, string, number]] : []),
   ]
   const tabs = useRef<HTMLDivElement>(null)
   const folded = useFolded(tabs)
