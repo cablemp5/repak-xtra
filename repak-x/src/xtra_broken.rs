@@ -870,10 +870,11 @@ pub(crate) fn record_check(mods_dir: &Path, utoc: &Path, outdated: bool, old_lay
 /// An update of `mod_path` said Nothing to update: Needs VFX update stops flagging it until the mod or the game changes.
 /// `anims_told`: the update's layout pass told every file's layout and none needed rewriting, its animations included.
 #[tauri::command(async)]
-pub fn xtra_vfx_no_update(mod_path: String, anims_told: Option<bool>, state: State<'_, Arc<Mutex<AppState>>>) -> Result<(), String> {
+/// `game`: the game build the update read (pipeline.ts), else the one installed now: a patch after its last check gets no clearance.
+pub fn xtra_vfx_no_update(mod_path: String, anims_told: Option<bool>, game: Option<u64>, state: State<'_, Arc<Mutex<AppState>>>) -> Result<(), String> {
     let mods_dir = state.lock().unwrap().game_path.clone();
     let utoc = Path::new(&mod_path).with_extension("utoc");
-    record_check(&mods_dir, &utoc, false, false)?;
+    remember_checked(&checked_store(), &utoc, game.unwrap_or_else(|| game_updated(&mods_dir)), false, false, None)?;
     if anims_told == Some(true) {
         let _one = CHECKED_WRITING.lock().unwrap_or_else(|e| e.into_inner());
         let (store, mut all) = (checked_store(), load_checked(&checked_store()));
@@ -915,9 +916,17 @@ fn load_outcomes(store: &Path) -> HashMap<String, Outcome> {
     std::fs::read_to_string(store).ok().and_then(|t| serde_json::from_str(&t).ok()).unwrap_or_default()
 }
 
-/// The saved USMAP's file name (never its folder): an outcome made with other mappings no longer holds.
+/// A USMAP file's name, size and time (never its folder): an outcome made with other mappings no longer holds, a file
+/// replaced under the same name included.
+fn usmap_id(path: &str) -> String {
+    let p = Path::new(path);
+    let name = p.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+    match file_stamp(p) { Some((size, modified)) => format!("{name}|{size}|{modified}"), None => name }
+}
+
+/// The saved USMAP's id (usmap_id).
 fn usmap_name() -> String {
-    crate::vfx_updater::commands::saved_usmap_path().and_then(|u| Path::new(&u).file_name().map(|n| n.to_string_lossy().into_owned())).unwrap_or_default()
+    crate::vfx_updater::commands::saved_usmap_path().map(|u| usmap_id(&u)).unwrap_or_default()
 }
 
 /// Whether `o` still describes the mod: the same file, game build and mappings it was recorded with.
@@ -942,7 +951,7 @@ pub fn xtra_vfx_outcome(mod_path: String, status: Option<String>, error: Option<
         Some(status) => {
             let (size, modified) = file_stamp(&utoc).ok_or_else(|| format!("{} is not there", utoc.display()))?;
             all.insert(checked_key(&utoc), Outcome { status, error: error.unwrap_or_default(), next: next.unwrap_or_default(), size, modified, game: game.unwrap_or_else(|| game_updated(&mods_dir)),
-                usmap: usmap.and_then(|u| Path::new(&u).file_name().map(|n| n.to_string_lossy().into_owned())).unwrap_or_else(usmap_name) });
+                usmap: usmap.map(|u| usmap_id(&u)).unwrap_or_else(usmap_name) });
         }
     }
     // bounded: outcomes that no longer hold go first (a mod updated, removed or made for an older game)

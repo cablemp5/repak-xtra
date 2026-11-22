@@ -33,7 +33,7 @@ export const unsupportedName = (path: string, on: boolean) => {
   return on ? `${bare}_UNSUPPORTED` : bare
 }
 /** The verdicts the app shows: not an encrypted mod's while Keep mods encrypted is on, nor a Failed mod's Needs update. */
-export const keptVerdict = (v: { path: string; kind: string; reason: string }) => !keepsEncrypted(v) && !(v.kind === 'vfx' && isUnsupported(v.path))
+export const keptVerdict = (v: { path: string; kind: string; reason: string; usmapWait?: number }) => !keepsEncrypted(v) && !(v.kind === 'vfx' && isUnsupported(v.path) && !v.usmapWait)
 /** What the Library's notice and the Mod Updater's Needs an update both count: a mod that needs an update, or one that
  *  may crash and is on (Update turns it off), never one it skips. */
 export const needsUpdater = (path: string, v?: { kind: string }, on = !/\.bak_repak$/i.test(path)) =>

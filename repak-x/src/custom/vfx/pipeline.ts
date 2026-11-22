@@ -49,8 +49,8 @@ export const repairOutcome = (r: VfxReport) => (r.status === 'mappings' ? 'Waiti
 
 /** What a Failed row offers: Retry in Best effort for a rejection only Strict makes, Try again for a problem another try
  *  may pass, else a newer copy of the mod (its page, when one is known). */
-export const failedNext = (r: Pick<VfxReport, 'status' | 'error' | 'strictOnly'>): 'best' | 'again' | 'page' =>
-  r.strictOnly ? 'best' : unsupportedFailure(r) && !/game's files are read again/.test(r.error ?? '') ? 'page' : 'again'
+export const failedNext = (r: Pick<VfxReport, 'status' | 'error' | 'strictOnly' | 'next'>): 'best' | 'again' | 'page' =>
+  r.next ? r.next : r.strictOnly ? 'best' : unsupportedFailure(r) && !/game's files are read again/.test(r.error ?? '') ? 'page' : 'again'
 
 export type Placed = { fixed: string; source: string; original: string; turnedOff: boolean; replaced: boolean; trashed?: boolean; warning?: string | null }
 export type VfxReport = {
@@ -70,6 +70,10 @@ export type VfxReport = {
   strictOnly?: boolean
   /** Safety tried to turn it off and could not: why (it is still on) */
   offError?: string
+  /** Its Failed or Waiting outcome was kept (xtra_broken.rs Outcome): the Mod Updater drops the row once that stops holding */
+  kept?: boolean
+  /** A kept outcome's next step as it was saved (savedFailure): wins over working it out again from the error */
+  next?: 'best' | 'again' | 'page'
   assets: AssetResult[]
   warnings: string[]
   /** left: Niagara files made for an older game build, left out until a USMAP for the game is out (a partial update).
@@ -391,6 +395,8 @@ async function rebuild(o: FixOptions): Promise<VfxReport> {
       if (done.size) log(`Merged ${plural(done.size, 'table')} onto the game's new ${done.size === 1 ? 'one' : 'ones'}.`)
     }
     const allStale = () => `Not updated: everything it changes is ${plural(report.counts.left + report.counts.ownGame, 'file')} made for an older game build that could not be rebuilt, and the game can crash on them. Turn the mod off until its author updates it.`
+    // only stale files the old mappings cannot rebuild: it waits for the new ones (never a failure) when they are behind
+    const staleOrWait = () => { if (wait) { report.status = 'mappings'; report.error = `Not updated yet. Its Niagara files can be rebuilt once the USMAP for game build ${wait.game} is out.`; log(report.error, 'warning') } else report.error = allStale() }
     if (keep.length) await invoke('vfx_copy_uasset_files', { sourcePaths: keep, sourceBaseDir: dirs.modExtract, destBaseDir: dirs.finalUassets })
     // the .pak half's raw files, as they are (the pack puts them in the update's .pak)
     if (raw.length) await invoke('vfx_copy_uasset_files', { sourcePaths: raw, sourceBaseDir: dirs.modExtract, destBaseDir: dirs.finalUassets })
@@ -525,7 +531,7 @@ async function rebuild(o: FixOptions): Promise<VfxReport> {
         await rebuildNiagara()
         // the rebuilt Niagara files, or at least the rest without the stale ones, which no longer crashes the game
         if (keep.length || niagaraDone || tablesUpdated) await packAndPlace()
-        else report.error = allStale()
+        else staleOrWait()
         return report
       }
       report.status = 'nothing'
@@ -668,13 +674,14 @@ async function rebuild(o: FixOptions): Promise<VfxReport> {
     const failedN = report.assets.filter(a => a.kind === 'failed').length
     if ((failedN || report.counts.unreadable || report.warnings.length) && strict) {
       // failed or unread with mappings older than the game: it waits for them, as Best effort does (packAndPlace)
-      if (wait && (failedN || report.counts.unreadable)) {
+      // or Niagara files the old mappings cannot rebuild: whole only once the new ones are out
+      if (wait && (failedN || report.counts.unreadable || staleFiles.length)) {
         report.status = 'mappings'
-        report.error = `Not updated yet. With the saved USMAP (game build ${wait.usmap}) ${plural(failedN + report.counts.unreadable, 'file')} of it could not be rebuilt or read. It can be updated once the USMAP for game build ${wait.game} is out.`
+        report.error = `Not updated yet. With the saved USMAP (game build ${wait.usmap}) ${plural(failedN + report.counts.unreadable + staleFiles.length, 'file')} of it cannot be rebuilt whole. It can be updated once the USMAP for game build ${wait.game} is out.`
         log(report.error, 'warning')
         return report
       }
-      report.strictOnly = !failedN && !report.counts.unreadable && Boolean(report.counts.updated || report.counts.added || relaid.size) // Best effort would install it (a match alone it would not)
+      report.strictOnly = !failedN && !report.counts.unreadable && Boolean(report.counts.updated || report.counts.added || report.assets.some(a => relaid.has(assetKey(rel(a.path))) && a.kind !== 'same')) // Best effort would install it (a match alone it would not)
       const why = [failedN && plural(failedN, 'material or blueprint', 'materials and blueprints') + ' could not be rebuilt', report.counts.unreadable && plural(report.counts.unreadable, 'asset') + ' could not be read', report.warnings.length && `Strict found ${plural(report.warnings.length, 'warning')}`].filter(Boolean).join(', and ')
       report.error = `Not updated: ${why}. The mod was not changed. ${report.strictOnly ? changePolicy : failedN || report.counts.unreadable ? 'If the USMAP in Advanced is current, a newer copy of the mod may be needed.' : 'Its creator edits could not be proven preserved.'}`
       log(report.error, 'warning')
@@ -701,7 +708,7 @@ async function rebuild(o: FixOptions): Promise<VfxReport> {
       return report
     }
     if (!report.counts.updated && !report.counts.added && !niagaraDone && !relaidKept && !((report.counts.left || report.counts.ownGame) && keep.length)) {
-      if (report.counts.left || report.counts.ownGame) { report.error = allStale(); return report }
+      if (report.counts.left || report.counts.ownGame) { staleOrWait(); return report }
       if (report.warnings.length) { report.error = 'Not updated: preserving all creator edits could not be verified. Review the asset report. The original was not changed.'; return report }
       // every material and blueprint was read and matches the game (anything else stopped above): it works as it is
       if (report.counts.same || swapped) {
@@ -738,11 +745,12 @@ async function rebuild(o: FixOptions): Promise<VfxReport> {
     }
     // here, where the early returns pass too: Needs VFX update stops flagging it until the mod or the game changes (xtra_broken.rs)
     // not when its materials were rewritten: the original stays installed in the old layout and still needs turning off
-    if (sameBuild && report.status === 'nothing' && !report.counts.relaid) await invoke('xtra_vfx_no_update', { modPath: o.modPath, animsTold: layoutsTold }).catch(e => log(`Could not note that it needs nothing: ${e}`, 'warning'))
+    if (sameBuild && report.status === 'nothing' && !report.counts.relaid) await invoke('xtra_vfx_no_update', { modPath: o.modPath, animsTold: layoutsTold, game: buildAt || null }).catch(e => log(`Could not note that it needs nothing: ${e}`, 'warning'))
+    if (!sameBuild && report.status === 'fixed') { const w = 'The game updated while this update was installed, so it is flagged for the new game version. Update it again.'; report.warnings.push(w); log(w, 'warning') }
     for (const modPath of sameBuild ? repairedPaths(report) : []) { // installed during a patch: it stays flagged for the new build
       // the original: kept off by xtra_safe_off.rs first (Turn on anyway still works), so a later switch-on warns
       if (modPath !== report.placed!.fixed && !await invoke('xtra_vfx_turn_off', { modPath, reason: 'Its update replaced it. It was made for an older game build and can crash the game.' }).then(() => true, () => false)) continue
-      await invoke('xtra_vfx_no_update', { modPath }).catch(e => {
+      await invoke('xtra_vfx_no_update', { modPath, game: buildAt || null }).catch(e => {
         const message = `The mod was updated, but its compatibility status could not be saved: ${e}. Recheck it in the Mod Updater.`
         report.warnings.push(message); log(message, 'warning')
       })
@@ -753,7 +761,7 @@ async function rebuild(o: FixOptions): Promise<VfxReport> {
       const failed = report.status === 'failed'
       await invoke('xtra_vfx_outcome', failed || report.status === 'mappings'
         ? { modPath: o.modPath, status: failed ? 'failed' : 'waiting', error: report.error ?? null, next: failed ? failedNext(report) : null, usmap: o.usmapPath, game: buildAt || null }
-        : { modPath: o.modPath, status: null, error: null, next: null, usmap: null, game: null }).catch(e => log(`Could not save how the update ended: ${e}`, 'warning'))
+        : { modPath: o.modPath, status: null, error: null, next: null, usmap: null, game: null }).then(() => { report.kept = failed || report.status === 'mappings' }, e => log(`Could not save how the update ended: ${e}`, 'warning'))
     }
     // A failed or cancelled run is the updater falling short, not news about the mod: it stays exactly as it was, flag and
     // all. Only a run that proved the original crashes the game (every file matches the game, but in the old layout) takes

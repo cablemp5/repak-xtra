@@ -131,7 +131,7 @@ const bare = (path: string) => fileName(path).replace(/\.[^.]+$/, '').replace(/(
 const emptyCounts = () => ({ updated: 0, same: 0, added: 0, passed: 0, left: 0, ownGame: 0, unreadable: 0, changes: 0, relaid: 0 })
 /** A Failed row with no report this session: its kept outcome, or the _UNSUPPORTED mark an older Mod Updater gave it. */
 export const savedFailure = (mod: { utoc: string; name: string; path: string }, o?: Outcome): VfxReport => ({ mod: mod.utoc, name: mod.name, status: 'failed', assets: [], warnings: [], counts: emptyCounts(), ms: 0, steps: [],
-  error: o?.error || 'An older version of the Mod Updater could not update it and renamed it _UNSUPPORTED. Its name stays as it is.', strictOnly: o?.next === 'best' })
+  error: o?.error || 'An older version of the Mod Updater could not update it and renamed it _UNSUPPORTED. Its name stays as it is.', strictOnly: o?.next === 'best', next: o?.next as VfxReport['next'] })
 
 /** Where the update went, in words: the original's new name, or the update's own when it was named _UPDATED. */
 function placedText(r: VfxReport) {
@@ -509,18 +509,17 @@ export function VfxUpdaterPanel() {
         if (seeded.current) pick(list.filter(m => waitsRef.current.has(norm(m.utoc)) && !nowWaits.has(norm(m.utoc)) && n.has(norm(m.path))).map(m => norm(m.utoc)), true)
         setWaits(nowWaits)
         const failedNow = new Map(Object.entries(outcomes).filter(([, o]) => o.status === 'failed').map(([p, o]) => [norm(p), o]))
-        const wasSaved = savedRef.current
         setSaved(failedNow)
         // this session's failures whose kept outcome stopped holding (a new copy, a new game build, new mappings) are judged
         // again. One never kept (a Safety turn-off that failed, an outcome that could not be saved) stays
-        setRuns(rs => { const gone = list.filter(m => (rs[norm(m.utoc)]?.status === 'failed' && wasSaved.has(norm(m.path)) && !failedNow.has(norm(m.path))) || (rs[norm(m.utoc)]?.status === 'mappings' && !nowWaits.has(norm(m.utoc)))).map(m => norm(m.utoc)); if (!gone.length) return rs; const n = { ...rs }; gone.forEach(k => delete n[k]); return n })
+        setRuns(rs => { const gone = list.filter(m => (rs[norm(m.utoc)]?.status === 'failed' && (rs[norm(m.utoc)]?.report?.kept || savedRef.current.has(norm(m.path))) && !failedNow.has(norm(m.path))) || (rs[norm(m.utoc)]?.status === 'mappings' && !nowWaits.has(norm(m.utoc)))).map(m => norm(m.utoc)); if (!gone.length) return rs; const n = { ...rs }; gone.forEach(k => delete n[k]); return n })
         setMods(list)
         setScanProblems(problems)
         setUncertain(new Map(verdicts.filter(v => v.kind === 'unknown').map(v => [norm(v.path), v.reason])))
         setNeeds(n)
         setMade(new Map(ours.filter(x => x.current).map(x => [norm(x.path), x.partial])))
         const present = new Set(list.map(m => norm(m.utoc)))
-        setPicked(p => { const kept = [...p].filter(k => present.has(k)); return kept.length === p.size ? p : new Set(kept) }) // an update elsewhere can rename or remove one
+        setPicked(p => { const kept = [...p].filter(k => present.has(k) && !nowWaits.has(k)); return kept.length === p.size ? p : new Set(kept) }) // an update elsewhere can rename or remove one, and a waiting mod is never ticked
         setCheckError(failed)
         if (!seeded.current && !failed) {
           seeded.current = true

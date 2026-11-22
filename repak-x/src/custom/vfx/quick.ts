@@ -110,7 +110,7 @@ function resultToast(r: VfxReport, name: string, alert: Alert, path: string) {
     const warned = r.warnings.length, left = r.counts.left
     const where = left ? 'The original is off and kept for a full update later.' : r.placed.trashed ? 'The original is in Recently deleted.' : r.placed.turnedOff ? 'The original is off.' : ''
     alert.showAlert({
-      color: warned || left ? 'warning' : 'success', duration: warned || left ? 0 : 6000, title: `${repairOutcome(r)}: ${name}`, action: show,
+      color: warned || left || r.counts.ownGame ? 'warning' : 'success', duration: warned || left || r.counts.ownGame ? 0 : 6000, title: `${repairOutcome(r)}: ${name}`, action: show,
       description: [
         r.counts.updated ? `Rebuilt ${plural(r.counts.updated, 'asset')}.` : '',
         left ? `Left out ${plural(left, 'Niagara file')} made for an older game build, so those effects show their usual colors.` : '',

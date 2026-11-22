@@ -167,8 +167,8 @@ const unsafe = await repair('bestEffort', false, { unreadable: true, safeOff: tr
 assert.equal(unsafe.report.status, 'failed')
 assert.ok(!unsafe.calls.includes('xtra_vfx_place'), 'an unread asset blocks placement')
 assert.ok(!unsafe.calls.some(c => c.startsWith('turn_off:')), 'a failed update leaves even a flagged mod as it was, on')
-// mappings older than the files it left out: Waiting, never Failed (this fixture's warnings stop Strict earlier, at step 6)
-for (const policy of ['bestEffort']) {
+// mappings older than the files it left out: Waiting under either policy, never Failed
+for (const policy of ['strict', 'bestEffort']) {
   const late = await repair(policy, false, { wait: 'late', niagara: 'retry' })
   assert.equal(late.report.status, 'mappings', `${policy}: an incomplete rebuild with old mappings waits`)
   assert.ok(!late.calls.includes('xtra_vfx_place'))
