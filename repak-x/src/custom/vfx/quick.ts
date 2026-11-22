@@ -13,8 +13,8 @@ import { modKey, nameKey, renameModKey } from '../loadoutStore'
 import { renameSource } from '../nexusSource'
 import { readFilter } from './filter'
 import { fixInVfxWindow, openVfxWindow, sendReport, utocOf } from './handoff'
-import { STEPS, fixVfxMod, incompleteAssets, repairOutcome, type VfxReport } from './pipeline'
-import { claimRun, newRunToken, readKeepEncrypted, readNaming, readOriginals, readAskReview, readRepairPolicy, readSafety, releaseRun, runLock } from './prefs'
+import { STEPS, fixVfxMod, repairOutcome, type VfxReport } from './pipeline'
+import { claimRun, newRunToken, readKeepEncrypted, readNaming, readOriginals, readRepairPolicy, readSafety, releaseRun, runLock } from './prefs'
 
 type Alert = ReturnType<typeof useAlert>
 let reserved = false // one right-click update at a time in this window, taken before anything is awaited
@@ -75,9 +75,6 @@ export async function updateVfxModInPlace(mod: { path: string; utoc_path?: strin
     const originals = readOriginals(), naming = readNaming()
     const r = await fixVfxMod({
       modPath: mod.utoc_path || utocOf(mod.path), usmapPath: usmap, gamePaksPath: paks, filter: readFilter(), policy: readRepairPolicy(),
-      // no review here: with Ask me to review candidates on, a candidate Strict would also pass goes in, any other is
-      // declined and sent to the Mod Updater's review. Off (the default), one without unchecked assets goes in
-      autoAccept: !readAskReview(), review: async c => !incompleteAssets(c) && !c.warnings.length,
       keepName: naming === 'broken', turnOffOriginal: originals !== 'keep', trashOriginal: originals === 'trash',
       safeOff: readSafety() !== 'on' && ['broken', 'vfx', 'risky'].includes(verdictOf(mod.path)?.kind ?? ''), keepEncrypted: readKeepEncrypted(),
       decryptOnly: verdictOf(mod.path)?.reason?.startsWith(ENCRYPTED),
@@ -91,7 +88,8 @@ export async function updateVfxModInPlace(mod: { path: string; utoc_path?: strin
       await reload()
     }
     if (r.decrypted) await emit('mods_dir_changed').catch(() => {})
-    if (r.status === 'nothing' || r.placed || r.turnedOff || r.decrypted) await verdictsChanged() // its Needs VFX update flag goes (xtra_broken.rs)
+    // its Needs update flag goes, or reads Waiting for mappings (xtra_broken.rs, its Outcome kept by the pipeline)
+    if (r.status !== 'cancelled') await verdictsChanged()
     if (id !== null) alert.dismissAlert(id)
     id = null
     resultToast(r, name, alert, mod.path)
@@ -112,7 +110,7 @@ function resultToast(r: VfxReport, name: string, alert: Alert, path: string) {
     const warned = r.warnings.length, left = r.counts.left
     const where = left ? 'The original is off and kept for a full update later.' : r.placed.trashed ? 'The original is in Recently deleted.' : r.placed.turnedOff ? 'The original is off.' : ''
     alert.showAlert({
-      color: warned || left ? 'warning' : 'success', duration: warned || left ? 0 : 6000, title: `${repairOutcome(r)}: ${name}`, action: show,
+      color: warned || left || r.counts.ownGame ? 'warning' : 'success', duration: warned || left || r.counts.ownGame ? 0 : 6000, title: `${repairOutcome(r)}: ${name}`, action: show,
       description: [
         r.counts.updated ? `Rebuilt ${plural(r.counts.updated, 'asset')}.` : '',
         left ? `Left out ${plural(left, 'Niagara file')} made for an older game build, so those effects show their usual colors.` : '',
@@ -120,9 +118,11 @@ function resultToast(r: VfxReport, name: string, alert: Alert, path: string) {
         where, warned ? `${plural(warned, 'warning')} in the report.` : '',
       ].filter(Boolean).join(' '),
     })
-  } else if (r.status === 'declined') {
-    alert.showAlert({ color: 'warning', duration: 0, title: `${name} needs a review`, description: 'Its repair has changes to approve before it replaces the mod. The original was not changed.',
-      action: { label: 'Review in Mod Updater', onClick: () => { void fixInVfxWindow([path], true) } } })
+  } else if (r.status === 'mappings') {
+    alert.showAlert({ color: 'default', duration: 0, title: `${name} is waiting for game mappings`, description: 'Mappings usually arrive within 24 hours of a game update. The mod was not changed.',
+      action: { label: 'Open Mod Updater', onClick: () => { void fixInVfxWindow([path], false) } } })
+  } else if (r.status === 'nothing' && r.offError) {
+    alert.showAlert({ color: 'warning', duration: 0, title: `${name} could not be turned off`, description: `${r.error ?? ''} Safety could not turn it off (${r.offError.replace(/[.!]?\s*$/, '')}), so it is still on.` })
   } else if (r.status === 'nothing') {
     alert.showAlert({ color: r.turnedOff ? 'warning' : 'default', duration: r.turnedOff ? 0 : 6000, title: r.turnedOff ? `${name} was turned off` : `${name} needs no update`,
       description: `${r.error ?? ''}${r.turnedOff ? ' It is off now, so it cannot crash the game.' : ''}` })

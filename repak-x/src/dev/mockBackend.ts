@@ -384,9 +384,11 @@ if (import.meta.env.DEV && !('__TAURI_INTERNALS__' in window)) {
       // 'mock.broken' = 'vfx' marks every mod with VFX in its name Needs VFX update instead (custom/vfx/VfxNotice.tsx shows)
       case 'xtra_broken_mods':
         // with 'mock.vfxStale' some also have 6 Niagara files the update rewrote (a partial update, mockStale)
-        if (localStorage.getItem('mock.broken') === 'vfx') return (args?.modPaths ?? []).filter((p: string) => /vfx/i.test(p) && !/_UPDATED_|_PARTIAL_|_ORIGINAL_/i.test(p)).map((path: string) => ({ path, kind: 'vfx',
+        // with 'mock.usmapBehind', every fourth (and any named wait) waits for the game's mappings. A failure kept in
+        // 'mock.vfxOutcomes' (the Mod Updater's xtra_vfx_outcome) clears its Needs update, as xtra_broken.rs does
+        if (localStorage.getItem('mock.broken') === 'vfx') return (args?.modPaths ?? []).filter((p: string) => /vfx/i.test(p) && !/_UPDATED_|_PARTIAL_|_ORIGINAL_/i.test(p) && mockOutcomes()[stemKey(p)]?.status !== 'failed').map((path: string, i: number) => ({ path, kind: 'vfx',
           reason: 'A game update changed 381 of the game files this VFX mod replaces, so its effects may look wrong or crash the game. The Mod Updater rebuilds it on the new game files.',
-          ...(mockStale(path) ? { staleNiagara: 6 } : {}) }))
+          ...(mockStale(path) ? { staleNiagara: 6 } : {}), ...(localStorage.getItem('mock.usmapBehind') === '1' && (/wait/i.test(path) || i % 4 === 0 || mockOutcomes()[stemKey(path)]?.status === 'waiting') ? { usmapWait: 3 } : {}) }))
         return localStorage.getItem('mock.broken') ? (args?.modPaths ?? []).slice(0, 2).map((path: string, i: number) => ({ path,
           kind: i ? 'risky' : 'broken', reason: i ? 'A Blueprint mod installed before the last game update.' : 'None of the 3 game files it replaces exist in this game version.' })) : []
       // the VFX Updater's list: mods with VFX in their name stand in for the VFX type (no originals with an update beside them)
@@ -395,6 +397,8 @@ if (import.meta.env.DEV && !('__TAURI_INTERNALS__' in window)) {
         ...(/vfx/i.test(m.path) ? {} : { materials: true, ui: true }), path: m.path, utoc: m.utoc_path || m.path.replace(/\.(pak|bak_repak)$/i, '.utoc'), enabled: m.enabled, hero: m.character_name ?? null, modified: m.modified_date ?? 0,
         name: m.custom_name || m.path.split(/[\\/]/).pop().replace(/\.[^.]+$/, '').replace(/(_\d+)?_P$/i, '') })) }
       case 'xtra_made_mods': return []
+      case 'xtra_vfx_outcomes': return Object.fromEntries((args?.modPaths ?? []).filter((p: string) => mockOutcomes()[stemKey(p)]).map((p: string) => [p, mockOutcomes()[stemKey(p)]]))
+      case 'xtra_vfx_outcome': { const all = mockOutcomes(); if (args?.status) all[stemKey(args.modPath)] = { status: args.status, error: args.error ?? '', next: args.next ?? '' }; else delete all[stemKey(String(args?.modPath))]; localStorage.setItem('mock.vfxOutcomes', JSON.stringify(all)); return null }
       // the mock USMAP is 3939753: localStorage 'mock.usmapBehind' = '1' puts the game a build ahead of it, so updates wait
       case 'xtra_game_build': return { updated: MOCK_GAME_UPDATED, cl: localStorage.getItem('mock.usmapBehind') === '1' ? 3962284 : 3939753 }
       // with mock.usmapBehind, mods whose name has 'wait' in it use files the patch changed
@@ -484,6 +488,9 @@ if (import.meta.env.DEV && !('__TAURI_INTERNALS__' in window)) {
 // Niagara systems older than the game's, so they are left out (a partial update).
 const vfxFiles = new Map<string, string>()
 /** 'mock.vfxStale': the mods (by any of their files) whose Niagara systems are older than the game's, about half of them */
+/** The Mod Updater's kept outcomes (xtra_broken.rs Outcome), by mod path */
+const stemKey = (p: string) => p.replace(/\.[^.\/]+$/, '').toLowerCase()
+const mockOutcomes = (): Record<string, { status: string; error: string; next: string }> => { try { return JSON.parse(localStorage.getItem('mock.vfxOutcomes') || '{}') } catch { return {} } }
 const mockStale = (path: string) => Boolean(localStorage.getItem('mock.vfxStale')) && path.replace(/\.[^.\\/]+$/, '').length % 2 === 0
 const vfxStep = () => new Promise(r => setTimeout(r, mock.__vfxStep ?? 400))
 const vfxEntry = (name: string, v: number) => ({ Name: '0', Value: [{ Name: 'ParameterInfo', Value: [{ Name: 'Name', Value: name }] },

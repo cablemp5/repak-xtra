@@ -25,6 +25,8 @@
 /* a group: its heading folds it away (the Loadouts screen's collections), Select all sits at the far end */
 .vf-grp-head { display: flex; align-items: center; gap: 12px; height: 32px; margin-bottom: 8px; }
 .vf-grp.is-folded .vf-grp-head { margin-bottom: 0; }
+/* Waiting for game mappings: one quiet line under its heading, aligned with the mod names */
+.vf-grp-note { margin: 0 0 8px; padding: 0 12px; font-size: 13px; line-height: 1.5; color: var(--text-secondary); text-wrap: pretty; }
 .vf-grp-title { flex: 1; min-width: 0; margin: 0; font: inherit; }
 .vf-grp-fold { width: 100%; min-width: 0; display: flex !important; align-items: center; justify-content: flex-start !important; gap: 8px; height: 32px !important; min-height: 0 !important;
   padding: 0 !important; margin-left: -2px; border: none !important; background: none !important; cursor: pointer; text-align: left; color: var(--text-secondary) !important; }
@@ -191,20 +193,6 @@ button.vf-assets-toggle:hover { color: var(--text-primary) !important; }
 .vf-behind-head { display: flex; align-items: center; gap: 8px; }
 .vf-behind-head svg { flex: none; color: #f5d342; }
 [data-theme="light"] .vf-behind-head svg { color: #9a7d00; }
-/* a Best effort candidate waiting for an answer: blue, the app's action color, pinned over the list (ReviewCard) */
-.vf-review { margin: 0 0 16px; padding: 14px 16px; border-radius: 10px; display: flex; flex-direction: column; gap: 8px;
-  border: 1px solid color-mix(in srgb, #346bf1, transparent 45%); background: color-mix(in srgb, #346bf1, transparent 90%); }
-.vf-review h3 { margin: 0; display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 600; color: var(--text-primary); }
-.vf-review h3 svg { flex: none; color: #346bf1; }
-.vf-review-more { margin-left: auto; font-size: 12px; font-weight: 500; color: var(--text-secondary); }
-.vf-review > p { margin: 0; font-size: 13px; line-height: 1.5; color: var(--text-secondary); text-wrap: pretty; }
-.vf-review > p b { font-weight: 600; color: var(--text-primary); }
-.vf-review > .vf-report { padding-bottom: 0; }
-.vf-review-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.vf-review-actions > .lo-text-btn { min-width: 148px; justify-content: center; } /* the two answers one size, whatever their words */
-.vf-review .vf-review-actions { align-self: stretch; margin-top: 4px; } /* the report lays out to its content: this row spans the card */
-.vf-review-actions > .vf-assets-toggle { margin-left: auto; } /* Show assets at the line's end */
-.vf-status.is-review { color: #346bf1; font-weight: 600; }
 .su-part-mark.is-behind { color: #f5d342; }
 .su-part-mark.is-behind::before { display: none; } /* the warning icon takes the empty circle's place */
 [data-theme="light"] .vf-behind b, [data-theme="light"] .su-part-mark.is-behind { color: #665400; }
