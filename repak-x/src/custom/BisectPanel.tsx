@@ -33,8 +33,11 @@ export default function BisectPanel({ deps, mods }: { deps: KeepDeps; mods: Mod[
   const shown = useRef(false)
   shown.current = Boolean(view)
   const d: KeepDeps = useMemo(() => {
-    const say = (title: string, text?: string) => { if (!shown.current) return deps.alert.warning(title, text); cue('warning'); setNote({ title, text: text ?? '' }); return -1 }
-    return { ...deps, alert: { ...deps.alert, warning: say, error: say } }
+    const say = (fallback: (title: string, text?: string) => number) => (title: string, text?: string) => {
+      if (!shown.current) return fallback(title, text)
+      cue('warning'); setNote({ title, text: text ?? '' }); return -1
+    }
+    return { ...deps, alert: { ...deps.alert, warning: say(deps.alert.warning), error: say(deps.alert.error) } }
   }, [deps])
   // Esc closes it only where nothing is switched (before the start, and at the end with every mod back)
   // mid-test Esc does nothing, but is still the dialog's: it never reaches Settings behind
@@ -47,9 +50,9 @@ export default function BisectPanel({ deps, mods }: { deps: KeepDeps; mods: Mod[
     let live = true
     setHint(undefined)
     const onNow = suspects(mods).map(m => m.path)
-    // the newest crash only: an older one is likely about something since fixed. At most 4 s: then plain halves
+    // the newest crash only: an older one is likely about something since fixed. At most 10 s (355 mods took 1.3 s): then plain halves
     const read = invoke<Listed[]>('xtra_recent_crashes').then(([c]) => c?.asset_path ? recentCrashes(onNow, onNow, [c]) : [])
-    Promise.race([read, new Promise<never>((_, no) => setTimeout(() => no(new Error('slow')), 4000))]).then(([c]) => {
+    Promise.race([read, new Promise<never>((_, no) => setTimeout(() => no(new Error('slow')), 10000))]).then(([c]) => {
       const likely = likelyIn(onNow, onNow.filter(p => c?.held?.some(h => stem(h) === stem(p))))
       if (live) setHint(c?.asset && likely.length ? { time: c.time, asset: c.asset, likely } : null)
     }).catch(() => { if (live) setHint(null) })
