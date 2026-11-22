@@ -230,11 +230,13 @@ function LoadoutsHome(p: LoadoutProps) {
   const customNames = useMemo(() => new Map(p.mods.map(m => [modKey(m.path), (m as { custom_name?: string | null }).custom_name || ''])), [p.mods])
   const modNames = (l: Loadout) => (inside ? l.on.map(k => customNames.get(displayName(k)) || memberName(k)) : [])
   const passesShow = (l: Loadout) => show === 'all' || isOn(l) === (show === 'enabled')
-  const direct = useMemo(() => loadouts.filter(l => (!q || matchesLoadout(l, q, { exact, modNames: modNames(l), inside })) && passesShow(l)),
-    [loadouts, q, show, enabledKeys, exact, inside, p.mods]) // eslint-disable-line react-hooks/exhaustive-deps
-  // nothing matches as typed: close matches (a word one letter off), never below real ones, never with Exact match
-  const close = useMemo(() => (!q || exact || direct.length ? [] : closeMatches(loadouts.filter(passesShow), l => loadoutNames(l, modNames(l), inside), q)),
-    [q, exact, direct.length, loadouts, show, enabledKeys, inside, p.mods]) // eslint-disable-line react-hooks/exhaustive-deps
+  const typed = useMemo(() => loadouts.filter(l => !q || matchesLoadout(l, q, { exact, modNames: modNames(l), inside })),
+    [loadouts, q, exact, inside, p.mods]) // eslint-disable-line react-hooks/exhaustive-deps
+  const direct = useMemo(() => typed.filter(passesShow), [typed, show, enabledKeys]) // eslint-disable-line react-hooks/exhaustive-deps
+  // nothing matches as typed, in any On / Off tab (a match one tab away is not a typo): close matches (a word one letter
+  // off), never below real ones, never with Exact match
+  const close = useMemo(() => (!q || exact || typed.length ? [] : closeMatches(loadouts.filter(passesShow), l => loadoutNames(l, modNames(l), inside), q)),
+    [q, exact, typed.length, loadouts, show, enabledKeys, inside, p.mods]) // eslint-disable-line react-hooks/exhaustive-deps
   const matching = close.length ? close : direct
   const [said, setSaid] = useState('') // the result count for screen readers, once typing pauses
   useEffect(() => {
@@ -547,7 +549,7 @@ function LoadoutsHome(p: LoadoutProps) {
             {/* shown with no loadouts too, so every page has the same head (the Library's search and All / On / Off) */}
             <label className="lp-search lo-search">
                 <Search size={14} aria-hidden="true" />
-                <input ref={searchRef} value={query} placeholder="Search loadouts" aria-label="Search loadouts by name" onChange={e => search(e.target.value)}
+                <input ref={searchRef} value={query} placeholder="Search loadouts" aria-label={inside ? 'Search loadouts by name or by a mod in them' : 'Search loadouts by name'} onChange={e => search(e.target.value)}
                   onKeyDown={e => { e.stopPropagation(); if (e.key === 'Escape') search('') }} />
                 {query && <button type="button" className="lo-icon" aria-label="Clear search" title="Clear search" onClick={clearSearch}><X size={13} /></button>}
               </label>

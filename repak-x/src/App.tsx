@@ -2998,11 +2998,13 @@ function App() {
   // closePool: every close match whatever On / Off / Problems says, which those tabs count while it shows; closeMods: the
   // ones the chosen tab keeps (built-in rows too, as the Library would list them, but never under the arrow keys)
   // only when nothing matches as typed with the other filters on, whatever the tab: matches one tab away are not typos
-  const closePool = useMemo(() => (!searchQuery.trim() || exactSearch || folderMods.length || libraryMods.length ? null
-    : closeMatches([...(selectedCharacters.size || selectedCategories.size || filterTag || selectedFolderId !== 'all' ? [] : builtinRows as ModRecord[]),
-      ...mods.filter(m => keepMod(m, false) && inFolder(m))], m => [libraryName(m)], searchQuery)),
-  [searchQuery, exactSearch, folderMods.length, libraryMods.length, mods, keepMod, inFolder, builtinRows, selectedCharacters, selectedCategories, filterTag, selectedFolderId])
-  const closeMods = useMemo(() => (closePool ?? []).filter(matchesState(modState, isEncrypted)), [closePool, modState, isEncrypted, brokenVersion])
+  const builtinsListed = !(selectedCharacters.size || selectedCategories.size || filterTag || selectedFolderId !== 'all')
+  const closePool = useMemo(() => (!searchQuery.trim() || exactSearch || folderMods.length || libraryMods.length
+    || (builtinsListed && builtinRows.some(r => directMatch(r.custom_name, searchQuery))) ? null // a built-in one tab away matches too
+    : closeMatches([...(builtinsListed ? builtinRows as ModRecord[] : []), ...mods.filter(m => keepMod(m, false) && inFolder(m))], m => [libraryName(m)], searchQuery, Infinity)),
+  [searchQuery, exactSearch, folderMods.length, libraryMods.length, mods, keepMod, inFolder, builtinRows, builtinsListed])
+  // the chosen tab's first 20 (the cap after the tab, so a match in it is never pushed out by others)
+  const closeMods = useMemo(() => (closePool ?? []).filter(matchesState(modState, isEncrypted)).slice(0, 20), [closePool, modState, isEncrypted, brokenVersion])
   const shownMods = closeMods.length ? closeMods : libraryMods
   const builtinPaths = useMemo(() => new Set(builtinRows.map(r => r.path)), [builtinRows])
   const navMods = useMemo(() => (closeMods.length ? closeMods.filter(m => !builtinPaths.has(m.path)) : filteredMods), [closeMods, builtinPaths, filteredMods]) // the arrow keys walk the mods shown, never a built-in

@@ -52,7 +52,7 @@ function closeNorm(name: string, q: string): number | null {
   let fixes = 0
   for (const t of q.split(' ')) {
     if (h.includes(t) || joinedFrom(words, t)) continue
-    if (t.length < MIN_FUZZY || !words.some(w => withinOne(t, w))) return null
+    if ([...t.normalize('NFC')].length < MIN_FUZZY || !words.some(w => withinOne(t, w))) return null // letters, not code units (Korean decomposes)
     if (++fixes > 1) return null // one guess at most: the other words must match as typed
   }
   return fixes || null
@@ -62,6 +62,7 @@ function closeNorm(name: string, q: string): number | null {
  *  matched by a later one (a mod inside it), then by name. Pure. */
 export function closeMatches<T>(items: T[], names: (item: T) => string[], query: string, limit = 20): T[] {
   const q = normText(query)
+  if (!q) return []
   const scored = items.map(item => { const all = names(item); return { item, name: all[0] ?? '', at: all.findIndex(n => closeNorm(n, q) !== null) } })
   return scored.filter(s => s.at >= 0).sort((a, b) => Math.min(a.at, 1) - Math.min(b.at, 1) || a.name.localeCompare(b.name)).slice(0, limit).map(s => s.item)
 }
