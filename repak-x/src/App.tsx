@@ -95,6 +95,7 @@ import { checkKoMod, forgetKoMods, knownKoMod, openInKoEditor } from './custom/k
 import { PREF_TOGGLED, type PrefToggled, fewerPopups, liteOn, newDefaultsOnce, prefOn, setPref } from './custom/uiPrefs' // repakxtra
 import { reportSource } from './custom/setupReport' // repakxtra: Copy setup report reads the live list
 import { finishInstallLoadout, sameRow, type SameMod } from './custom/installLoadout'
+import { oneAtATime } from './custom/oneAtATime' // repakxtra
 import SetupButton from './custom/SetupPanel'
 import { REPAKXTRA_VERSION, latestRelease, versionTag } from './custom/version'
 import { installedReleaseNotes } from './custom/releaseNotes'
@@ -531,6 +532,20 @@ function App() {
   const filteredModsRef = useRef<ModRecord[]>([]) // Keep in sync with filteredMods for selection handler
   const sameMods = useRef<SameMod[]>([]) // repakxtra: this install's mods left out as already installed (xtra_install_same)
   const loadModsSeq = useRef(0) // repakxtra: the newest loadMods call, so a slow older one cannot overwrite it
+  // repakxtra: the mods folder is listed by one call at a time (custom/oneAtATime.ts). newestListing: the last one asked for
+  const [listModsOnce] = useState(() => oneAtATime(() => invoke<ModRecord[]>('get_pak_files')))
+  const newestListing = useRef<Promise<ModRecord[]> | null>(null)
+  const listMods = () => (newestListing.current = listModsOnce())
+  // repakxtra: an install's one listing after it finished, by the install's id. install_complete's reload and the install
+  // flow's own step each used to walk the folder. `again`: tags were added since, and the list carries each mod's tags
+  const installListing = useRef<{ request: string; listed: Promise<ModRecord[]> } | null>(null)
+  const listAfterInstall = (request?: string, again = false) => {
+    const had = installListing.current
+    if (request && !again && had?.request === request) return had.listed
+    const listed = listMods()
+    if (request) installListing.current = { request, listed }
+    return listed
+  }
   const clashScopeModPath = useRef<string | null>(null) // null = global clashes, path = single-mod scope
   const safeRefreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const filtersResizeRef = useRef({ startY: 0, startHeight: 0 })
@@ -1527,7 +1542,7 @@ function App() {
       if (!event.payload?.failed?.length && !event.payload?.all_failed) { uiLog.success('Install', 'Installation complete'); setStatus('Installation complete!') }
       setIsModsLoading(false)
       setModLoadingProgress(0)
-      loadMods()
+      void showMods(listAfterInstall(event.payload?.request)) // repakxtra: the listing the install flow's own step reads too
     })
 
 
@@ -1861,7 +1876,11 @@ function App() {
       // or unreachable GitHub must never hold up the mods list.
       void initHeroImages()
 
-      const modList = await loadMods()
+      // repakxtra: folders, the game check, and the folder watcher follow the mod list itself, not every mod's details
+      // (seconds of pak reads on a first launch or after an update). The mod count still waits for them, as before
+      const listed = listMods()
+      const loading = showMods(listed)
+      await listed.catch(() => {})
       await loadFolders()
       await checkGame()
 
@@ -1872,14 +1891,17 @@ function App() {
 
       // Start the file watcher
       await invoke('start_file_watcher')
-      return modList.length
+      return (await loading).length
     } catch (error) {
       uiLog.error('Startup', `Startup failed partway through: ${error}`)
       return 0
     }
   }
 
-  const loadMods = async (): Promise<ModRecord[]> => {
+  const loadMods = (): Promise<ModRecord[]> => showMods(listMods())
+  // repakxtra: shows a listing of the mods folder (listMods) and reads its details. Apart from loadMods so startup and an
+  // install can read the same listing without waiting for the details
+  const showMods = async (listing: Promise<ModRecord[]>): Promise<ModRecord[]> => {
     // repakxtra: several loads can overlap (an install, its loadout, previews and the watcher each reload). Only the newest
     // may set the list: an older scan answering late put the pre-install list back, hiding a mod just installed
     const mine = ++loadModsSeq.current
@@ -1889,7 +1911,7 @@ function App() {
       setModLoadingProgress(-1) // Indeterminate while fetching list
       setStatus('Loading mods...')
 
-      const modList = await invoke('get_pak_files') as any
+      const modList = await listing as any // repakxtra: was its own get_pak_files
       console.log('Loaded mods:', modList)
       if (mine !== loadModsSeq.current) return modList as ModRecord[] // a newer load is on its way, with the newer list
       syncLoadoutKeys(modList) // repakxtra: loadout members follow moved mods and old saves migrate, before the list shows
@@ -3283,10 +3305,10 @@ function App() {
       const pct = Math.max(0, Math.min(100, Math.round(Number(event.payload) || 0)))
       if (installToast >= 0 && !ended) alert.updateToast(installToast, { progressValue: pct })
     })
+    const request = `${Date.now()}-${Math.random().toString(36).slice(2)}` // repakxtra: install_complete names it
     const installed = (async () => {
         // Create a promise that resolves when install_complete event fires
         type Outcome = { name: string; source: string; requested?: string; whole?: boolean } // repakxtra
-        const request = `${Date.now()}-${Math.random().toString(36).slice(2)}` // repakxtra: install_complete names it
         let stopWaiting = () => {}
         const installCompletePromise = new Promise<{ failed: Outcome[]; done?: Outcome[] }>((resolve, reject) => { // repakxtra: what failed in a partial install
           let unlistenComplete: UnlistenFn | null = null
@@ -3389,6 +3411,7 @@ function App() {
         // Mirror tag assignment flow used by the main list/context menu
         const typeTracker: Record<string, number> = {}
         let tagsFailed = 0 // repakxtra: said once, not only in the console
+        let tagged = false // repakxtra
         for (const mod of modsWithSettings.filter(done)) { // repakxtra: no tags for a mod left out as already installed
           const modType = mod.mod_type || 'Unknown'
           const count = typeTracker[modType] || 0
@@ -3403,6 +3426,7 @@ function App() {
             for (const tag of mod.selectedTags) {
               try {
                 await invoke('add_custom_tag', { modPath: fullPath, tag })
+                tagged = true // repakxtra
               } catch (e) {
                 console.error(`Failed to add tag ${tag} to ${fullPath}:`, e)
                 tagsFailed++
@@ -3417,11 +3441,13 @@ function App() {
         const fresh = modsWithSettings.filter(done) // repakxtra: a mod left out as already installed has no new file to save or source
         // repakxtra: Save as a loadout, the copies already installed included
         const kept = modsWithSettings.flatMap(m => { const s = sameOf(m); return s ? [{ path: s.path, loadouts: m.loadouts }] : [] })
-        if (fresh.length || kept.length) await finishInstallLoadout(fresh, alert, kept)
+        const listed = listAfterInstall(request, tagged) // repakxtra: one listing for the loadout step and the reload below
+        if (fresh.length || kept.length) await finishInstallLoadout(fresh, alert, kept, listed)
         await recordSources(fresh) // repakxtra: Nexus source from the archive name
 
         // Reload in background so alert shows success immediately
-        loadMods()
+        if (newestListing.current === listed) void showMods(listed) // repakxtra: still the newest listing: shown without another walk
+        else loadMods()
         loadFolders()
         loadTags()
         setStatus(failedNames.length ? `Installed ${plural(modsWithSettings.filter(done).length, 'mod')}, ${failedNames.length} failed` : 'Mods installed successfully!') // repakxtra

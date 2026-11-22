@@ -163,14 +163,14 @@ export const startingLoadouts = () => { const id = openLoadoutId(); return id &&
 
 /** After a successful install: add the mods now on disk to the loadouts picked for them, make the new loadout, then
  *  queue its previews. `kept`: the mods the install left out as already installed, by their copy in the Library, which
- *  join the same loadouts. */
-export async function finishInstallLoadout(installed: Installed[], alert: ReturnType<typeof useAlert>, kept: { path: string; loadouts?: string[] }[] = []) {
+ *  join the same loadouts. `listed`: the mods folder as listed after the install, the one listing App's reload shows too. */
+export async function finishInstallLoadout(installed: Installed[], alert: ReturnType<typeof useAlert>, kept: { path: string; loadouts?: string[] }[], listed: Promise<Mod[]>) {
   const job = pending
   pending = null
   const joining = [...installed, ...kept].filter(m => m.loadouts?.length)
   if (!job && joining.length === 0) return
   const [all, paks, had] = await Promise.all([
-    invoke<Mod[]>('get_pak_files').catch(() => [] as Mod[]),
+    listed.catch(() => [] as Mod[]),
     invoke<string[][]>('xtra_install_paks', { paths: installed.map(m => m.path ?? '') }).catch(() => [] as string[][]),
     before ?? Promise.resolve(null),
   ])
