@@ -1153,8 +1153,8 @@ function App() {
     }
     const off = () => { window.removeEventListener('keydown', cancel, true); window.removeEventListener('pointerdown', cancel, true) }
     window.addEventListener('keydown', cancel, true); window.addEventListener('pointerdown', cancel, true)
-    void Promise.race([checkKoMod(mod.path), new Promise(r => setTimeout(r, 150))])
-      .then(() => { off(); setContextMenu(c => (c?.mod?.path === mod.path && c.koWait ? { ...c, koWait: false, ko: knownKoMod(mod.path) } : c)) })
+    void Promise.race([checkKoMod(mod.path), new Promise<undefined>(r => setTimeout(r, 150))]) // the answer itself: a reload may clear the cache meanwhile
+      .then(ko => { off(); setContextMenu(c => (c?.mod?.path === mod.path && c.koWait ? { ...c, koWait: false, ko } : c)) })
   }
 
   const handleFolderContextMenu = (e: React.MouseEvent, folder: FolderRecord) => {
