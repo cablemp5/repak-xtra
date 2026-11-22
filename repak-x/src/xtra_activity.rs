@@ -78,14 +78,17 @@ fn with_store<T>(f: impl FnOnce(&mut Store) -> T) -> Option<T> {
     }
 }
 
-/// Saves the store a moment later, once, however many changes come meanwhile.
+static DIRTY: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Saves the store now, off the caller's thread, from one writer at a time: changes made while it writes are saved by
+/// its next pass, so a loadout switch costs a few writes, not one per mod, and nothing waits on a timer.
 fn save_soon() {
-    if SAVING.swap(true, std::sync::atomic::Ordering::AcqRel) { return; }
-    std::thread::spawn(|| {
-        std::thread::sleep(std::time::Duration::from_millis(400));
-        SAVING.store(false, std::sync::atomic::Ordering::Release);
-        let bytes = with_store(|s| serde_json::to_vec(s).unwrap_or_default());
-        if let Some(bytes) = bytes {
+    use std::sync::atomic::Ordering::AcqRel;
+    DIRTY.store(true, std::sync::atomic::Ordering::Release);
+    if SAVING.swap(true, AcqRel) { return; }
+    std::thread::spawn(|| loop {
+        DIRTY.store(false, std::sync::atomic::Ordering::Release);
+        if let Some(bytes) = with_store(|s| serde_json::to_vec(s).unwrap_or_default()) {
             let path = store_path();
             let tmp = path.with_extension("json.tmp");
             if let Some(dir) = path.parent() { let _ = std::fs::create_dir_all(dir); } // a fresh profile has no Repak-X folder yet
@@ -93,6 +96,9 @@ fn save_soon() {
                 log::warn!("[activity] could not save the history: {e}");
             }
         }
+        // done unless a change came meanwhile (and no other writer took over)
+        SAVING.store(false, std::sync::atomic::Ordering::Release);
+        if !DIRTY.load(std::sync::atomic::Ordering::Acquire) || SAVING.swap(true, AcqRel) { break; }
     });
 }
 
@@ -107,9 +113,22 @@ fn push_into(s: &mut Store, e: Event) {
     }
 }
 
+/// A loadout switch's own on and off events (each toggle records one) fold into it: between its start and now, of its
+/// mods (any of them when its names were capped). A big Collection switch then takes one slot, not hundreds.
+fn fold_switches(s: &mut Store, l: &Event) {
+    if l.from == 0 { return; }
+    let capped = l.n_ok > l.ok.len() || l.n_failed > l.failed.len();
+    s.events.retain(|e| !((e.kind == "enable" || e.kind == "disable") && e.t >= l.from && e.t <= l.t
+        && (capped || e.ok.iter().all(|n| l.ok.contains(n) || l.failed.contains(n)))));
+}
+
 /// A text with folders taken out (a path keeps only its last part) and no user name.
 fn plain(text: &str) -> String {
-    let no_dirs = regex_lite::Regex::new(r"[A-Za-z]:[\\/](?:[^\\/\r\n]*[\\/])*").map(|re| re.replace_all(text, "").into_owned()).unwrap_or_else(|_| text.to_string());
+    if text.is_empty() { return String::new(); }
+    // a drive path, or a network path (\\server\share\...), up to its last separator
+    static DIRS: std::sync::OnceLock<Option<regex_lite::Regex>> = std::sync::OnceLock::new();
+    let no_dirs = DIRS.get_or_init(|| regex_lite::Regex::new(r"(?:[A-Za-z]:|[\\/]{2}[^\\/\r\n]+)[\\/](?:[^\\/\r\n]*[\\/])*").ok()).as_ref()
+        .map_or_else(|| text.to_string(), |re| re.replace_all(text, "").into_owned());
     crate::xtra_crash::redact(&no_dirs, &crate::xtra_crash::user_names())
 }
 
@@ -138,7 +157,7 @@ pub(crate) fn record(kind: &str, ok: &[String], failed: &[String], detail: &str)
 fn record_from(kind: &str, ok: &[String], failed: &[String], detail: &str, from: u64) {
     if ok.is_empty() && failed.is_empty() && detail.is_empty() { return; }
     let e = event(now(), kind, ok, failed, detail, from);
-    if with_store(|s| push_into(s, e)).is_some() { save_soon(); }
+    if with_store(|s| { if kind == "loadout" { fold_switches(s, &e); } push_into(s, e) }).is_some() { save_soon(); }
 }
 
 /// The frontend's operations (a loadout switch, a Mod Updater result): only kinds it may send. `started`: when its batch
@@ -188,9 +207,12 @@ pub struct Timeline {
 /// Pure: the timeline for a crash at `crash` from the sessions (start and end), the store's `since`, and its events.
 fn timeline_of(crash: u64, starts: &[(u64, Option<u64>)], since: u64, events: &[Event]) -> Timeline {
     // the session it crashed in: started before it and not ended long before it (xtra_crash.rs on_at's rule)
-    let session = starts.iter().filter(|(s, e)| *s <= crash && crash <= e.map_or(s + 6 * 3600, |e| e + 120)).map(|(s, _)| *s).max();
+    let matched = starts.iter().filter(|(s, e)| *s <= crash && crash <= e.map_or(s + 6 * 3600, |e| e + 120)).max_by_key(|(s, _)| *s);
+    let session = matched.map(|(s, _)| *s);
+    // seen running when it crashed: a crash well after the session was seen ending may be an unseen relaunch
+    let seen = matched.is_some_and(|(_, e)| e.is_none_or(|e| crash <= e + 10));
     let from = starts.iter().map(|(s, _)| *s).filter(|s| *s < session.unwrap_or(crash)).max();
-    let coverage = if since == 0 || since > crash { "none" } else if session.is_some() && from.is_some_and(|f| since <= f) { "full" } else { "partial" };
+    let coverage = if since == 0 || since > crash { "none" } else if seen && from.is_some_and(|f| since <= f) { "full" } else { "partial" };
     // strictly before the crash second: one finished in the same second may have come after it
     let events = if coverage == "none" { Vec::new() } else { events.iter().filter(|e| from.is_none_or(|f| e.t > f) && e.t < crash).cloned().collect() };
     Timeline { crash, from, started: session, coverage, events }
@@ -251,7 +273,27 @@ mod tests {
     }
 
     #[test]
+    fn a_loadout_switch_folds_its_own_toggles() {
+        let mut s = Store { since: 1, ..Default::default() };
+        let t = |t: u64, kind: &str, n: &str| Event { t, kind: kind.into(), ok: vec![n.into()], n_ok: 1, ..Default::default() };
+        for e in [t(5, "enable", "Other"), t(10, "enable", "A"), t(11, "disable", "B"), t(12, "enable", "Mine")] { push_into(&mut s, e); }
+        let l = Event { t: 13, kind: "loadout".into(), ok: vec!["A".into(), "B".into()], n_ok: 2, from: 10, detail: "Look on".into(), ..Default::default() };
+        fold_switches(&mut s, &l);
+        assert_eq!(s.events.iter().map(|e| e.ok[0].as_str()).collect::<Vec<_>>(), vec!["Other", "Mine"], "only its own mods in its own window");
+        let big = Event { n_ok: 500, ..l };
+        fold_switches(&mut s, &big);
+        assert_eq!(s.events.iter().map(|e| e.ok[0].as_str()).collect::<Vec<_>>(), vec!["Other"], "a capped switch folds every toggle in its window");
+    }
+
+    #[test]
+    fn a_crash_after_the_session_was_seen_ending_is_not_full() {
+        assert_eq!(timeline_of(205, &[(50, Some(60)), (100, Some(200))], 10, &[]).coverage, "full", "the crash folder lands as the game closes");
+        assert_eq!(timeline_of(300, &[(50, Some(60)), (100, Some(200))], 10, &[]).coverage, "partial", "100 s after it ended: maybe an unseen relaunch");
+    }
+
+    #[test]
     fn names_carry_no_folder_or_priority() {
+        assert_eq!(plain(r"Mine \\server\share\Alice\Draft on"), "Mine Draft on", "a network path too");
         assert_eq!(mod_name(r"C:\Games\Paks\~mods\Purple VFX_9999999_P.pak"), "Purple VFX");
         assert_eq!(mod_name("D:/x/Cool_P.bak_repak"), "Cool");
         assert_eq!(mod_name("Plain"), "Plain");

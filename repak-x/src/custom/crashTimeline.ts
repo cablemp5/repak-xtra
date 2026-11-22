@@ -27,7 +27,7 @@ function words(e: ActivityEvent): string {
   const failedPart = nFailed ? ` (${nFailed} failed: ${names(e.failed, nFailed)})` : ''
   switch (e.kind) {
     case 'install': return nOk ? `Installed ${nFailed ? `${nOk} of ${count(nOk + nFailed, 'mod')}` : subject(e.ok, nOk)}${failedPart}` : `Install failed for ${subject(e.failed, nFailed)}`
-    case 'replace': return `Replaced ${subject(e.ok, nOk)} with a new copy`
+    case 'replace': return e.detail === 'kept' ? `Installed a new copy of ${subject(e.ok, nOk)}, but the old copy could not be moved and is still there` : `Replaced ${subject(e.ok, nOk)} with a new copy`
     case 'enable': return `Turned on ${subject(e.ok, nOk)}`
     case 'disable': return `Turned off ${subject(e.ok, nOk)}`
     case 'delete': return `Moved ${subject(e.ok, nOk)} to Recently deleted`
@@ -45,7 +45,7 @@ function words(e: ActivityEvent): string {
 export function timelineRows(t: Timeline): TimelineRow[] {
   const loadouts = t.events.filter(e => e.kind === 'loadout')
   // a loadout's own switches (recorded by each toggle) are its row, not rows of their own
-  const own = (e: ActivityEvent) => (e.kind === 'enable' || e.kind === 'disable') && loadouts.some(l => l.t >= e.t && e.t >= (l.from || l.t - 120) && e.ok.every(n => l.ok.includes(n)))
+  const own = (e: ActivityEvent) => (e.kind === 'enable' || e.kind === 'disable') && loadouts.some(l => l.t >= e.t && e.t >= (l.from || l.t - 120) && ((l.n_ok ?? 0) > l.ok.length || e.ok.every(n => l.ok.includes(n))))
   const merged: ActivityEvent[] = []
   for (const e of t.events.filter(e => !own(e))) {
     const last = merged[merged.length - 1]
@@ -54,7 +54,7 @@ export function timelineRows(t: Timeline): TimelineRow[] {
         n_ok: Math.max(last.n_ok ?? 0, last.ok.length) + Math.max(e.n_ok ?? 0, e.ok.length), n_failed: Math.max(last.n_failed ?? 0, last.failed.length) + Math.max(e.n_failed ?? 0, e.failed.length) }
     } else merged.push(e)
   }
-  const rows: TimelineRow[] = merged.map(e => ({ t: e.t, text: words(e), problem: e.failed.length > 0 || (e.n_failed ?? 0) > 0 || e.detail === 'partial' }))
+  const rows: TimelineRow[] = merged.map(e => ({ t: e.t, text: words(e), problem: e.failed.length > 0 || (e.n_failed ?? 0) > 0 || e.detail === 'partial' || e.detail === 'kept' }))
   if (t.started) rows.push({ t: t.started, text: 'Started the game' })
   return rows.sort((a, b) => b.t - a.t)
 }

@@ -3774,7 +3774,7 @@ async fn update_mod(
     window.emit("install_complete", ()).ok();
 
     info!("update_mod completed successfully");
-    xtra_activity::record("replace", &[new_mod_path.to_string_lossy().to_string()], &[], ""); // repakxtra: What changed?
+    xtra_activity::record("replace", &[new_mod_path.to_string_lossy().to_string()], &[], if old_deleted { "" } else { "kept" }); // repakxtra: What changed? (kept: the old copy is still there)
 
     Ok(UpdateModResult {
         new_mod_path: new_mod_path.to_string_lossy().to_string(),
