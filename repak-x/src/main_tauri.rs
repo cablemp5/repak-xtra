@@ -5443,11 +5443,18 @@ async fn check_game_running(state: State<'_, Arc<Mutex<AppState>>>) -> Result<bo
     // the start time needs a handle to the game process, which its anti-cheat may refuse: then the launch keeps the time
     // it was first seen, and no relaunch is told from it
     let real = if running { game_started_at() } else { None };
+    // STARTED_REAL: the time in STARTED is the process's own, not when it was first seen (a relaunch compares two real times)
+    static STARTED_REAL: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
     let before = STARTED.load(std::sync::atomic::Ordering::Relaxed);
+    let before_real = STARTED_REAL.load(std::sync::atomic::Ordering::Relaxed);
     let start = if !running { 0 } else { real.unwrap_or(if before != 0 { before } else { now }) };
-    STARTED.store(start, std::sync::atomic::Ordering::Relaxed);
     let was = WAS.swap(running, std::sync::atomic::Ordering::Relaxed);
-    let relaunched = was && running && real.is_some() && before != 0 && before.abs_diff(start) > 2;
+    let relaunched = was && running && real.is_some() && before_real && before.abs_diff(start) > 2;
+    // a first-seen time is kept for this launch even once the real one can be read: its session was saved under it
+    let keep = was && running && !before_real && before != 0;
+    let start = if keep { before } else { start };
+    STARTED.store(start, std::sync::atomic::Ordering::Relaxed);
+    STARTED_REAL.store(running && (if keep { false } else { real.is_some() }), std::sync::atomic::Ordering::Relaxed);
     if was != running || relaunched {
         let mods = state.lock().unwrap().game_path.clone();
         // the end is noted at once: a start still listing the mods folder closes its session if the game ended meanwhile
@@ -5457,7 +5464,8 @@ async fn check_game_running(state: State<'_, Arc<Mutex<AppState>>>) -> Result<bo
             if relaunched { xtra_crash::remember_end(start.saturating_sub(1)) } else if !running { xtra_crash::remember_end(now) }
             if running {
                 let fresh = xtra_crash::remember_on(&mods, start);
-                if ENDED.load(std::sync::atomic::Ordering::SeqCst) > start.max(now) { xtra_crash::remember_end(ENDED.load(std::sync::atomic::Ordering::SeqCst)) }
+                let ended = ENDED.load(std::sync::atomic::Ordering::SeqCst);
+                if ended > start.max(now) { xtra_crash::end_session(start, ended) } // this launch's own session, never a newer one
                 xtra_activity::note_versions(&mods, start, fresh)
             }
         });

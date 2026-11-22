@@ -142,9 +142,15 @@ fn plain(text: &str) -> String {
     static DIRS: std::sync::OnceLock<Option<(regex_lite::Regex, regex_lite::Regex)>> = std::sync::OnceLock::new();
     let no_dirs = DIRS.get_or_init(|| Some((regex_lite::Regex::new(r"[\\/]{2}[^\\/\s][^\\/\r\n]*(?:[\\/][^\r\n]*)?").ok()?, regex_lite::Regex::new(r"[A-Za-z]:[\\/](?:[^\\/\r\n]*[\\/])*").ok()?))).as_ref()
         .map_or_else(|| text.to_string(), |(unc, drive)| drive.replace_all(&unc.replace_all(text, ""), "").into_owned());
-    // and a path from the root of a drive (\Private\Client\Skin.pak): two separators or more, only its last part stays
-    static ROOTED: std::sync::OnceLock<Option<regex_lite::Regex>> = std::sync::OnceLock::new();
-    let no_dirs = ROOTED.get_or_init(|| regex_lite::Regex::new(r"[\\/](?:[^\\/\r\n]+[\\/])+").ok()).as_ref().map_or(no_dirs.clone(), |re| re.replace_all(&no_dirs, "").into_owned());
+    // any other path: a backslash means one (names rarely hold one), and slashes count only before a file name with an
+    // extension, so "Tank/Support/DPS on" stays a name and "Private Client\Draft.pak" keeps only "Draft.pak"
+    let no_dirs = match no_dirs.rfind('\\') {
+        Some(i) => no_dirs[i + 1..].to_string(),
+        None => match no_dirs.rfind('/') {
+            Some(i) if no_dirs[i + 1..].split_whitespace().next().is_some_and(|f| f.rsplit_once('.').is_some_and(|(n, x)| !n.is_empty() && (2..=5).contains(&x.len()) && x.chars().all(|c| c.is_ascii_alphanumeric()))) => no_dirs[i + 1..].to_string(),
+            _ => no_dirs,
+        },
+    };
     crate::xtra_crash::redact(&no_dirs, &crate::xtra_crash::user_names())
 }
 
@@ -161,8 +167,10 @@ pub(crate) fn mod_name(path: &str) -> String {
 
 fn event(t: u64, kind: &str, ok: &[String], failed: &[String], detail: &str, from: u64) -> Event {
     let cap = if kind == "loadout" { MAX_LOADOUT_NAMES } else { MAX_NAMES };
-    let names = |v: &[String]| v.iter().take(cap).map(|p| mod_name(p)).collect::<Vec<_>>();
-    Event { t, kind: kind.into(), ok: names(ok), failed: names(failed), n_ok: ok.len(), n_failed: failed.len(), detail: plain(detail), from }
+    // one name per mod: a dropped .pak, .utoc and .ucas are one mod
+    let unique = |v: &[String]| { let mut seen = std::collections::HashSet::new(); v.iter().map(|p| mod_name(p)).filter(|n| seen.insert(n.to_lowercase())).collect::<Vec<_>>() };
+    let (ok, failed) = (unique(ok), unique(failed));
+    Event { t, kind: kind.into(), ok: ok.iter().take(cap).cloned().collect(), failed: failed.iter().take(cap).cloned().collect(), n_ok: ok.len(), n_failed: failed.len(), detail: plain(detail), from }
 }
 
 /// Records an operation that finished: `ok` and `failed` are mod paths or names (kept as names only). Nothing when both
@@ -203,7 +211,8 @@ pub(crate) fn note_versions(mods_dir: &Path, start: u64, fresh: bool) {
         if !s.game.is_empty() && !game.is_empty() && s.game != game { push_into(s, event(before, "game_update", &[], &[], &game, 0)); changed = true; }
         if !s.app.is_empty() && s.app != app { push_into(s, event(app_t, "app_update", &[], &[], &app, 0)); changed = true; }
         changed |= s.app != app || (!game.is_empty() && s.game != game) || s.since == 0;
-        if s.since == 0 { s.since = now(); } // recording begins now, not at a launch the app may not have seen
+        // recording begins at this launch when the app saw it start, else now (it may have opened mid-game)
+        if s.since == 0 { s.since = if fresh && now().saturating_sub(start) <= 60 { start } else { now() }; }
         s.app = app;
         if !game.is_empty() { s.game = game; }
         changed
@@ -307,14 +316,18 @@ mod tests {
         assert_eq!(plain(r"Mine \\server\Private Share\Draft"), "Mine ", "a network path goes whole, spaces too");
         assert_eq!(plain(r"\\server\PrivateShare"), "", "a share root too");
         assert_eq!(plain("Skins // Ranked on"), "Skins // Ranked on", "a double slash between words is a name");
-        assert_eq!(plain(r"Mine \Private\Paid Client\Skin.pak"), "Mine Skin.pak", "a path from a drive's root too");
+        assert_eq!(plain(r"Mine \Private\Paid Client\Skin.pak"), "Skin.pak", "a path from a drive's root too");
+        assert_eq!(plain(r"Private Client\Draft.pak"), "Draft.pak", "and a relative one");
+        assert_eq!(plain("Tank/Support/DPS on"), "Tank/Support/DPS on", "slashes in a name stay");
         assert_eq!(mod_name(r"C:\Games\Paks\~mods\Purple VFX_9999999_P.pak"), "Purple VFX");
         assert_eq!(mod_name("D:/x/Cool_P.bak_repak"), "Cool");
         assert_eq!(mod_name("Plain"), "Plain");
         assert_eq!(mod_name("猫猫猫.utoc"), "猫猫猫", "never slices through a character");
         assert_eq!(mod_name("猫"), "猫");
         assert_eq!(plain(r"Mine C:\Users\Alice\Private Client\Draft.pak on"), "Mine Draft.pak on", "a path in a loadout name keeps only its last part");
-        let e = event(1, "install", &vec!["m".to_string(); MAX_NAMES + 5], &[], "", 0);
+        let e = event(1, "install", &(0..MAX_NAMES + 5).map(|i| format!("m{i}")).collect::<Vec<_>>(), &[], "", 0);
+        let one = event(1, "install", &["A.pak".into(), "A.utoc".into(), "A.ucas".into()], &[], "", 0);
+        assert_eq!((one.ok.len(), one.n_ok), (1, 1), "a dropped .pak, .utoc and .ucas are one mod");
         assert_eq!((e.ok.len(), e.n_ok), (MAX_NAMES, MAX_NAMES + 5), "names are capped, the count is kept");
     }
 }

@@ -70,6 +70,16 @@ pub(crate) fn remember_end(end: u64) {
     }
 }
 
+/// Ends the session that started at `start` (within 2 s) at `end`, when it is still open: a start whose save finished
+/// after its game ended (main_tauri.rs check_game_running) closes its own session, never a newer launch's.
+pub(crate) fn end_session(start: u64, end: u64) {
+    let mut all = read_sessions();
+    if let Some(s) = all.iter_mut().find(|s| s.start.abs_diff(start) <= 2 && s.end.is_none()) {
+        s.end = Some(end);
+        let _ = std::fs::write(sessions_store(), serde_json::to_vec(&all).unwrap_or_default());
+    }
+}
+
 /// The on-set of the session a crash at `time` happened in: it started before the crash and had not ended long before it
 /// (a session the app never saw end counts for OPEN_SESSION_SECS). None for a crash outside every saved session.
 fn on_at(all: Vec<Session>, time: u64) -> Option<Vec<String>> {
