@@ -73,10 +73,10 @@ export function buildReport(r: ReportInput) {
     '```',
     `repakxtra ${r.version}${r.repakx ? ` (RepakX ${r.repakx})` : ''}, ${r.launcher}`,
     ...(r.made ? [`Report made ${r.made}`] : []),
-    ...(trying || instead ? ['', ...(trying ? [`What I was trying to do: ${trying}`] : []), ...(instead ? [`What happened instead: ${instead}`] : [])] : []),
     '',
     'What to check next:',
     ...(r.next?.length ? r.next.map(l => `  - ${l}`) : ['  Nothing stands out in these checks. Say what you see in your help message.']),
+    ...(trying || instead ? ['', ...(trying ? [`What I was trying to do: ${trying}`] : []), ...(instead ? [`What happened instead: ${instead}`] : [])] : []),
     '',
     'Why mods might not load:',
     ...(r.folder ? [`  Game folder: ${r.folder}`] : []),
@@ -245,7 +245,8 @@ export async function gatherReport(onStage?: (stage: ReportStage) => void, notes
   const next = nextSteps({
     // a bypass file that is there but cannot be read reads as its own state, not as incomplete
     folder: !src.gamePath ? 'unset' : build && !build.updated ? 'no-game' : 'ok', bypass: bypassState, galacta: g,
-    vfx: count('vfx'), broken: count('broken'), mayCrash: verdicts ? mayCrash : 0, conflicts: conflictGroups, notLoaded: notLoaded.length,
+    vfx: count('vfx'), broken: count('broken'), conflicts: conflictGroups,
+    mayCrash: verdicts ? onPaths.filter(p => !suspect.has(key(p)) && (verdictOf.get(key(p))?.kind === 'risky' || (dumpSuspect.has(key(p)) && verdictOf.get(key(p))?.kind !== 'broken'))).length : 0, notLoaded: notLoaded.length,
     // only the mods that hold the very asset the crash names (one only in the crash dump is not told to go off)
     suspects: mods.filter(m => m.enabled && suspect.has(key(m.path))).map(m => relativeToMods(m.path, src.gamePath)), crashAsset: crash?.asset_path?.split('/').pop(),
   })
@@ -330,19 +331,19 @@ export function nextSteps(f: Facts): string[] {
   if (f.folder === 'unset') out.push('No game folder is set. Choose it in Settings > Game folder.')
   if (f.folder === 'no-game') out.push('The game files were not found in the game folder, or could not be read. Choose the Marvel Rivals folder again in Settings.')
   const bypass: Record<string, string> = {
-    missing: 'Signature bypass is not installed, so the game skips mods. Open Setup and install it.',
-    partial: 'Signature bypass is incomplete. Open Setup and repair it.',
-    other: 'Signature bypass is a different version. Open Setup and replace it.',
-    disabled: 'Signature bypass is off. Open Setup and turn it on.',
-    outdated: 'Signature bypass is an older version. Open Setup and update it.',
-    unreadable: 'A signature bypass file is there but could not be read. Restart the PC, then open Setup to check it again.',
+    missing: 'Signature bypass is not installed, so the game skips mods. Open Setup to see what the game needs.',
+    partial: 'Signature bypass is incomplete. Open Setup to see which part is missing.',
+    other: 'Signature bypass is a different version. Open Setup to check it.',
+    disabled: 'Signature bypass is off. Open Setup to see its state.',
+    outdated: 'Signature bypass is an older version. Open Setup to check it.',
+    unreadable: 'A signature bypass file is there but could not be read. Open Setup to check it again.',
   }
   if (f.bypass && bypass[f.bypass]) out.push(bypass[f.bypass])
   if (f.galacta?.installed && f.galacta.up_to_date === false) out.push(`${LOADER_NAME} is older than ${f.galacta.latest}. Open Setup and update it.`)
   if (f.notLoaded) out.push(`${plural(f.notLoaded, 'mod')} that ${f.notLoaded === 1 ? 'was' : 'were'} on did not load in the game. Check ${f.notLoaded === 1 ? 'it is' : 'they are'} made for this game build.`)
   if (f.suspects.length) out.push(`The newest crash names ${f.crashAsset ?? 'a file'}, and ${holdersAll(f.suspects)} ${f.suspects.length === 1 ? 'replaces' : 'replace'} it. Turn ${f.suspects.length === 1 ? 'it' : 'them'} off and test again.`)
   if (f.broken) out.push(`${plural(f.broken, 'mod')} that ${f.broken === 1 ? 'is' : 'are'} on ${f.broken === 1 ? 'is' : 'are'} broken for this game build. Turn ${f.broken === 1 ? 'it' : 'them'} off or find an update.`)
-  const risky = (f.mayCrash ?? 0) - f.suspects.length // a crash suspect has its own step above
+  const risky = f.mayCrash ?? 0 // without the exact crash suspects, which have their own step above
   if (risky > 0) out.push(`${plural(risky, 'mod')} that ${risky === 1 ? 'is' : 'are'} on may crash the game. Their notes in the list below say why.`)
   if (f.vfx) out.push(`${plural(f.vfx, 'mod')} ${f.vfx === 1 ? 'needs' : 'need'} a VFX update. Open Mod Updater.`)
   if (f.conflicts) out.push(`${plural(f.conflicts, 'conflict group')}. Open Check conflicts and pick which mod wins.`)
@@ -372,7 +373,7 @@ if (import.meta.env.DEV) {
   const noted = buildReport({ version: '1.0.0', launcher: 'Steam', bypass: 'installed', galacta: 'not installed', on: [], off: 0, conflicts: '0 groups', crash: 'none found',
     notes: { trying: 'Load  my\nPanther skin from C:\\Users\\Alice\\x.pak', instead: '' }, next: ['Signature bypass is off. Open Setup and turn it on.'] })
   console.assert(noted.includes('\n\nWhat I was trying to do: Load my Panther skin from %USERPROFILE%') && !noted.includes('Alice') && !noted.includes('What happened instead')
-    && noted.indexOf('What I was trying') < noted.indexOf('What to check next:\n  - Signature bypass is off'), 'notes first on one line, scrubbed, the empty one left out', noted)
+    && noted.indexOf('What to check next:\n  - Signature bypass is off') < noted.indexOf('What I was trying'), 'notes after the checks, on one line, scrubbed, the empty one left out', noted)
   const logged = buildReport({ version: '1.0.0', launcher: 'Steam', bypass: 'installed', galacta: 'not installed', on: [], off: 0, conflicts: '0 groups', crash: 'x', crashRef: 'r', log: { lines: ['a', '```', 'b'] } })
   console.assert(logged.endsWith("Game log of that crash, last 3 lines (user name, account ids, and tokens taken out):\na\n'''\nb\n```") , 'the log last, its fences cannot end the block', logged)
   console.assert(buildReport({ version: '1.0.0', launcher: 'Steam', bypass: 'installed', galacta: 'not installed', on: [], off: 0, conflicts: '0 groups', crash: 'x', crashRef: 'r', log: { status: logStatusText('log_undecodable') } })
@@ -381,7 +382,7 @@ if (import.meta.env.DEV) {
   console.assert(steps.length === 5 && steps[0].startsWith('Signature bypass is not installed') && steps.some(l => l.startsWith('1 mod that was on did not load'))
     && steps.some(l => l === 'The newest crash names MI_Eyes, and ~mods/A.pak replaces it. Turn it off and test again.'), 'blockers first, five at most', steps)
   console.assert(nextSteps({ folder: 'ok', vfx: 0, broken: 0, mayCrash: 1, notLoaded: 0, suspects: [] })[0] === '1 mod that is on may crash the game. Their notes in the list below say why.'
-    && nextSteps({ folder: 'ok', vfx: 0, broken: 0, mayCrash: 1, notLoaded: 0, suspects: ['a'], crashAsset: 'x' }).length === 1, 'may crash said once, not again for a crash suspect')
+    && nextSteps({ folder: 'ok', vfx: 0, broken: 0, mayCrash: 0, notLoaded: 0, suspects: ['a'], crashAsset: 'x' }).length === 1, 'a crash suspect has its own step, not a may crash one')
   console.assert(nextSteps({ folder: 'unset', vfx: 0, broken: 0, notLoaded: 0, suspects: [] })[0].startsWith('No game folder is set')
     && nextSteps({ folder: 'ok', bypass: 'installed', vfx: 0, broken: 0, conflicts: 0, notLoaded: 0, suspects: [] }).length === 0, 'folder first, nothing to say: no steps')
   console.assert(!nextSteps({ folder: 'ok', bypass: 'missing', vfx: 1, broken: 1, conflicts: 1, notLoaded: 1, suspects: ['a'] }).some(l => /antivirus|defender|exclusion|quarantine/i.test(l)), 'never asks to weaken protection')

@@ -26,7 +26,7 @@ export const scrub = (text: string) => text
   .replace(/\beyJ[\w-]{6,}\.[\w-]{6,}\.[\w-]+/g, '<hidden>') // a JWT
   .replace(/\b(authorization)(["']?\s*[=:]\s*)(?:(?:basic|bearer)\s+)?[^\s"'&,;]+/gi, '$1$2<hidden>')
   // a keyed value: accessToken=, account_id:, username="First Last" (a quoted value goes whole)
-  .replace(/\b(\w*?(?:token|password|passwd|secret|api[-_]?key|account_?id|client_?id|user_?id|user_?name|authorization))(["']?\s*[=:]\s*)("[^"]*"|'[^']*'|[^\s"'&,;]+)/gi, '$1$2<hidden>')
+  .replace(/\b(\w*?(?:token|password|passwd|secret|api[-_]?key|account[ _]?id|client[ _]?id|user[ _]?id|user[ _]?name|authorization))(["']?\s*[=:]\s*)("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|[^\s"'&,;]+)/gi, '$1$2<hidden>')
 
 if (import.meta.env.DEV) {
   console.assert(scrub('C:\\Users\\someone\\Desktop\\x and D:/Games/MarvelRivals/~mods/a.pak') === '%USERPROFILE%\\…\\x and ~mods/a.pak', 'no user name, no drive paths', scrub('C:\\Users\\someone\\Desktop\\x and D:/Games/MarvelRivals/~mods/a.pak'))
@@ -44,6 +44,8 @@ if (import.meta.env.DEV) {
   const keyed = 'accountId=123456789 username="Jane Doe" accessToken=abc123xyz author: Someone'
   const more = 'Authorization: Basic dXNlcjpwYXNz x-api-key=k1 jwt eyJhbGciOi.eyJzdWIiOi.sig github_token=abc'
   console.assert(scrub(more) === 'Authorization: <hidden> x-api-key=<hidden> jwt <hidden> github_token=<hidden>', 'headers, dashed keys, JWTs, prefixed tokens', scrub(more))
+  const spaced = 'Account ID: 123456789 {"username":"Jane \\"JJ\\" Doe","x":1}'
+  console.assert(scrub(spaced) === 'Account ID: <hidden> {"username":<hidden>,"x":1}', 'spaced keys, a quoted value with escaped quotes goes whole', scrub(spaced))
   console.assert(scrub(keyed) === 'accountId=<hidden> username=<hidden> accessToken=<hidden> author: Someone', 'keyed ids, quoted names, camelCase tokens', scrub(keyed))
   console.assert(scrub(ids) ==='mail <email>, steam <account id>, Bearer <hidden>, token=<hidden>&x=1', 'ids and tokens', scrub(ids))
 }

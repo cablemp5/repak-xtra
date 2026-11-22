@@ -2984,6 +2984,10 @@ async fn install_mods(
     let mut installable_mods: Vec<_> = unique_paths.iter().flat_map(|p| {
         map_paths_to_mods(std::slice::from_ref(p)).into_iter().map(move |m| crate::install_mod::InstallableMod { source: p.clone(), ..m })
     }).collect();
+    // repakxtra: a path that gave no mod at all (unreadable or gone since the card opened) is a failed one too, so a
+    // partial install never reads as complete
+    let unmapped: Vec<serde_json::Value> = unique_paths.iter().filter(|p| !installable_mods.iter().any(|m| &m.source == *p))
+        .map(|p| serde_json::json!({ "name": p.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default(), "source": p.to_string_lossy() })).collect();
 
     // Filter out mods the user disabled in the frontend (multi-PAK selection)
     // Build a set of enabled mod_names; only keep installable_mods that match
@@ -3321,10 +3325,11 @@ async fn install_mods(
                 };
                 window_for_logs.emit("install_log", &msg).ok();
                 toast_events::emit_installation_failed(&window_for_logs, &msg);
-                    all_failed = true;
+                all_failed = true;
                 error!("Installation thread panicked!");
             }
         }
+        if !all_failed { partly_failed.extend(unmapped); } // repakxtra
         // repakxtra: after any failure toast above (events reach the window in order), with the mods that failed
         window_for_logs.emit("install_complete", serde_json::json!({ "failed": partly_failed, "all_failed": all_failed })).ok();
         reported_by_install.store(true, std::sync::atomic::Ordering::SeqCst);

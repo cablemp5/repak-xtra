@@ -2616,6 +2616,7 @@ function App() {
       await loadFolders()
     } catch (error) {
       setStatus(`Error: ${error}`)
+      setSelectedMods(new Set()) // repakxtra: the ones that moved have new paths
       // repakxtra: one notice: a refusal with no toast of its own is said here, and so is how far a batch got (the
       // backend's toast only names the one that failed)
       if (silentRefusal(error)) alert.error(moved ? `Moved ${moved} of ${plural(selectedFiles.size, 'mod')}` : 'Mods not moved', `${opText(error)} The rest stayed where they were.`)
@@ -3303,7 +3304,8 @@ function App() {
             if (unlistenComplete) unlistenComplete()
             if (unlistenError) unlistenError()
             if (unlistenRefused) unlistenRefused() // repakxtra
-            resolve(Array.isArray(event.payload?.failed) ? event.payload.failed : [])
+            if (event.payload?.all_failed) reject(new Error('Nothing was installed. Details are in Logs.')) // repakxtra: not only from the failure toast's title
+            else resolve(Array.isArray(event.payload?.failed) ? event.payload.failed : [])
           }).then(unlisten => { unlistenComplete = unlisten })
 
           // repakxtra: a failure the shared dialog explains (game open, file in use) comes without a toast
@@ -3338,9 +3340,15 @@ function App() {
         // priority suffix, a number for Keep both). One that matches no row is still counted and named.
         const failedList = await installCompletePromise
         const pathKey = (p: string) => p.replace(/\\/g, '/').toLowerCase()
-        const sources = new Set(failedList.map(f => pathKey(f.source)))
-        const failed = modsWithSettings.filter(m => isNew(m) && sources.has(pathKey(m.path)))
-        const unmatched = failedList.filter(f => !failed.some(m => pathKey(m.path) === pathKey(f.source))).map(f => f.name)
+        // the name without the priority suffix, a Keep both number, or .pak, so a renamed output still finds its row
+        const baseName = (n: string) => n.toLowerCase().replace(/\.pak$/, '').replace(/ \(\d+\)$/, '').replace(/_\d+_p$/, '').trim()
+        const rowName = (m: InstallModPayload) => baseName(m.customName || m.mod_name || nameKey(m.path))
+        const failedRow = (f: { name: string; source: string }) => {
+          const rows = modsWithSettings.filter(m => isNew(m) && pathKey(m.path) === pathKey(f.source))
+          return rows.length <= 1 ? rows[0] : rows.find(m => rowName(m) === baseName(f.name)) // one archive, several paks
+        }
+        const failed = [...new Set(failedList.map(failedRow).filter((m): m is InstallModPayload => Boolean(m)))]
+        const unmatched = failedList.filter(f => !failedRow(f)).map(f => f.name)
         const failedNames = [...failed.map(m => m.customName || m.mod_name || nameKey(m.path)), ...unmatched]
         return { count: Math.max(0, modsWithSettings.filter(isNew).length - failed.length), failed, failedNames } // repakxtra: without the ones already installed
       })().finally(() => { ended = true; unlistenToastProgress.then(u => u()) })
