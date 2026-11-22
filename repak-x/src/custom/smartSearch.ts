@@ -25,19 +25,15 @@ export function directMatch(name: string, query: string, exact = false): boolean
  *  never a run across a word's middle ("thor" is not in "midnight horror"). Pure. */
 const joinedFrom = (words: string[], t: string) => words.some((_, i) => words.slice(i).join('').startsWith(t))
 
-/** Edit distance with an adjacent swap counting as one (optimal string alignment), stopping past `max`. Pure. */
-function distance(a: string, b: string, max = 1): number {
-  if (Math.abs(a.length - b.length) > max) return max + 1
-  const d: number[][] = Array.from({ length: a.length + 1 }, (_, i) => [i, ...Array(b.length).fill(0)])
-  for (let j = 1; j <= b.length; j++) d[0][j] = j
-  for (let i = 1; i <= a.length; i++) {
-    for (let j = 1; j <= b.length; j++) {
-      const cost = a[i - 1] === b[j - 1] ? 0 : 1
-      d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + cost)
-      if (i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1]) d[i][j] = Math.min(d[i][j], d[i - 2][j - 2] + 1)
-    }
-  }
-  return d[a.length][b.length]
+/** Whether `a` and `b` are at most one edit apart: one letter changed, added, or dropped, or two neighbors swapped.
+ *  Linear, no table: the fallback checks every word of every name. Pure. */
+function withinOne(a: string, b: string): boolean {
+  if (a === b) return true
+  if (Math.abs(a.length - b.length) > 1) return false
+  let i = 0
+  while (i < a.length && i < b.length && a[i] === b[i]) i++
+  if (a.length === b.length) return a.slice(i + 1) === b.slice(i + 1) || (a[i] === b[i + 1] && a[i + 1] === b[i] && a.slice(i + 2) === b.slice(i + 2))
+  return a.length > b.length ? a.slice(i + 1) === b.slice(i) : a.slice(i) === b.slice(i + 1)
 }
 
 /** The shortest word that may be one letter off. */
@@ -56,7 +52,7 @@ function closeNorm(name: string, q: string): number | null {
   let fixes = 0
   for (const t of q.split(' ')) {
     if (h.includes(t) || joinedFrom(words, t)) continue
-    if (t.length < MIN_FUZZY || !words.some(w => distance(t, w) <= 1)) return null
+    if (t.length < MIN_FUZZY || !words.some(w => withinOne(t, w))) return null
     if (++fixes > 1) return null // one guess at most: the other words must match as typed
   }
   return fixes || null
@@ -86,4 +82,5 @@ if (import.meta.env.DEV) {
   console.assert(!directMatch('Hulk Hat', '_', true) && directMatch('A_B', '_', true), 'exact: an _ alone matches as typed')
   console.assert(directMatch(bp, '   ') && closeMatch(bp, ' ') === null, 'a blank query matches everything and guesses nothing')
   console.assert(closeMatches([spidey, bp, 'Purple Pnather Mod'], n => [n], 'purpel panther').join() === bp, 'only close matches, ranked')
+  console.assert(withinOne('purpel', 'purple') && withinOne('purple', 'purples') && withinOne('purpe', 'purple') && withinOne('purxle', 'purple') && !withinOne('pruple', 'purpel') && !withinOne('abc', 'abcde'), 'one edit: a swap, an extra, a missing, or a changed letter')
 }

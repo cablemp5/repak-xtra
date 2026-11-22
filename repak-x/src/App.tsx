@@ -2995,18 +2995,17 @@ function App() {
   [filteredMods, builtinRows, selectedCharacters, selectedCategories, filterTag, selectedFolderId, searchQuery, exactSearch, modState, isEncrypted, brokenVersion])
   // repakxtra: nothing matches the search as typed, with every other filter on: the close matches (a word one letter off),
   // labeled as such, never below real matches. Exact match never guesses
-  // from every filter but the search, read only when nothing matches. Never the built-in rows: they keep their own
-  // switch, out of reach of the arrow keys and Delete
   // closePool: every close match whatever On / Off / Problems says, which those tabs count while it shows; closeMods: the
   // ones the chosen tab keeps (built-in rows too, as the Library would list them, but never under the arrow keys)
-  const closePool = useMemo(() => (!searchQuery.trim() || exactSearch || libraryMods.length ? null
+  // only when nothing matches as typed with the other filters on, whatever the tab: matches one tab away are not typos
+  const closePool = useMemo(() => (!searchQuery.trim() || exactSearch || folderMods.length || libraryMods.length ? null
     : closeMatches([...(selectedCharacters.size || selectedCategories.size || filterTag || selectedFolderId !== 'all' ? [] : builtinRows as ModRecord[]),
-      ...mods.filter(m => keepMod(m, false) && inFolder(m))], m => [libraryName(m)], searchQuery, Infinity)),
-  [searchQuery, exactSearch, libraryMods.length, mods, keepMod, inFolder, builtinRows, selectedCharacters, selectedCategories, filterTag, selectedFolderId])
-  const closeMods = useMemo(() => (closePool ?? []).filter(matchesState(modState, isEncrypted)).slice(0, 20), [closePool, modState, isEncrypted, brokenVersion])
+      ...mods.filter(m => keepMod(m, false) && inFolder(m))], m => [libraryName(m)], searchQuery)),
+  [searchQuery, exactSearch, folderMods.length, libraryMods.length, mods, keepMod, inFolder, builtinRows, selectedCharacters, selectedCategories, filterTag, selectedFolderId])
+  const closeMods = useMemo(() => (closePool ?? []).filter(matchesState(modState, isEncrypted)), [closePool, modState, isEncrypted, brokenVersion])
   const shownMods = closeMods.length ? closeMods : libraryMods
   const builtinPaths = useMemo(() => new Set(builtinRows.map(r => r.path)), [builtinRows])
-  const navMods = closeMods.length ? closeMods.filter(m => !builtinPaths.has(m.path)) : filteredMods // the arrow keys walk the mods shown, never a built-in
+  const navMods = useMemo(() => (closeMods.length ? closeMods.filter(m => !builtinPaths.has(m.path)) : filteredMods), [closeMods, builtinPaths, filteredMods]) // the arrow keys walk the mods shown, never a built-in
 
   // Keep filteredModsRef in sync for Shift+click range selection (repakxtra: the rows shown, built-ins too)
   filteredModsRef.current = shownMods
@@ -4293,7 +4292,8 @@ function App() {
                 </div>
               </div>
 
-              {closeMods.length > 0 && <p className="lib-close-label" role="status">Close matches for “{searchQuery.trim()}”</p>}{/* repakxtra */}
+              {closeMods.length > 0 && <p className="lib-close-label">Close matches for “{searchQuery.trim()}”</p>}{/* repakxtra */}
+              <span className="xtra-sr-only" aria-live="polite">{closeMods.length ? `No exact matches, ${closeMods.length} close ${closeMods.length === 1 ? 'match' : 'matches'}` : ''}</span>
               <ModsList
                 mods={shownMods}
                 viewMode={viewMode}
