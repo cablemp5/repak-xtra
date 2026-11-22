@@ -5434,7 +5434,9 @@ async fn check_game_running(state: State<'_, Arc<Mutex<AppState>>>) -> Result<bo
     if WAS.swap(running, std::sync::atomic::Ordering::Relaxed) != running {
         let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_secs());
         let mods = state.lock().unwrap().game_path.clone();
-        std::thread::spawn(move || if running { xtra_activity::note_versions(&mods, now); xtra_crash::remember_on(&mods, now) } else { xtra_crash::remember_end(now) });
+        // when the game process itself started: the app opened again during a game is the same launch, not a new one
+        let start = if running { game_started_at().unwrap_or(now) } else { now };
+        std::thread::spawn(move || if running { xtra_activity::note_versions(&mods, start); xtra_crash::remember_on(&mods, start) } else { xtra_crash::remember_end(now) });
     }
     if running {
         crate::xtra_previews::stop_kept(false); // repakxtra: a game started outside the app (Steam) gets the kept preview helpers' memory too
@@ -5482,6 +5484,13 @@ pub(crate) fn is_game_process_running() -> bool {
     }
 
     false
+}
+
+/// repakxtra: when the running game process started (Unix seconds), if it runs.
+fn game_started_at() -> Option<u64> {
+    use sysinfo::{ProcessRefreshKind, RefreshKind, System};
+    let s = System::new_with_specifics(RefreshKind::new().with_processes(ProcessRefreshKind::new()));
+    s.processes().values().filter(|p| p.name().to_string_lossy().eq_ignore_ascii_case("marvel-win64-shipping.exe")).map(|p| p.start_time()).filter(|t| *t > 0).min()
 }
 
 /// Launch Marvel Rivals via Steam, temporarily skipping the launcher
@@ -9058,6 +9067,7 @@ fn main() {
         .run(|app_handle, event| {
             if let tauri::RunEvent::ExitRequested { .. } = event {
                 crate::xtra_previews::stop_kept(false); // repakxtra: the preview helpers kept warm end with the app
+                crate::xtra_activity::flush(); // repakxtra: What changed? keeps the last change made before closing
                 // Ensure Discord RPC is disconnected on exit
                 let discord_state = app_handle.state::<DiscordState>();
                 if discord_state.manager.is_connected() {

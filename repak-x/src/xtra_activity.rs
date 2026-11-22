@@ -83,23 +83,39 @@ static DIRTY: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new
 /// Saves the store now, off the caller's thread, from one writer at a time: changes made while it writes are saved by
 /// its next pass, so a loadout switch costs a few writes, not one per mod, and nothing waits on a timer.
 fn save_soon() {
-    use std::sync::atomic::Ordering::AcqRel;
-    DIRTY.store(true, std::sync::atomic::Ordering::Release);
-    if SAVING.swap(true, AcqRel) { return; }
+    use std::sync::atomic::Ordering::SeqCst; // a store then a load on two flags: only SeqCst orders them
+    DIRTY.store(true, SeqCst);
+    if SAVING.swap(true, SeqCst) { return; }
     std::thread::spawn(|| loop {
-        DIRTY.store(false, std::sync::atomic::Ordering::Release);
-        if let Some(bytes) = with_store(|s| serde_json::to_vec(s).unwrap_or_default()) {
-            let path = store_path();
-            let tmp = path.with_extension("json.tmp");
-            if let Some(dir) = path.parent() { let _ = std::fs::create_dir_all(dir); } // a fresh profile has no Repak-X folder yet
-            if let Err(e) = std::fs::write(&tmp, bytes).and_then(|_| std::fs::rename(&tmp, &path)) {
-                log::warn!("[activity] could not save the history: {e}");
-            }
-        }
+        DIRTY.store(false, SeqCst);
+        write_now();
         // done unless a change came meanwhile (and no other writer took over)
-        SAVING.store(false, std::sync::atomic::Ordering::Release);
-        if !DIRTY.load(std::sync::atomic::Ordering::Acquire) || SAVING.swap(true, AcqRel) { break; }
+        SAVING.store(false, SeqCst);
+        if !DIRTY.load(SeqCst) || SAVING.swap(true, SeqCst) { break; }
     });
+}
+
+fn write_now() {
+    // a store that cannot be serialized is never written as an empty file
+    if let Some(Ok(bytes)) = with_store(|s| serde_json::to_vec(s)) {
+        let path = store_path();
+        let tmp = path.with_extension("json.tmp");
+        if let Some(dir) = path.parent() { let _ = std::fs::create_dir_all(dir); } // a fresh profile has no Repak-X folder yet
+        if let Err(e) = std::fs::write(&tmp, bytes).and_then(|_| std::fs::rename(&tmp, &path)) {
+            log::warn!("[activity] could not save the history: {e}");
+        }
+    }
+}
+
+/// The app is closing (main_tauri.rs ExitRequested): the writer's pass finishes, and a change it has not taken yet is
+/// written here, so the last change made before closing is kept. Waits at most a second.
+pub(crate) fn flush() {
+    use std::sync::atomic::Ordering::SeqCst;
+    for _ in 0..20 {
+        if !SAVING.load(SeqCst) { break; }
+        std::thread::sleep(std::time::Duration::from_millis(50));
+    }
+    if DIRTY.swap(false, SeqCst) && !SAVING.load(SeqCst) { write_now(); }
 }
 
 /// Drops events past MAX_EVENTS, moving `since` to the newest one let go: a span before it is no longer covered.
@@ -113,22 +129,20 @@ fn push_into(s: &mut Store, e: Event) {
     }
 }
 
-/// A loadout switch's own on and off events (each toggle records one) fold into it: between its start and now, of its
-/// mods (any of them when its names were capped). A big Collection switch then takes one slot, not hundreds.
-fn fold_switches(s: &mut Store, l: &Event) {
-    if l.from == 0 { return; }
-    let capped = l.n_ok > l.ok.len() || l.n_failed > l.failed.len();
-    s.events.retain(|e| !((e.kind == "enable" || e.kind == "disable") && e.t >= l.from && e.t <= l.t
-        && (capped || e.ok.iter().all(|n| l.ok.contains(n) || l.failed.contains(n)))));
+/// A loadout switch's own on and off events (each toggle records one) fold into it: between its start `from` and `to`,
+/// of its mods (`names`, every mod it switched or tried, never capped). A big Collection switch then takes one slot.
+fn fold_switches(s: &mut Store, from: u64, to: u64, names: &[String]) {
+    if from == 0 { return; }
+    s.events.retain(|e| !((e.kind == "enable" || e.kind == "disable") && e.t >= from && e.t <= to && e.ok.iter().all(|n| names.contains(n))));
 }
 
 /// A text with folders taken out (a path keeps only its last part) and no user name.
 fn plain(text: &str) -> String {
     if text.is_empty() { return String::new(); }
-    // a drive path, or a network path (\\server\share\...), up to its last separator
-    static DIRS: std::sync::OnceLock<Option<regex_lite::Regex>> = std::sync::OnceLock::new();
-    let no_dirs = DIRS.get_or_init(|| regex_lite::Regex::new(r"(?:[A-Za-z]:|[\\/]{2}[^\\/\r\n]+)[\\/](?:[^\\/\r\n]*[\\/])*").ok()).as_ref()
-        .map_or_else(|| text.to_string(), |re| re.replace_all(text, "").into_owned());
+    // a network path (\\server\share\...) goes whole, server and share too, and a drive path keeps only its last part
+    static DIRS: std::sync::OnceLock<Option<(regex_lite::Regex, regex_lite::Regex)>> = std::sync::OnceLock::new();
+    let no_dirs = DIRS.get_or_init(|| Some((regex_lite::Regex::new(r"[\\/]{2}[^\\/\s]+(?:[\\/][^\\/\s]*)*").ok()?, regex_lite::Regex::new(r"[A-Za-z]:[\\/](?:[^\\/\r\n]*[\\/])*").ok()?))).as_ref()
+        .map_or_else(|| text.to_string(), |(unc, drive)| drive.replace_all(&unc.replace_all(text, ""), "").into_owned());
     crate::xtra_crash::redact(&no_dirs, &crate::xtra_crash::user_names())
 }
 
@@ -156,8 +170,11 @@ pub(crate) fn record(kind: &str, ok: &[String], failed: &[String], detail: &str)
 
 fn record_from(kind: &str, ok: &[String], failed: &[String], detail: &str, from: u64) {
     if ok.is_empty() && failed.is_empty() && detail.is_empty() { return; }
-    let e = event(now(), kind, ok, failed, detail, from);
-    if with_store(|s| { if kind == "loadout" { fold_switches(s, &e); } push_into(s, e) }).is_some() { save_soon(); }
+    let t = now();
+    // a loadout switch is placed at its start: a crash during it still shows the switch that began before it
+    let e = event(if kind == "loadout" && from > 0 { from } else { t }, kind, ok, failed, detail, from);
+    let names: Vec<String> = ok.iter().chain(failed).map(|p| mod_name(p)).collect();
+    if with_store(|s| { if kind == "loadout" { fold_switches(s, from, t, &names); } push_into(s, e) }).is_some() { save_soon(); }
 }
 
 /// The frontend's operations (a loadout switch, a Mod Updater result): only kinds it may send. `started`: when its batch
@@ -208,9 +225,10 @@ pub struct Timeline {
 fn timeline_of(crash: u64, starts: &[(u64, Option<u64>)], since: u64, events: &[Event]) -> Timeline {
     // the session it crashed in: started before it and not ended long before it (xtra_crash.rs on_at's rule)
     let matched = starts.iter().filter(|(s, e)| *s <= crash && crash <= e.map_or(s + 6 * 3600, |e| e + 120)).max_by_key(|(s, _)| *s);
-    let session = matched.map(|(s, _)| *s);
-    // seen running when it crashed: a crash well after the session was seen ending may be an unseen relaunch
+    // seen running when it crashed: a crash well after the session was seen ending may be an unseen relaunch, so that
+    // session is not its own (its span then runs from the newest launch before the crash)
     let seen = matched.is_some_and(|(_, e)| e.is_none_or(|e| crash <= e + 10));
+    let session = matched.filter(|_| seen).map(|(s, _)| *s);
     let from = starts.iter().map(|(s, _)| *s).filter(|s| *s < session.unwrap_or(crash)).max();
     let coverage = if since == 0 || since > crash { "none" } else if seen && from.is_some_and(|f| since <= f) { "full" } else { "partial" };
     // strictly before the crash second: one finished in the same second may have come after it
@@ -277,12 +295,8 @@ mod tests {
         let mut s = Store { since: 1, ..Default::default() };
         let t = |t: u64, kind: &str, n: &str| Event { t, kind: kind.into(), ok: vec![n.into()], n_ok: 1, ..Default::default() };
         for e in [t(5, "enable", "Other"), t(10, "enable", "A"), t(11, "disable", "B"), t(12, "enable", "Mine")] { push_into(&mut s, e); }
-        let l = Event { t: 13, kind: "loadout".into(), ok: vec!["A".into(), "B".into()], n_ok: 2, from: 10, detail: "Look on".into(), ..Default::default() };
-        fold_switches(&mut s, &l);
-        assert_eq!(s.events.iter().map(|e| e.ok[0].as_str()).collect::<Vec<_>>(), vec!["Other", "Mine"], "only its own mods in its own window");
-        let big = Event { n_ok: 500, ..l };
-        fold_switches(&mut s, &big);
-        assert_eq!(s.events.iter().map(|e| e.ok[0].as_str()).collect::<Vec<_>>(), vec!["Other"], "a capped switch folds every toggle in its window");
+        fold_switches(&mut s, 10, 13, &["A".into(), "B".into()]);
+        assert_eq!(s.events.iter().map(|e| e.ok[0].as_str()).collect::<Vec<_>>(), vec!["Other", "Mine"], "only its own mods in its own window, never another toggle");
     }
 
     #[test]
@@ -293,7 +307,8 @@ mod tests {
 
     #[test]
     fn names_carry_no_folder_or_priority() {
-        assert_eq!(plain(r"Mine \\server\share\Alice\Draft on"), "Mine Draft on", "a network path too");
+        assert_eq!(plain(r"Mine \\server\share\Alice\Draft on"), "Mine  on", "a network path goes whole");
+        assert_eq!(plain(r"\\server\PrivateShare"), "", "a share root too");
         assert_eq!(mod_name(r"C:\Games\Paks\~mods\Purple VFX_9999999_P.pak"), "Purple VFX");
         assert_eq!(mod_name("D:/x/Cool_P.bak_repak"), "Cool");
         assert_eq!(mod_name("Plain"), "Plain");
