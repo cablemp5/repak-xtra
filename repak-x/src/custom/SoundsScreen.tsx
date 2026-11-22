@@ -1,5 +1,5 @@
 // repakxtra: the Sounds tab (xtra_sounds.rs). Groups on the left (Combat, Killstreaks, Healing, Kill feed, Alerts,
-// Match, Announcer) with how many of their slots have a sound, the picked group's slots on the right. Drop an audio
+// Match, Announcer, and each hero's ult line as their team and their enemies hear it) with how many of their slots have a sound, the picked group's slots on the right. Drop an audio
 // file on a slot (or click it to browse), drop several files or a folder anywhere and files named like a slot fill
 // it. The page decodes each file (WebView2 reads .wav, .mp3, .ogg, .flac, and .m4a) to 48 kHz 16-bit WAV and the app
 // keeps it per slot. Make mod builds a mod from every filled slot and opens the install card. Play compares yours with the
