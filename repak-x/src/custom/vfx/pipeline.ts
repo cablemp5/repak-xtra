@@ -18,6 +18,7 @@
 import { invoke } from '@tauri-apps/api/core'
 import { DEFAULT_FILTER, type ColorFilter } from './filter'
 import { retireUnsafe } from './prefs'
+import { recordActivity } from '../crashTimeline'
 import { type ColorProp, type ModParam, applyColor, isMaterialInstance, packageImports, portParam, readColors, readModParams, uncarriedPackages } from './assets'
 
 export const STEPS = ['Reading the mod', 'Opening its materials', 'Finding its edits', "Reading the game's files", "Opening the game's files", 'Carrying the edits over', 'Rebuilding Niagara effects', 'Rebuilding the assets', 'Packing the update'] as const
@@ -191,11 +192,13 @@ export async function fixVfxMod(o: FixOptions): Promise<VfxReport> {
     report.decrypted = true
     report.error = undefined
     log(`Decrypted ${stem(o.modPath)}: the game's Season 11 check can read it now. The encrypted copy is in Recently deleted.`, 'success')
+    void recordActivity('update', [report.output], [], 'decrypted')
   } catch (e) {
     report.status = 'failed'
     report.error = `Not decrypted: ${String(e).replace(/[.!]?\s*$/, '')}. The mod was not changed. Try again later.`
     log(report.error, 'warning')
     await invoke('xtra_vfx_outcome', { modPath: o.modPath, status: 'failed', error: report.error, next: 'again', usmap: o.usmapPath, game: null }).then(() => { report.kept = true }, () => {})
+    void recordActivity('update_failed', [], [o.modPath])
   }
   // only a decrypt that worked says how long it took: a failed one never counts as a rebuild's time (ms 0 is never recorded)
   if (direct && report.decrypted) report.ms = performance.now() - t0
@@ -766,6 +769,9 @@ async function rebuild(o: FixOptions): Promise<VfxReport> {
         ? { modPath: o.modPath, status: failed ? 'failed' : 'waiting', error: report.error ?? null, next: failed ? failedNext(report) : null, usmap: o.usmapPath, game: buildAt || null }
         : { modPath: o.modPath, status: null, error: null, next: null, usmap: null, game: null }).then(() => { report.kept = failed || report.status === 'mappings' }, e => log(`Could not save how the update ended: ${e}`, 'warning'))
     }
+    // What changed? before a crash (crashTimeline.ts): an installed update, or an attempt that left the mod as it was
+    if (!o.outputDir && report.status === 'fixed' && report.placed) void recordActivity('update', [report.placed.fixed], [], repairOutcome(report) === 'Partially updated' ? 'partial' : '')
+    else if (!o.outputDir && report.status === 'failed') void recordActivity('update_failed', [], [o.modPath])
     // A failed or cancelled run leaves the mod's files exactly as they were (a failure only clears Needs update, through
     // its kept outcome above). Only a run that proved the original crashes the game (every file matches the game, but in the old layout) takes
     // it out, as Safety says: off, never deleted, and its Needs update flag stays so the Library still says why

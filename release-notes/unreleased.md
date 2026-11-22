@@ -16,3 +16,4 @@
 - Removed the Mod Updater's candidate review: Best effort installs an update that passes its checks and marks it Partially updated when part could not be rebuilt, and Strict lists anything less under Failed
 - Fixed a failed update renaming the mod _UNSUPPORTED and turning it off: the mod keeps its name, loadouts, and on or off state, and its row offers Retry in Best effort, Try again, or the mod's page
 - Fixed Needs update coming back after a failed or partial update, until the game, the mod, or the mappings change
+- Added What changed? to each crash in Settings > Crash reports: the installs, updates, mods turned on or off, loadout switches, and app or game updates since the game launch before the crash, also in Copy setup report

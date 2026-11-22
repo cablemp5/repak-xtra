@@ -6,6 +6,7 @@
 mod asset_explorer;
 mod xtra_classify; // repakxtra: extra mod types, Project Galacta check
 mod xtra_dupes; // repakxtra: same-content installs and Check Conflicts' Duplicates
+mod xtra_activity; // repakxtra: what changed before a crash (installs, on and off, updates)
 mod xtra_ops; // repakxtra: game open, file in use, and name taken, one dialog each
 mod xtra_made; // repakxtra: installed mods keep when they were made (the Needs VFX update check)
 mod xtra_vfx_check; // repakxtra: Check for VFX update (built for this game version or an older one)
@@ -2136,7 +2137,10 @@ async fn quick_organize(
         target_folder.clone()
     };
 
-    quick_organize_impl(paths, output_dir, location_label, selections, renames, flatten, &|m| { let _ = window.emit("install_log", m); })
+    let dropped = paths.clone();
+    let r = quick_organize_impl(paths, output_dir, location_label, selections, renames, flatten, &|m| { let _ = window.emit("install_log", m); });
+    if matches!(r, Ok(n) if n > 0) { xtra_activity::record("install", &dropped, &[], ""); } // repakxtra: What changed? (a drop on a Library folder)
+    r
 }
 
 /// Locks the destination to wherever `existing_mod_path` currently lives instead of a
@@ -2176,6 +2180,7 @@ async fn quick_organize_locked(
     };
 
     let location_label = format!("Project Galacta's current location ({})", output_dir.display());
+    let dropped = paths.clone();
     let count = quick_organize_impl(
         paths,
         output_dir.clone(),
@@ -2185,6 +2190,7 @@ async fn quick_organize_locked(
         flatten,
         &|m| { let _ = window.emit("install_log", m); },
     )?;
+    if count > 0 { xtra_activity::record("install", &dropped, &[], ""); } // repakxtra: What changed?
 
     // The shared copy step above always installs enabled; restore the disabled state the
     // replaced mod had, since nothing else here has a reason to flip it back off.
@@ -3235,6 +3241,7 @@ async fn install_mods(
                     .emit("install_log", format!("[FAIL] {}: {}", name, err))
                     .ok();
             }
+            xtra_activity::record("install", &succeeded, &failed.iter().map(|f| f.0.clone()).collect::<Vec<_>>(), ""); // repakxtra: What changed?
             window_for_logs
                 .emit(
                     "install_log",
@@ -3468,6 +3475,7 @@ async fn delete_mod(
     }
     xtra_trash::release_if_empty(&trash);
     log::info!("Deleted mod files: {:?}", doomed);
+    xtra_activity::record("delete", &[path], &[], ""); // repakxtra: What changed?
     Ok(())
 }
 
@@ -3771,6 +3779,7 @@ async fn update_mod(
     window.emit("install_complete", ()).ok();
 
     info!("update_mod completed successfully");
+    xtra_activity::record("replace", &[new_mod_path.to_string_lossy().to_string()], &[], if old_deleted { "" } else { "kept" }); // repakxtra: What changed? (kept: the old copy is still there)
 
     Ok(UpdateModResult {
         new_mod_path: new_mod_path.to_string_lossy().to_string(),
@@ -5024,6 +5033,7 @@ async fn toggle_mod(
         }
     }
 
+    xtra_activity::record(if is_enabled { "disable" } else { "enable" }, &[mod_path], &[], ""); // repakxtra: What changed?
     Ok(!is_enabled)
 }
 
@@ -5426,10 +5436,39 @@ async fn check_game_running(state: State<'_, Arc<Mutex<AppState>>>) -> Result<bo
     // repakxtra: the mods on as the game starts, and when it ends, so a crash report names only those (xtra_crash.rs).
     // This is the app's game poll (App.tsx, every 5 s)
     static WAS: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
-    if WAS.swap(running, std::sync::atomic::Ordering::Relaxed) != running {
-        let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_secs());
+    // when the game process itself started: the app opened again during a game is the same launch, and a game that
+    // closed and started again between two polls is a new one
+    static STARTED: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_secs());
+    // the start time needs a handle to the game process, which its anti-cheat may refuse: then the launch keeps the time
+    // it was first seen, and no relaunch is told from it
+    let real = if running { game_started_at() } else { None };
+    // STARTED_REAL: the time in STARTED is the process's own, not when it was first seen (a relaunch compares two real times)
+    static STARTED_REAL: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+    let before = STARTED.load(std::sync::atomic::Ordering::Relaxed);
+    let before_real = STARTED_REAL.load(std::sync::atomic::Ordering::Relaxed);
+    let start = if !running { 0 } else { real.unwrap_or(if before != 0 { before } else { now }) };
+    let was = WAS.swap(running, std::sync::atomic::Ordering::Relaxed);
+    let relaunched = was && running && real.is_some() && before_real && before.abs_diff(start) > 2;
+    // a first-seen time is kept for this launch even once the real one can be read: its session was saved under it
+    let keep = was && running && !before_real && before != 0;
+    let start = if keep { before } else { start };
+    STARTED.store(start, std::sync::atomic::Ordering::Relaxed);
+    STARTED_REAL.store(running && (if keep { false } else { real.is_some() }), std::sync::atomic::Ordering::Relaxed);
+    if was != running || relaunched {
         let mods = state.lock().unwrap().game_path.clone();
-        std::thread::spawn(move || if running { xtra_crash::remember_on(&mods, now) } else { xtra_crash::remember_end(now) });
+        // the end is noted at once: a start still listing the mods folder closes its session if the game ended meanwhile
+        static ENDED: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+        if !running || relaunched { ENDED.store(now, std::sync::atomic::Ordering::SeqCst); }
+        std::thread::spawn(move || {
+            if relaunched { xtra_crash::remember_end(start.saturating_sub(1)) } else if !running { xtra_crash::remember_end(now) }
+            if running {
+                let fresh = xtra_crash::remember_on(&mods, start);
+                let ended = ENDED.load(std::sync::atomic::Ordering::SeqCst);
+                if ended > start.max(now) { xtra_crash::end_session(start, ended) } // this launch's own session, never a newer one
+                xtra_activity::note_versions(&mods, start, fresh)
+            }
+        });
     }
     if running {
         crate::xtra_previews::stop_kept(false); // repakxtra: a game started outside the app (Steam) gets the kept preview helpers' memory too
@@ -5477,6 +5516,13 @@ pub(crate) fn is_game_process_running() -> bool {
     }
 
     false
+}
+
+/// repakxtra: when the running game process started (Unix seconds), if it runs.
+fn game_started_at() -> Option<u64> {
+    use sysinfo::{ProcessRefreshKind, RefreshKind, System};
+    let s = System::new_with_specifics(RefreshKind::new().with_processes(ProcessRefreshKind::new()));
+    s.processes().values().filter(|p| p.name().to_string_lossy().eq_ignore_ascii_case("marvel-win64-shipping.exe")).map(|p| p.start_time()).filter(|t| *t > 0).min()
 }
 
 /// Launch Marvel Rivals via Steam, temporarily skipping the launcher
@@ -8833,6 +8879,8 @@ fn main() {
             xtra_role::xtra_role_claim_start, xtra_role::xtra_role_ready, // repakxtra: Claim role
             xtra_broken::xtra_broken_mods, // repakxtra: broken mods
             xtra_broken::xtra_vfx_no_update, // repakxtra: Nothing to update stops the Needs VFX update flag
+            xtra_activity::xtra_activity_record, // repakxtra: What changed?
+            xtra_activity::xtra_crash_timeline,
             xtra_broken::xtra_vfx_outcome, // repakxtra: the Mod Updater's Failed or Waiting outcome, kept
             xtra_broken::xtra_vfx_outcomes,
             xtra_broken::xtra_scan_forget, // repakxtra: the Mod Updater's Scan checks the ticked mods fresh
@@ -9051,6 +9099,7 @@ fn main() {
         .run(|app_handle, event| {
             if let tauri::RunEvent::ExitRequested { .. } = event {
                 crate::xtra_previews::stop_kept(false); // repakxtra: the preview helpers kept warm end with the app
+                crate::xtra_activity::flush(); // repakxtra: What changed? keeps the last change made before closing
                 // Ensure Discord RPC is disconnected on exit
                 let discord_state = app_handle.state::<DiscordState>();
                 if discord_state.manager.is_connected() {

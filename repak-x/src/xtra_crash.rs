@@ -8,7 +8,7 @@ use std::sync::OnceLock;
 
 // ---- which mods were on while the game ran: a crash report names only those ----
 // Saved when the game is seen starting (main_tauri.rs check_game_running, the app's 5 s poll): its start time and every
-// .pak in the mods folder then (on), as keys (on_key), and its end once it is seen gone. The newest ten are kept.
+// .pak in the mods folder then (on), as keys (on_key), and its end once it is seen gone. The newest 40 are kept.
 
 #[derive(serde::Serialize, serde::Deserialize)]
 struct Session {
@@ -37,8 +37,9 @@ pub(crate) fn on_key(path: &std::path::Path) -> String {
     [".pak", ".bak_repak", ".utoc", ".ucas"].iter().find_map(|x| p.strip_suffix(x)).unwrap_or(&p).to_string()
 }
 
-/// main_tauri.rs: the game started (`start`, Unix seconds): which mods are on now.
-pub(crate) fn remember_on(mods_dir: &std::path::Path, start: u64) {
+/// main_tauri.rs: the game started (`start`, Unix seconds): which mods are on now. False when that launch was already
+/// saved (the app opened again during it).
+pub(crate) fn remember_on(mods_dir: &std::path::Path, start: u64) -> bool {
     let on: Vec<String> = walkdir::WalkDir::new(mods_dir)
         .into_iter()
         .filter_entry(crate::xtra_bundle::library_walk)
@@ -47,17 +48,33 @@ pub(crate) fn remember_on(mods_dir: &std::path::Path, start: u64) {
         .map(|e| on_key(e.path()))
         .collect();
     let mut all = read_sessions();
+    // the same game process seen again (the app reopened during it, or one poll missed it): one launch, running again
+    if let Some(s) = all.iter_mut().find(|s| s.start.abs_diff(start) <= 2) {
+        if s.end.take().is_some() { let _ = std::fs::write(sessions_store(), serde_json::to_vec(&all).unwrap_or_default()); }
+        return false;
+    }
     all.push(Session { start, end: None, on });
     all.sort_by_key(|s| s.start);
-    let skip = all.len().saturating_sub(10);
+    let skip = all.len().saturating_sub(40); // enough that every crash Crash reports lists keeps its launch
     all.drain(..skip);
     let _ = std::fs::write(sessions_store(), serde_json::to_vec(&all).unwrap_or_default());
+    true
 }
 
 /// main_tauri.rs: the game is gone (`end`, Unix seconds): the newest session still open ends then.
 pub(crate) fn remember_end(end: u64) {
     let mut all = read_sessions();
     if let Some(s) = all.iter_mut().rev().find(|s| s.end.is_none()) {
+        s.end = Some(end);
+        let _ = std::fs::write(sessions_store(), serde_json::to_vec(&all).unwrap_or_default());
+    }
+}
+
+/// Ends the session that started at `start` (within 2 s) at `end`, when it is still open: a start whose save finished
+/// after its game ended (main_tauri.rs check_game_running) closes its own session, never a newer launch's.
+pub(crate) fn end_session(start: u64, end: u64) {
+    let mut all = read_sessions();
+    if let Some(s) = all.iter_mut().find(|s| s.start.abs_diff(start) <= 2 && s.end.is_none()) {
         s.end = Some(end);
         let _ = std::fs::write(sessions_store(), serde_json::to_vec(&all).unwrap_or_default());
     }
@@ -70,6 +87,11 @@ fn on_at(all: Vec<Session>, time: u64) -> Option<Vec<String>> {
         .filter(|s| s.start <= time && time <= s.end.map_or(s.start + OPEN_SESSION_SECS, |e| e + CRASH_WRITE_SECS))
         .max_by_key(|s| s.start)
         .map(|s| s.on)
+}
+
+/// Every saved game session's start and end (xtra_activity.rs: what changed before a crash).
+pub(crate) fn session_times() -> Vec<(u64, Option<u64>)> {
+    read_sessions().iter().map(|s| (s.start, s.end)).collect()
 }
 
 /// setupReport.ts: the mods that were on in the game session a crash at `time` (Unix seconds) happened in, as keys

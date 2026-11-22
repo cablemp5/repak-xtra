@@ -1,5 +1,6 @@
 // repakxtra: loadout pieces the Library uses (state lives in loadoutStore.ts): the selection bar's Add to loadout, the
 // right-click Add to loadout items, switching with its guards (runChanges), and Ctrl+N for a loadout pinned to N.
+import { recordActivity } from './crashTimeline'
 import { cue } from './sounds'
 import { showKeptOff } from './safeOff'
 import { useEffect, useRef } from 'react'
@@ -159,12 +160,14 @@ export async function runChanges(p: LoadoutProps, l: Loadout, changes: Mod[], ve
     if (p.isBlocked()) { p.alert.warning(...GAME_RUNNING); return }
     // Mods that will not work or may crash, read before the switch renames their files
     const flagged = verb === 'on' && brokenShown() ? changes.map(m => verdictOf(m.path)).filter((v): v is Verdict => Boolean(v)) : []
+    const started = Math.floor(Date.now() / 1000)
     const failed = await flipMods(changes)
     await p.reload()
     showKeptOff(p.alert, failed.keptOff ?? [], p.reload) // repakxtra: mods turned off because they can crash stay off
     const flipped = new Set(changes.filter(m => !failed.includes(m)).map(m => m.path))
     const after = p.mods.map(m => (flipped.has(m.path) ? { ...m, enabled: !m.enabled } : m))
     const stuck = failed.filter(m => !failed.keptOff?.some(k => k.path === m.path)) // kept off: its own toast above
+    void recordActivity('loadout', [...flipped], failed.map(m => m.path), `${l.name || 'a loadout'} ${verb}`, started) // What changed? (crashTimeline.ts): kept off for safety counts as not switched
     if (stuck.length) {
       p.alert.warning(`${l.name} partly ${verb}`, failed.reason ?? `Could not switch ${stuck.map(m => nameKey(m.path)).join(', ')}. Close anything using those files, then try again.`)
     } else {

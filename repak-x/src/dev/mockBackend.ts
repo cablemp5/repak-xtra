@@ -291,6 +291,24 @@ if (import.meta.env.DEV && !('__TAURI_INTERNALS__' in window)) {
         { id: 'UECC-Windows-MOCK1_0000', time: Math.floor(Date.now() / 1000) - 3600, crash_type: 'Assertion failed', asset_path: '/Game/Marvel/Characters/1026/1026001/Meshes/SK_1026_1026001' },
         { id: 'UECC-Windows-NOLOG_0000', time: Math.floor(Date.now() / 1000) - 7200, crash_type: 'Access Violation', asset_path: null },
       ] : []
+      // What changed? (xtra_activity.rs): MOCK2 has a full span with a batch, a loadout, a partial install, and an update;
+      // MOCK1 had nothing recorded before it; NOLOG is covered and empty
+      case 'xtra_activity_record': return null
+      case 'xtra_crash_timeline': {
+        const now = Math.floor(Date.now() / 1000), worst = localStorage.getItem('mock.crash') === 'worst'
+        if (args?.id === 'UECC-Windows-MOCK1_0000') return { crash: now - 3600, from: null, started: now - 3900, coverage: 'none', events: [] }
+        if (args?.id === 'UECC-Windows-NOLOG_0000') return { crash: now - 7200, from: now - 90000, started: now - 7500, coverage: 'full', events: [] }
+        const ev = (ago: number, kind: string, ok: string[], failed: string[] = [], detail = '') => ({ t: now - ago, kind, ok, failed, detail })
+        const long = worst ? 'An Extremely Long Mod Name That Someone Typed Without Thinking About Rows_v12 Purple Black Panther Recolor' : 'Purple VFX'
+        return { crash: now - 600, from: now - 86400, started: now - 1500, coverage: 'full', events: [
+          ev(80000, 'game_update', [], [], '3962284'), ev(70000, 'app_update', [], [], '1.0.3'),
+          ev(5000, 'install', [long]), ev(4000, 'install', ['Cool Skin', 'Blue Trails', 'Hero Icons'], ['Broken Pack', 'Old Mesh']),
+          ev(3000, 'enable', ['A']), ev(2990, 'enable', ['B']), ev(2980, 'enable', ['C']),
+          ev(2500, 'disable', ['X']), ev(2499, 'enable', ['Y']), ev(2495, 'loadout', ['X', 'Y'], [], 'Panther looks on'),
+          ev(2000, 'update', ['Yellow Colored VFX'], [], 'partial'), ev(1900, 'update_failed', [], ['Catboy Panther VFX']),
+          ev(1700, 'delete', ['Old Hat']), ...(worst ? Array.from({ length: 12 }, (_, i) => ev(1600 - i, 'install', [`Bulk mod ${i + 1}`])) : []),
+        ] }
+      }
       case 'xtra_crash_log_summary': {
         if (args?.id === 'UECC-Windows-NOLOG_0000') return null
         const worst = localStorage.getItem('mock.crash') === 'worst'
