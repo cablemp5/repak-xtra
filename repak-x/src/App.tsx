@@ -166,6 +166,7 @@ import { keepThisOne, setModsBlocked } from './custom/keepOne' // repakxtra: Kee
 import { NEXUS_TYPE, recordSourceAs, recordSources, renameSource, sourceOf, useNexusScan, useNexusSources } from './custom/nexusSource' // repakxtra: Nexus source
 import { stageOffFiles } from './custom/offFiles' // repakxtra: .pak.off files
 import CrashSuspects, { previousCrashes, withSuspects } from './custom/CrashSuspects' // repakxtra: crash suspects
+import { readBisect } from './custom/crashBisect' // repakxtra: a crash test shows its own crash note
 import { revealBuiltin, toggleBuiltin, useBuiltins, watchBuiltins } from './custom/BuiltinMods' // repakxtra: built-in mods
 import { isBuiltin, useBuiltinRows } from './custom/builtinRows'
 
@@ -522,6 +523,7 @@ function App() {
   const searchInputRef = useRef<HTMLInputElement | null>(null)
   const modsGridRef = useRef<HTMLDivElement | null>(null)
   const gameRunningRef = useRef(false)
+  const crashChecksRef = useRef(0) // repakxtra: crash folder checks left after the game closed
   const bypassRef = useRef(false); bypassRef.current = bypassGameRunningLock // repakxtra: live game lock for Undo toasts
   const undoBlocked = () => gameRunningRef.current && !bypassRef.current // repakxtra
   setModsBlocked(undoBlocked) // repakxtra: the same guard for Setup's Ban risk and Why isn't it working? (refs keep it live)
@@ -1573,6 +1575,7 @@ function App() {
     // Listen for game crash notifications
     const unlistenCrash = listen('game_crash_detected', (event: any) => {
       const payload = event.payload
+      if (readBisect()) return // repakxtra: during Find the crashing mod the test itself asks whether it crashed
 
       // Show persistent error toast for crashes
       alert.crash(payload.title, payload.description, {
@@ -1724,7 +1727,7 @@ function App() {
     const intervalId = setInterval(() => {
       if (!document.hidden) checkGame()
     }, 5000)
-    const onShow = () => { if (!document.hidden) checkGame() }
+    const onShow = () => { if (!document.hidden) { crashChecksRef.current ||= 1; checkGame() } } // repakxtra: a game played and closed while minimized
     document.addEventListener('visibilitychange', onShow)
 
     return () => {
@@ -2082,6 +2085,10 @@ function App() {
     try {
       const running = await invoke('check_game_running') as any
       setGameRunning(running)
+      // repakxtra: a crash gets its toast once the game is gone, not only on the next start. Three tries (about 15 s):
+      // the crash folder can land after the game closes. A crash already told stays quiet (the last known folder)
+      if (gameRunningRef.current && !running) crashChecksRef.current = 3
+      if (!running && crashChecksRef.current > 0) { crashChecksRef.current--; void invoke('check_for_previous_crash').catch(() => {}) }
     } catch (error) {
       console.error('Failed to check game status:', error)
     }
