@@ -8,11 +8,12 @@ use std::sync::Mutex;
 /// (the archive's stamp when it was unpacked, its folder)
 static KEPT: Mutex<Vec<(String, PathBuf)>> = Mutex::new(Vec::new());
 
-/// The archive as it is now: path, size, and change time, so a changed or replaced archive is unpacked again.
+/// The archive as it is now: path, size, change time, and creation time, so a changed or replaced archive (also one copied
+/// over it with its old change time kept) is unpacked again.
 fn stamp(archive: &Path) -> Option<String> {
     let m = std::fs::metadata(archive).ok()?;
-    let ns = m.modified().ok()?.duration_since(std::time::UNIX_EPOCH).ok()?.as_nanos();
-    Some(format!("{}|{}|{ns}", archive.display(), m.len()))
+    let ns = |t: std::io::Result<std::time::SystemTime>| t.ok().and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok()).map(|d| d.as_nanos());
+    Some(format!("{}|{}|{}|{:?}", archive.display(), m.len(), ns(m.modified())?, ns(m.created())))
 }
 
 /// Unpacks into a fresh run folder. A failed unpack leaves no folder behind.
@@ -34,18 +35,36 @@ pub fn unpack(archive: &Path) -> Result<PathBuf, String> {
     }
 }
 
-/// The drop's unpack, kept for Install. The same archive dropped again replaces its older folder.
-pub fn unpack_and_keep(archive: &Path) -> Result<PathBuf, String> {
-    let before = stamp(archive);
-    let dir = unpack(archive)?;
-    if let Some(s) = before {
-        let mut kept = KEPT.lock().unwrap_or_else(|e| e.into_inner());
-        if let Some(i) = kept.iter().position(|(k, _)| *k == s) {
-            let _ = std::fs::remove_dir_all(kept.swap_remove(i).1);
+/// The drop's unpacked folder. It is kept for Install only when this is dropped, once the drop has finished reading it, so
+/// Cancel, an install, or another drop never deletes it mid-read. `keep` false (nothing in it to install) deletes it.
+pub struct Unpacked {
+    pub dir: PathBuf,
+    stamp: Option<String>,
+    pub keep: std::cell::Cell<bool>,
+}
+
+impl Drop for Unpacked {
+    fn drop(&mut self) {
+        let Some(s) = self.stamp.take().filter(|_| self.keep.get()) else {
+            let _ = std::fs::remove_dir_all(&self.dir);
+            return;
+        };
+        let older = {
+            let mut kept = KEPT.lock().unwrap_or_else(|e| e.into_inner());
+            let older = kept.iter().position(|(k, _)| *k == s).map(|i| kept.swap_remove(i).1); // the same archive dropped again
+            kept.push((s, self.dir.clone()));
+            older
+        };
+        if let Some(d) = older {
+            let _ = std::fs::remove_dir_all(d);
         }
-        kept.push((s, dir.clone()));
     }
-    Ok(dir)
+}
+
+/// The drop's unpack (see Unpacked).
+pub fn unpack_for_drop(archive: &Path) -> Result<Unpacked, String> {
+    let stamp = stamp(archive);
+    Ok(Unpacked { dir: unpack(archive)?, stamp, keep: std::cell::Cell::new(true) })
 }
 
 /// Install's folder for this archive: the kept one when the archive is unchanged since the drop, else a fresh unpack.
@@ -84,13 +103,22 @@ mod tests {
         z.write_all(b"pak").unwrap();
         z.finish().unwrap();
 
-        let kept = super::unpack_and_keep(&zip_path).unwrap();
+        let u = super::unpack_for_drop(&zip_path).unwrap();
+        let kept = u.dir.clone();
         assert!(kept.join("a/x.pak").is_file());
+        drop(u); // kept only once the drop has read it
         assert_eq!(super::take_or_unpack(&zip_path).unwrap(), kept, "Install reuses the drop's folder");
         let again = super::take_or_unpack(&zip_path).unwrap();
         assert_ne!(again, kept, "taken once: a second install unpacks fresh");
 
-        let dropped = super::unpack_and_keep(&zip_path).unwrap();
+        let u = super::unpack_for_drop(&zip_path).unwrap();
+        let dropped = u.dir.clone();
+        drop(u);
+        let skipped = super::unpack_for_drop(&zip_path).unwrap();
+        skipped.keep.set(false); // nothing in it to install: deleted, and the kept one stays
+        let gone = skipped.dir.clone();
+        drop(skipped);
+        assert!(!gone.exists() && dropped.exists());
         std::fs::OpenOptions::new().append(true).open(&zip_path).unwrap().write_all(b" ").unwrap();
         // a changed archive (size differs) never reuses the old folder
         let after = super::take_or_unpack(&zip_path);

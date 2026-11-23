@@ -172,10 +172,13 @@ pub struct Check {
     pub source: Option<Pending>,
 }
 
-/// A source's hash: made during the check, or on a thread beside the install when nothing installed has its size.
+/// A source's hash: made during the check, or beside the install when nothing installed has its size (`Later`, which
+/// leave_out_installed runs on one thread for the whole batch, in order, so big batches read one file at a time).
 pub enum Pending {
     Done(Source),
-    Later(std::thread::JoinHandle<Option<Source>>),
+    Later(Box<dyn FnOnce() -> Option<Source> + Send>),
+    /// The nth result of that thread
+    Nth(usize),
 }
 
 /// Whether the mod about to install is one already installed among `mods` (`installed(root)`, listed once per batch).
@@ -190,8 +193,8 @@ pub fn check(root: &Path, mods: &[Installed], m: &crate::install_mod::Installabl
     let sized_copy = m.iostore && mods.iter().any(|i| i.size == size && i.files.len() == 3);
     let source_of = move |plain: &str| Source { size, hash: format!("{plain}|{opts}"), installed: 0, at: 0 };
     if !sized_record && !sized_copy {
-        let later = std::thread::spawn(move || hash_files(&files, base.as_deref()).ok().map(|plain| source_of(&plain)));
-        return Check { same: None, source: Some(Pending::Later(later)) };
+        let later = move || hash_files(&files, base.as_deref()).ok().map(|plain| source_of(&plain));
+        return Check { same: None, source: Some(Pending::Later(Box::new(later))) };
     }
     let Ok(plain) = hash_files(&files, base.as_deref()) else { return Check { same: None, source: None } };
     let source = source_of(&plain);
@@ -359,8 +362,8 @@ mod tests {
         for (x, d) in [("pak", &b"built"[..]), ("utoc", b"t"), ("ucas", b"c")] { put(&pak.with_extension(x), d); }
         let c = chk(&root, &m);
         assert_eq!(c.same, None);
-        let Some(Pending::Later(h)) = c.source else { panic!("no installed mod has its size: hashed beside the install") };
-        record(&root, &pak, h.join().unwrap().unwrap());
+        let Some(Pending::Later(hash)) = c.source else { panic!("no installed mod has its size: hashed beside the install") };
+        record(&root, &pak, hash().unwrap());
         assert_eq!(chk(&root, &m).same, Some(pak.clone()), "the same download again");
         let other = crate::install_mod::InstallableMod { obfuscate: true, ..m.clone() };
         assert_eq!(chk(&root, &other).same, None, "other install options build another mod");
@@ -400,6 +403,8 @@ mod tests {
 pub struct LeftOut {
     pub same: usize,
     sources: Vec<Option<Pending>>,
+    /// The batch's `Later` hashes, made beside the install
+    later: Option<std::thread::JoinHandle<Vec<Option<Source>>>>,
 }
 
 pub fn leave_out_installed(root: &Path, mods: &mut Vec<crate::install_mod::InstallableMod>, window: &tauri::Window) -> LeftOut {
@@ -426,17 +431,31 @@ pub fn leave_out_installed(root: &Path, mods: &mut Vec<crate::install_mod::Insta
     if !same.is_empty() {
         let _ = window.emit("xtra_install_same", &same);
     }
-    LeftOut { same: same.len(), sources }
+    let mut jobs = Vec::new();
+    for s in sources.iter_mut() {
+        if let Some(Pending::Later(_)) = s {
+            let Some(Pending::Later(job)) = s.replace(Pending::Nth(jobs.len())) else { unreachable!() };
+            jobs.push(job);
+        }
+    }
+    // no thread to be had: those mods install without a record, as when a hash fails
+    let later = (!jobs.is_empty()).then(|| std::thread::Builder::new().spawn(move || jobs.into_iter().map(|job| job()).collect()).ok()).flatten();
+    LeftOut { same: same.len(), sources, later }
 }
 
 /// After the install: each mod that went in records the source it came from (its name is final by now).
 pub fn record_installed(root: &Path, left: LeftOut, mods: &[crate::install_mod::InstallableMod], results: &[crate::install_mod::install_mod_logic::ModInstallResult]) {
+    let mut hashed: Vec<Option<Source>> = left.later.and_then(|h| h.join().ok()).unwrap_or_default();
     for (m, s) in mods.iter().zip(left.sources) {
         let Some(s) = s else { continue };
         if results.iter().any(|r| r.success && r.mod_name == m.mod_name) {
             let s = match s {
                 Pending::Done(s) => s,
-                Pending::Later(h) => match h.join().ok().flatten() {
+                Pending::Later(hash) => match hash() {
+                    Some(s) => s,
+                    None => continue,
+                },
+                Pending::Nth(i) => match hashed.get_mut(i).and_then(Option::take) {
                     Some(s) => s,
                     None => continue,
                 },

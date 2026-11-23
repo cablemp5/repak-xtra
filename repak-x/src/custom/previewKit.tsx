@@ -69,12 +69,22 @@ export function usePreviewKit(alert: Alert) {
   const [checked, setChecked] = useState(false) // Check for updates was clicked: the kit's line says what GitHub has
   const [plan, setPlan] = useState<string[] | null>(null) // the steps of the install going now (installTrack.tsx KitTrack)
   const [beside, setBeside] = useState<KitProgress | null>(null) // Blender's own track while it installs beside the kit (setUp)
-  const besideOn = useRef(false)
+  // where Blender's progress goes: the main line, its own line beside the kit's, or nowhere (it finished first, a late
+  // message must not land on the kit's line or the check)
+  const lane = useRef<'main' | 'beside' | 'drop'>('main')
+  const lastBlender = useRef<KitProgress | null>(null)
   const { finished, finish } = useFinished() // its finished line, for a moment
   const status = () => invoke<KitStatus>('preview_kit_status').then(s => { setKit(s); return s })
   useEffect(() => {
     status().catch(e => alert.warning('Preview kit', String(e)))
-    const off = listen<KitProgress>('preview-kit-progress', e => (besideOn.current && e.payload.stage === 'blender' ? setBeside : setProgress)(e.payload))
+    const off = listen<KitProgress>('preview-kit-progress', e => {
+      if (e.payload.stage === 'blender') {
+        lastBlender.current = e.payload
+        if (lane.current === 'drop') return
+        if (lane.current === 'beside') { setBeside(e.payload); return }
+      }
+      setProgress(e.payload)
+    })
     const changed = () => { status().catch(() => undefined) } // a kit zip dropped on the window
     window.addEventListener('preview-kit-changed', changed)
     return () => { off.then(f => f()).catch(() => undefined); window.removeEventListener('preview-kit-changed', changed) }
@@ -117,6 +127,7 @@ export function usePreviewKit(alert: Alert) {
       return v
     }, file ? undefined : BY_HAND),
     installBlender: () => run('blender', async () => {
+      lane.current = 'main'
       setPlan(['Blender', 'Check'])
       setProgress(BLENDER_START)
       const path = await invoke<string>('preview_kit_install_blender')
@@ -151,11 +162,23 @@ export function usePreviewKit(alert: Alert) {
       const both = needKit && !now.blender // a fresh PC: the kit's download and winget's run side by side, 10 to 30 s sooner
       setPlan([...(needKit ? ['Download', 'Unpack'] : []), ...(now.blender || both ? [] : ['Blender']), 'Check'])
       const blender = async () => { await invoke<string>('preview_kit_install_blender'); await status(); changed() }
+      lane.current = 'main'
       if (both) {
-        besideOn.current = true
+        lane.current = 'beside'
+        lastBlender.current = BLENDER_START
         setBeside(BLENDER_START)
+        // the kit done first: Blender moves to the one line, as when it installs alone
+        const kitJob = installKit().finally(() => {
+          if (lane.current !== 'beside') return
+          lane.current = 'main'
+          setBeside(null)
+          setPlan(['Blender', 'Check'])
+          setProgress(lastBlender.current)
+        })
+        // Blender done first: its line goes, the kit's stays
+        const blenderJob = blender().finally(() => { if (lane.current === 'beside') { lane.current = 'drop'; setBeside(null) } })
         // both run to their end before anything is said, so neither keeps going after the card reads as done
-        const [k, b] = await Promise.allSettled([installKit(), blender()]).finally(() => { besideOn.current = false; setBeside(null) })
+        const [k, b] = await Promise.allSettled([kitJob, blenderJob]).finally(() => { lane.current = 'drop'; setBeside(null) })
         for (const r of [k, b]) if (r.status === 'rejected') throw r.reason
       } else {
         if (needKit) await installKit()

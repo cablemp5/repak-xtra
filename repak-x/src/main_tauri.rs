@@ -1289,10 +1289,10 @@ async fn parse_dropped_files(
                     format!("[Detection] Archive detected: {} ({})", mod_name, ext),
                 );
 
-                // repakxtra: unpacked once, and the folder is kept for Install (xtra_unpacked)
-                let temp_dir = crate::xtra_unpacked::unpack_and_keep(&path).ok();
+                // repakxtra: unpacked once, and the folder is kept for Install once read (xtra_unpacked)
+                let temp_dir = crate::xtra_unpacked::unpack_for_drop(&path).ok();
                 if let Some(ref temp) = temp_dir {
-                    let temp_path = temp.to_str().unwrap();
+                    let temp_path = temp.dir.to_str().unwrap();
 
                     {
                         let _ = window
@@ -1312,7 +1312,7 @@ async fn parse_dropped_files(
                         // repakxtra: a mod loader in the archive is Setup's, never a row. An archive of only loaders lists nothing
                         let paks_found = pak_files_in_archive.len();
                         pak_files_in_archive.retain(|p| !crate::xtra_setup::is_managed_loader(p));
-                        if paks_found > 0 && pak_files_in_archive.is_empty() { continue; }
+                        if paks_found > 0 && pak_files_in_archive.is_empty() { temp.keep.set(false); continue; }
 
                         // repakxtra: with a loader left out, the rest lists by pak name as in a multi-pak archive (the install matches by it)
                         if pak_files_in_archive.len() > 1 || pak_files_in_archive.len() < paks_found {
@@ -2909,8 +2909,9 @@ async fn install_mods(
     window: Window,
     state: State<'_, Arc<Mutex<AppState>>>,
 ) -> Result<(), String> {
-    let _mutation = crate::xtra_mutation::edit()?;
-    crate::xtra_identity::upstream_guard()?; // repakxtra: not while Repak X is open (both change the same files)
+    // repakxtra: a refused install lets go of the drop's unpacked archives (xtra_unpacked), the panel is closed by now
+    let _mutation = crate::xtra_mutation::edit().inspect_err(|_| xtra_unpacked::forget())?;
+    crate::xtra_identity::upstream_guard().inspect_err(|_| xtra_unpacked::forget())?; // repakxtra: not while Repak X is open (both change the same files)
     use std::sync::atomic::{AtomicBool, AtomicI32};
     use std::sync::Arc as StdArc;
 

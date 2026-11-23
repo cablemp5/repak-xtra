@@ -736,6 +736,7 @@ function App() {
             'Folder mods with UAssets need to be processed. Please drop them on the Install Mods area.',
             { duration: 8000 }
           )
+          invoke('forget_unpacked_archives').catch(() => undefined) // repakxtra: nothing installs, the drop's unpacked archives go
           return
         }
       } catch (parseError) {
@@ -3147,7 +3148,7 @@ function App() {
         if (panels.shortcuts) setPanel('shortcuts', false)
         else if (panels.settings) setPanel('settings', false)
         else if (panels.tools) setPanel('tools', false)
-        else if (panels.install) setPanel('install', false)
+        else if (panels.install) closeInstallPanel() // repakxtra: as Cancel
         else if (panels.clash) setPanel('clash', false)
         else if (modalOpen()) return // repakxtra: another dialog takes its own Esc, the Library behind it keeps its selection
         else if (selectedMod) setSelectedMod(null)
@@ -3302,6 +3303,8 @@ function App() {
   }
 
 
+  /** Cancel and Esc on the install panel: it closes and the drop's unpacked archives go (xtra_unpacked.rs). */
+  function closeInstallPanel() { setPanel('install', false); invoke('forget_unpacked_archives').catch(() => undefined) }
   const handleInstallMods = async (sent: InstallModPayload[]) => {
     const modsWithSettings = sent.filter(m => m.enabled !== false) // repakxtra: left-out archive mods go to the backend only, to be skipped
     setPanel('install', false)
@@ -3729,7 +3732,7 @@ function App() {
           onDeleteTag={handleDeleteTagFromCatalog}
           onCreateFolder={handleCreateFolderAndReturn}
           onInstall={handleInstallMods}
-          onCancel={() => { setPanel('install', false); invoke('forget_unpacked_archives').catch(() => undefined) }} // repakxtra: the drop's unpacked archives go
+          onCancel={closeInstallPanel} // repakxtra: the drop's unpacked archives go
           onNewTag={(callback) => setNewTagPrompt({ callback })}
           onNewFolder={(callback) => setNewFolderFromInstall({ callback })}
           onMergeHybrid={handleMergeHybrid}
