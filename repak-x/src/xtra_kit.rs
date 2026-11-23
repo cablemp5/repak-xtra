@@ -508,7 +508,7 @@ pub async fn preview_kit_check_file(file: String) -> Result<KitFile, String> {
     let path = PathBuf::from(&file);
     let size = fs::metadata(&path).map_err(|e| format!("Could not read {file}: {e}"))?.len();
     let hashed = path.clone();
-    let hash = tauri::async_runtime::spawn_blocking(move || crate::xtra_update::sha256_file(&hashed)).await.map_err(|e| e.to_string())??;
+    let hashing = tauri::async_runtime::spawn_blocking(move || crate::xtra_update::sha256_file(&hashed)); // beside GitHub's answer
     let published = async {
         let release = preview_kit_latest(None).await?.ok_or("none published")?;
         let client = reqwest::Client::builder().timeout(std::time::Duration::from_secs(15)).build().map_err(|e| e.to_string())?;
@@ -517,6 +517,7 @@ pub async fn preview_kit_check_file(file: String) -> Result<KitFile, String> {
         let name = release.asset.rsplit('/').next().unwrap_or_default().to_string();
         Ok::<_, String>((release.version, crate::xtra_update::parse_sha256(&text, &name)?))
     }.await.ok();
+    let hash = hashing.await.map_err(|e| e.to_string())??;
     Ok(KitFile { size, matches: published.as_ref().map(|(_, h)| *h == hash), published: published.map(|(v, _)| v) })
 }
 

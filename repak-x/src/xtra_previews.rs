@@ -123,15 +123,19 @@ pub fn list_mod_previews() -> Vec<String> {
     keys
 }
 
-/// The preview file of a key: the newer of its PNG and WebP (the generator removes the other one, but a run that was
-/// stopped mid-way may leave both).
-fn preview_file(dir: &std::path::Path, key: &str) -> Option<PathBuf> {
-    PREVIEW_EXTS
-        .iter()
-        .map(|x| dir.join(format!("{key}{x}")))
-        .filter_map(|p| Some((std::fs::metadata(&p).ok()?.modified().ok()?, p)))
-        .max_by_key(|(t, _)| *t)
-        .map(|(_, p)| p)
+/// Each key's preview file name and change time, in one read of the folder: the newest of its PNG, WebP, and WebM (the
+/// generator removes the others, but a run that was stopped mid-way may leave two). Same time: the later of PREVIEW_EXTS.
+fn newest_previews(dir: &std::path::Path) -> std::collections::BTreeMap<String, (std::time::SystemTime, usize, String)> {
+    let mut newest = std::collections::BTreeMap::new();
+    for e in std::fs::read_dir(dir).into_iter().flatten().flatten() {
+        let Some(name) = e.file_name().to_str().map(str::to_string) else { continue };
+        let Some((i, key)) = PREVIEW_EXTS.iter().enumerate().find_map(|(i, x)| Some((i, name.strip_suffix(x)?.to_string()))) else { continue };
+        let Ok(t) = e.metadata().and_then(|m| m.modified()) else { continue };
+        if newest.get(&key).map_or(true, |(ot, oi, _): &(std::time::SystemTime, usize, String)| (t, i) > (*ot, *oi)) {
+            newest.insert(key, (t, i, name));
+        }
+    }
+    newest
 }
 
 /// Deletes the combined renders of loadouts that are gone for good (each key's image, before picture, animation, other
@@ -155,14 +159,9 @@ pub fn delete_loadout_previews(keys: Vec<String>) -> usize {
 #[tauri::command(async)]
 pub fn list_preview_files() -> serde_json::Value {
     let dir = previews_dir();
-    let files: serde_json::Map<String, serde_json::Value> = list_mod_previews()
+    let files: serde_json::Map<String, serde_json::Value> = newest_previews(&dir)
         .into_iter()
-        .filter_map(|key| {
-            let file = preview_file(&dir, &key)?;
-            let ms = std::fs::metadata(&file).ok()?.modified().ok()?.duration_since(std::time::UNIX_EPOCH).ok()?.as_millis() as u64;
-            let name = file.file_name()?.to_string_lossy().to_string();
-            Some((key, serde_json::json!([name, ms])))
-        })
+        .filter_map(|(key, (t, _, name))| Some((key, serde_json::json!([name, t.duration_since(std::time::UNIX_EPOCH).ok()?.as_millis() as u64]))))
         .collect();
     // each loadout render's covers and members (get_preview_covers), so the cards need no call each
     let covers: serde_json::Map<String, serde_json::Value> = files.keys()
@@ -685,15 +684,37 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("previews-test-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
-        assert!(preview_file(&dir, "A").is_none());
+        let file = |dir: &std::path::Path| newest_previews(dir).remove("A").map(|(_, _, n)| n);
+        assert!(file(&dir).is_none());
         std::fs::write(dir.join("A.png"), b"png").unwrap();
-        assert_eq!(preview_file(&dir, "A").unwrap().extension().unwrap(), "png");
+        assert_eq!(file(&dir).unwrap(), "A.png");
         let webp = dir.join("A.webp");
         std::fs::write(&webp, b"webp").unwrap();
         let later = std::time::SystemTime::now() + std::time::Duration::from_secs(5);
         std::fs::File::options().write(true).open(&webp).unwrap().set_modified(later).unwrap();
-        assert_eq!(preview_file(&dir, "A").unwrap().extension().unwrap(), "webp");
+        assert_eq!(file(&dir).unwrap(), "A.webp");
+        std::fs::write(dir.join("B.webm"), b"webm").unwrap();
+        assert_eq!(newest_previews(&dir).len(), 2, "one entry per key");
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// The real previews folder, old way (a listing, then each key's three files) against newest_previews: same answer.
+    ///   cargo test -p repak-x --bin REPAK-X preview_index_bench -- --ignored --nocapture
+    #[test]
+    #[ignore]
+    fn preview_index_bench() {
+        let dir = previews_dir();
+        let t = std::time::Instant::now();
+        let old: std::collections::BTreeMap<String, String> = list_mod_previews().into_iter().filter_map(|key| {
+            let p = PREVIEW_EXTS.iter().map(|x| dir.join(format!("{key}{x}")))
+                .filter_map(|p| Some((std::fs::metadata(&p).ok()?.modified().ok()?, p))).max_by_key(|(t, _)| *t)?.1;
+            Some((key, p.file_name()?.to_string_lossy().to_string()))
+        }).collect();
+        let old_s = t.elapsed().as_secs_f32();
+        let t = std::time::Instant::now();
+        let new: std::collections::BTreeMap<String, String> = newest_previews(&dir).into_iter().map(|(k, (_, _, n))| (k, n)).collect();
+        println!("[preview index timing] {} keys: old {:.4} s, one pass {:.4} s", new.len(), old_s, t.elapsed().as_secs_f32());
+        assert_eq!(old, new);
     }
 
     #[test]

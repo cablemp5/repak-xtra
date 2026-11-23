@@ -110,6 +110,8 @@ pub fn check_update_zip(path: &std::path::Path) -> Result<(), String> {
 /// match it. A release without one (404) is refused. The checksum comes from the same release as the zip: it catches a
 /// corrupted or swapped download, not a release someone else published.
 pub async fn verify_checksum(client: &reqwest::Client, asset_url: &str, path: &std::path::Path) -> Result<(), String> {
+    let hashed = path.to_path_buf();
+    let hashing = tokio::task::spawn_blocking(move || sha256_file(&hashed)); // beside the checksum request, read only
     let res = client.get(format!("{asset_url}.sha256")).header("User-Agent", "repakxtra").send().await
         .map_err(|e| format!("Could not download the checksum: {e}"))?;
     if res.status() == reqwest::StatusCode::NOT_FOUND {
@@ -121,8 +123,7 @@ pub async fn verify_checksum(client: &reqwest::Client, asset_url: &str, path: &s
     let text = res.text().await.map_err(|e| format!("Could not read the checksum: {e}"))?;
     let name = asset_url.rsplit('/').next().unwrap_or_default(); // the published name (a kit is saved under another)
     let expected = parse_sha256(&text, name)?;
-    let path = path.to_path_buf();
-    let actual = tokio::task::spawn_blocking(move || sha256_file(&path)).await.map_err(|e| e.to_string())??;
+    let actual = hashing.await.map_err(|e| e.to_string())??;
     if expected != actual {
         return Err("The download does not match its published checksum. Nothing was changed. Try again.".into());
     }
