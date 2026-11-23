@@ -1,6 +1,5 @@
 pub mod install_mod_logic;
 
-use crate::install_mod::install_mod_logic::archives::{extract_7z, extract_rar, extract_zip};
 use crate::utils::{collect_files, get_current_pak_characteristics};
 use crate::utoc_utils::read_utoc;
 use log::{debug, error};
@@ -514,26 +513,16 @@ fn map_to_mods_internal(paths: &[PathBuf]) -> Vec<InstallableMod> {
 
             if is_archive {
                 modtype = "Archive".to_string();
-                // repakxtra: unpacked into temp/repak-x/archives/<pid>-*, which stays through the install and goes at
-                // the next start (xtra_vfx::sweep_work_dirs). A bad archive is skipped with a message, not a crash.
-                let tempdir = match crate::xtra_vfx::run_work_dir("archives") {
+                // repakxtra: the drop's unpack when the archive is unchanged since (xtra_unpacked), else unpacked into
+                // temp/repak-x/archives/<pid>-*, which stays through the install and goes at the next start
+                // (xtra_vfx::sweep_work_dirs). A bad archive is skipped with a message, not a crash.
+                let tempdir = match crate::xtra_unpacked::take_or_unpack(path) {
                     Ok(d) => d.to_string_lossy().to_string(),
                     Err(e) => {
-                        crate::ui_log::error("Install", format!("Could not make a folder to unpack {}: {e}", path.display()));
+                        crate::ui_log::error("Install", format!("Could not unpack {} ({e}). It may be damaged or password protected.", path.display()));
                         return None;
                     }
                 };
-                let src = path.to_string_lossy();
-                let unpacked = match extension.to_str().unwrap_or_default() {
-                    "zip" => extract_zip(&src, &tempdir).map_err(|e| e.to_string()),
-                    "rar" => extract_rar(&src, &tempdir).map_err(|e| e.to_string()),
-                    _ => extract_7z(&src, &tempdir).map_err(|e| e.to_string()),
-                };
-                if let Err(e) = unpacked {
-                    crate::ui_log::error("Install", format!("Could not unpack {} ({e}). It may be damaged or password protected.", path.display()));
-                    let _ = std::fs::remove_dir_all(&tempdir);
-                    return None;
-                }
 
                 // Now find pak files / iostore mods and turn them into installable mods
                 let mut new_mods = find_mods_from_archive(&tempdir);

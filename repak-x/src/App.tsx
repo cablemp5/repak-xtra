@@ -3729,7 +3729,7 @@ function App() {
           onDeleteTag={handleDeleteTagFromCatalog}
           onCreateFolder={handleCreateFolderAndReturn}
           onInstall={handleInstallMods}
-          onCancel={() => setPanel('install', false)}
+          onCancel={() => { setPanel('install', false); invoke('forget_unpacked_archives').catch(() => undefined) }} // repakxtra: the drop's unpacked archives go
           onNewTag={(callback) => setNewTagPrompt({ callback })}
           onNewFolder={(callback) => setNewFolderFromInstall({ callback })}
           onMergeHybrid={handleMergeHybrid}
