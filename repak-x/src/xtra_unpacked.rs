@@ -61,13 +61,10 @@ impl Drop for Unpacked {
 
 /// The drop's unpack (see Unpacked).
 pub fn unpack_for_drop(archive: &Path) -> Result<Unpacked, String> {
-    // the hash reads the archive beside the unpack, so the drop's look waits for neither twice
-    let (stamp, dir) = std::thread::scope(|s| {
-        let stamp = s.spawn(|| stamp(archive));
-        let dir = unpack(archive);
-        (stamp.join().ok().flatten(), dir)
-    });
-    Ok(Unpacked { dir: dir?, stamp, keep: std::cell::Cell::new(true) })
+    // hashed before the unpack: an archive replaced in between leaves a folder newer than its stamp, which Install then
+    // fails to match and unpacks fresh, never older content under a newer stamp
+    let stamp = stamp(archive);
+    Ok(Unpacked { dir: unpack(archive)?, stamp, keep: std::cell::Cell::new(true) })
 }
 
 /// Install's folder for this archive: the kept one when the archive is unchanged since the drop, else a fresh unpack.

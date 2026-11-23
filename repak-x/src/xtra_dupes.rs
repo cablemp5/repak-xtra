@@ -201,6 +201,9 @@ pub fn check(root: &Path, mods: &[Installed], m: &crate::install_mod::Installabl
     }
     let Ok(plain) = hash_files(&files, base.as_deref()) else { return Check { same: None, source: None } };
     let source = source_of(&plain);
+    // listed again after the hash, as before this batch listing existed: an install that finished meanwhile counts
+    let mods = &installed(root);
+    let by_key: HashMap<String, &Installed> = mods.iter().map(|i| (key(root, &i.pak), i)).collect();
     let recorded = with_sources(|map| {
         map.iter().find(|(k, s)| s.size == source.size && s.hash == source.hash && by_key.get(*k).is_some_and(|i| fresh(s, i))).map(|(k, _)| by_key[k].pak.clone())
     });
@@ -421,7 +424,7 @@ pub fn leave_out_installed(root: &Path, mods: &mut Vec<crate::install_mod::Insta
         }
         let c = check(root, &listed, m);
         if matches!(c.source, Some(Pending::Done(_))) {
-            listed = installed(root); // that hash took a while: an install that finished meanwhile counts for the next mod
+            listed = installed(root); // that hash took a while: an install that finished meanwhile counts for the next mods too
         }
         match c.same {
             Some(p) => {
