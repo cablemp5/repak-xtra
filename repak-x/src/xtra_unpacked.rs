@@ -1,5 +1,5 @@
 //! repakxtra: a dropped archive is unpacked once. The drop's look unpacks it into temp/repak-x/archives/<pid>-* and keeps
-//! the folder, and Install takes that folder instead of unpacking it again (0.4 s at 192 MB, 1.7 s at 714 MB). Cancel and
+//! the folder, and Install takes that folder instead of unpacking it again (1.8 to 2 s for a 162 MB pack). Cancel and
 //! the end of an install delete what is still kept, and the next start sweeps the rest (xtra_vfx::sweep_work_dirs).
 
 use std::path::{Path, PathBuf};
@@ -61,13 +61,20 @@ impl Drop for Unpacked {
 
 /// The drop's unpack (see Unpacked).
 pub fn unpack_for_drop(archive: &Path) -> Result<Unpacked, String> {
-    let stamp = stamp(archive);
-    Ok(Unpacked { dir: unpack(archive)?, stamp, keep: std::cell::Cell::new(true) })
+    // the hash reads the archive beside the unpack, so the drop's look waits for neither twice
+    let (stamp, dir) = std::thread::scope(|s| {
+        let stamp = s.spawn(|| stamp(archive));
+        let dir = unpack(archive);
+        (stamp.join().ok().flatten(), dir)
+    });
+    Ok(Unpacked { dir: dir?, stamp, keep: std::cell::Cell::new(true) })
 }
 
 /// Install's folder for this archive: the kept one when the archive is unchanged since the drop, else a fresh unpack.
 pub fn take_or_unpack(archive: &Path) -> Result<PathBuf, String> {
-    let kept = stamp(archive).and_then(|s| {
+    let path = format!("{}|", archive.display());
+    let any = KEPT.lock().unwrap_or_else(|e| e.into_inner()).iter().any(|(k, _)| k.starts_with(&path));
+    let kept = any.then(|| stamp(archive)).flatten().and_then(|s| { // nothing kept for this path: no hash
         let mut kept = KEPT.lock().unwrap_or_else(|e| e.into_inner());
         let i = kept.iter().position(|(k, d)| *k == s && d.is_dir())?;
         Some(kept.swap_remove(i).1)
