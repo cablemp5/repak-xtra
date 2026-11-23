@@ -417,7 +417,8 @@ function Yours({ f }: { f: Flow }) {
   const size = f.kit.latest?.size ? `${Math.round(f.kit.latest.size / 1048576)} MB, plus Blender` : 'a download, plus Blender'
   // winget's installer has started ("Starting package install..."): the admin prompt shows now, not while winget looks
   // Blender up or downloads it
-  const blenderWaits = f.kit.progress?.stage === 'blender' && !f.kit.progress.total && /package install/i.test(f.kit.progress.text ?? '')
+  const bp = f.kit.beside ?? f.kit.progress // Blender's own track while it installs beside the kit
+  const blenderWaits = bp?.stage === 'blender' && !bp.total && /package install/i.test(bp.text ?? '')
   return (
     <div className="ob-prefs">
       <Pref title="Pictures of your mods" stage={<MiniCard name="Catboy" src={catboy} className="wi-reveal ob-shot"><span className="wi-render"><span>Rendering</span></span></MiniCard>}
@@ -428,6 +429,7 @@ function Yours({ f }: { f: Flow }) {
         {!kitReady && !f.kit.kit?.blender && <p className={`fr-admin${blenderWaits ? ' is-waiting' : ''}`} title={blenderWaits ? 'It may wait in the taskbar' : 'Windows asks once, when Blender installs'}>
           <ShieldCheck size={13} aria-hidden="true" />{blenderWaits ? 'Approve the Windows prompt.' : 'Blender needs admin rights once.'}</p>}
         <KitTrack plan={f.kit.plan} p={f.kit.progress} />
+        {f.kit.beside && <KitTrack plan={['Blender']} p={f.kit.beside} />}
         <DoctorProblems d={f.kit.doctor} />
       </Pref>
       <Pref title="Show it on Discord" stage={<span className="ob-presence"><AppMark /><span><small>Playing</small><b>{APP_NAME}</b><small className="ob-activity"><Gamepad2 size={12} aria-hidden="true" />Switching loadouts</small></span></span>}

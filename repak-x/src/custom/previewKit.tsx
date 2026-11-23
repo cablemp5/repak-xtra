@@ -1,7 +1,8 @@
 // repakxtra: the preview kit's state and actions (backend: xtra_kit.rs), shared by Setup's Mod previews card and the
-// first-run setup. "Set up previews" is one click: the newest kit (with download progress) when it is missing or old,
-// Blender when it is missing (winget), then the generator's own check of this PC, which names anything still missing.
-import { useEffect, useState } from 'react'
+// first-run setup. "Set up previews" is one click: the newest kit (with download progress) when it is missing or old and
+// Blender when it is missing (winget), both at once when both are needed, then the generator's own check of this PC,
+// which names anything still missing.
+import { useEffect, useRef, useState } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
 import { open as openUrl } from '@tauri-apps/plugin-shell'
@@ -67,11 +68,13 @@ export function usePreviewKit(alert: Alert) {
   const [doctor, setDoctor] = useState<Doctor | null>(null)
   const [checked, setChecked] = useState(false) // Check for updates was clicked: the kit's line says what GitHub has
   const [plan, setPlan] = useState<string[] | null>(null) // the steps of the install going now (installTrack.tsx KitTrack)
+  const [beside, setBeside] = useState<KitProgress | null>(null) // Blender's own track while it installs beside the kit (setUp)
+  const besideOn = useRef(false)
   const { finished, finish } = useFinished() // its finished line, for a moment
   const status = () => invoke<KitStatus>('preview_kit_status').then(s => { setKit(s); return s })
   useEffect(() => {
     status().catch(e => alert.warning('Preview kit', String(e)))
-    const off = listen<KitProgress>('preview-kit-progress', e => setProgress(e.payload))
+    const off = listen<KitProgress>('preview-kit-progress', e => (besideOn.current && e.payload.stage === 'blender' ? setBeside : setProgress)(e.payload))
     const changed = () => { status().catch(() => undefined) } // a kit zip dropped on the window
     window.addEventListener('preview-kit-changed', changed)
     return () => { off.then(f => f()).catch(() => undefined); window.removeEventListener('preview-kit-changed', changed) }
@@ -96,6 +99,8 @@ export function usePreviewKit(alert: Alert) {
 
   return {
     kit, latest, busy, progress, doctor, checked, plan, finished,
+    /** Blender's progress while it installs beside the kit (a second KitTrack with the plan ['Blender']), else null */
+    beside,
     update: Boolean(latest && kit?.version && isNewerKit(latest.version, kit.version)),
     /** Asks GitHub for the newest kit; the card's kit line then says what it found (an update is one click: Update to vN). */
     check: () => run('check', async () => { setChecked(false); const r = await fetchLatest(true); setChecked(true); return r }, BY_HAND),
@@ -143,9 +148,19 @@ export function usePreviewKit(alert: Alert) {
       const release = latest === undefined ? await fetchLatest().catch(e => { if (!now.version) throw e; alert.warning('Preview kit', String(e), BY_HAND); return null }) : latest
       if (!now.version && !release) throw new Error('No preview kit has been published yet. If someone sent you the kit zip, drop it on this window.')
       const needKit = Boolean(release && (!now.version || isNewerKit(release.version, now.version)))
-      setPlan([...(needKit ? ['Download', 'Unpack'] : []), ...(now.blender ? [] : ['Blender']), 'Check'])
-      if (needKit) await installKit()
-      if (!now.blender) { setProgress(BLENDER_START); await invoke<string>('preview_kit_install_blender'); await status(); changed() }
+      const both = needKit && !now.blender // a fresh PC: the kit's download and winget's run side by side, 10 to 30 s sooner
+      setPlan([...(needKit ? ['Download', 'Unpack'] : []), ...(now.blender || both ? [] : ['Blender']), 'Check'])
+      const blender = async () => { await invoke<string>('preview_kit_install_blender'); await status(); changed() }
+      if (both) {
+        besideOn.current = true
+        setBeside(BLENDER_START)
+        // both run to their end before anything is said, so neither keeps going after the card reads as done
+        const [k, b] = await Promise.allSettled([installKit(), blender()]).finally(() => { besideOn.current = false; setBeside(null) })
+        for (const r of [k, b]) if (r.status === 'rejected') throw r.reason
+      } else {
+        if (needKit) await installKit()
+        if (!now.blender) { setProgress(BLENDER_START); await blender() }
+      }
       const d = await checkAfter()
       if (d?.ok !== false) { alert.success('Mod previews', 'Ready. Generate previews from a loadout.'); finish('Previews are ready on this PC') }
       return d

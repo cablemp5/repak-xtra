@@ -189,12 +189,13 @@ function PreviewKitCard({ alert }: { alert: Alert }) {
         onYes={() => { setAsking(false); k.remove() }} onNo={() => setAsking(false)} />}
       {(kit && !kit.blender || installingBlender) && <BlenderTrust />}
       <KitTrack plan={k.plan} p={k.progress} done={k.finished ?? undefined} />
+      {k.beside && <KitTrack plan={['Blender']} p={k.beside} />}
       <DoctorProblems d={k.doctor} />
       {(missing || update || (k.doctor?.ok && !busy && !k.finished)) && <div className="su-actions">
         {(missing || update) && (
           <button type="button" className="btn-primary su-main" disabled={Boolean(busy) || (!kit?.version && latest === null)} onClick={() => k.setUp()}
             title={update ? 'Downloads the newest kit from GitHub' : 'Installs what is missing: the kit (from GitHub) and Blender (with winget), then checks this PC'}>
-            {busy === 'setup' ? (installingBlender ? 'Installing Blender…' : k.progress ? 'Installing kit…' : 'Setting up…') : busy === 'blender' ? 'Installing Blender…' : update ? `Update to v${latest!.version}` : 'Set up previews'}
+            {busy === 'setup' ? (k.beside ? 'Installing kit and Blender…' : installingBlender ? 'Installing Blender…' : k.progress ? 'Installing kit…' : 'Setting up…') : busy === 'blender' ? 'Installing Blender…' : update ? `Update to v${latest!.version}` : 'Set up previews'}
           </button>
         )}
         {k.doctor?.ok && !busy && !k.finished && <span className="su-meta su-ok">This PC can make previews</span>}{/* not twice: the finished line says it first */}
