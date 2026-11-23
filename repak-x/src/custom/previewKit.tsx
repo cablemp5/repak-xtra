@@ -1,7 +1,8 @@
 // repakxtra: the preview kit's state and actions (backend: xtra_kit.rs), shared by Setup's Mod previews card and the
-// first-run setup. "Set up previews" is one click: the newest kit (with download progress) when it is missing or old,
-// Blender when it is missing (winget), then the generator's own check of this PC, which names anything still missing.
-import { useEffect, useState } from 'react'
+// first-run setup. "Set up previews" is one click: the newest kit (with download progress) when it is missing or old and
+// Blender when it is missing (winget), both at once when both are needed, then the generator's own check of this PC,
+// which names anything still missing.
+import { useEffect, useRef, useState } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
 import { open as openUrl } from '@tauri-apps/plugin-shell'
@@ -67,11 +68,23 @@ export function usePreviewKit(alert: Alert) {
   const [doctor, setDoctor] = useState<Doctor | null>(null)
   const [checked, setChecked] = useState(false) // Check for updates was clicked: the kit's line says what GitHub has
   const [plan, setPlan] = useState<string[] | null>(null) // the steps of the install going now (installTrack.tsx KitTrack)
+  const [beside, setBeside] = useState<KitProgress | null>(null) // Blender's own track while it installs beside the kit (setUp)
+  // where Blender's progress goes: the main line, its own line beside the kit's, or nowhere (it finished first, a late
+  // message must not land on the kit's line or the check)
+  const lane = useRef<'main' | 'beside' | 'drop'>('main')
+  const lastBlender = useRef<KitProgress | null>(null)
   const { finished, finish } = useFinished() // its finished line, for a moment
   const status = () => invoke<KitStatus>('preview_kit_status').then(s => { setKit(s); return s })
   useEffect(() => {
     status().catch(e => alert.warning('Preview kit', String(e)))
-    const off = listen<KitProgress>('preview-kit-progress', e => setProgress(e.payload))
+    const off = listen<KitProgress>('preview-kit-progress', e => {
+      if (e.payload.stage === 'blender') {
+        lastBlender.current = e.payload
+        if (lane.current === 'drop') return
+        if (lane.current === 'beside') { setBeside(e.payload); return }
+      }
+      setProgress(e.payload)
+    })
     const changed = () => { status().catch(() => undefined) } // a kit zip dropped on the window
     window.addEventListener('preview-kit-changed', changed)
     return () => { off.then(f => f()).catch(() => undefined); window.removeEventListener('preview-kit-changed', changed) }
@@ -96,6 +109,8 @@ export function usePreviewKit(alert: Alert) {
 
   return {
     kit, latest, busy, progress, doctor, checked, plan, finished,
+    /** Blender's progress while it installs beside the kit (a second KitTrack with the plan ['Blender']), else null */
+    beside,
     update: Boolean(latest && kit?.version && isNewerKit(latest.version, kit.version)),
     /** Asks GitHub for the newest kit; the card's kit line then says what it found (an update is one click: Update to vN). */
     check: () => run('check', async () => { setChecked(false); const r = await fetchLatest(true); setChecked(true); return r }, BY_HAND),
@@ -112,6 +127,7 @@ export function usePreviewKit(alert: Alert) {
       return v
     }, file ? undefined : BY_HAND),
     installBlender: () => run('blender', async () => {
+      lane.current = 'main'
       setPlan(['Blender', 'Check'])
       setProgress(BLENDER_START)
       const path = await invoke<string>('preview_kit_install_blender')
@@ -143,9 +159,31 @@ export function usePreviewKit(alert: Alert) {
       const release = latest === undefined ? await fetchLatest().catch(e => { if (!now.version) throw e; alert.warning('Preview kit', String(e), BY_HAND); return null }) : latest
       if (!now.version && !release) throw new Error('No preview kit has been published yet. If someone sent you the kit zip, drop it on this window.')
       const needKit = Boolean(release && (!now.version || isNewerKit(release.version, now.version)))
-      setPlan([...(needKit ? ['Download', 'Unpack'] : []), ...(now.blender ? [] : ['Blender']), 'Check'])
-      if (needKit) await installKit()
-      if (!now.blender) { setProgress(BLENDER_START); await invoke<string>('preview_kit_install_blender'); await status(); changed() }
+      const both = needKit && !now.blender // a fresh PC: the kit's download and winget's run side by side, 10 to 30 s sooner
+      setPlan([...(needKit ? ['Download', 'Unpack'] : []), ...(now.blender || both ? [] : ['Blender']), 'Check'])
+      const blender = async () => { await invoke<string>('preview_kit_install_blender'); await status(); changed() }
+      lane.current = 'main'
+      if (both) {
+        lane.current = 'beside'
+        lastBlender.current = BLENDER_START
+        setBeside(BLENDER_START)
+        // the kit done first: Blender moves to the one line, as when it installs alone
+        const kitJob = installKit().finally(() => {
+          if (lane.current !== 'beside') return
+          lane.current = 'main'
+          setBeside(null)
+          setPlan(['Blender', 'Check'])
+          setProgress(lastBlender.current)
+        })
+        // Blender done first: its line goes, the kit's stays
+        const blenderJob = blender().finally(() => { if (lane.current === 'beside') { lane.current = 'drop'; setBeside(null) } })
+        // both run to their end before anything is said, so neither keeps going after the card reads as done
+        const [k, b] = await Promise.allSettled([kitJob, blenderJob]).finally(() => { lane.current = 'drop'; setBeside(null) })
+        for (const r of [k, b]) if (r.status === 'rejected') throw r.reason
+      } else {
+        if (needKit) await installKit()
+        if (!now.blender) { setProgress(BLENDER_START); await blender() }
+      }
       const d = await checkAfter()
       if (d?.ok !== false) { alert.success('Mod previews', 'Ready. Generate previews from a loadout.'); finish('Previews are ready on this PC') }
       return d

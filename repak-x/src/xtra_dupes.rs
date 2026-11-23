@@ -169,17 +169,40 @@ pub struct Check {
     /// The installed mod with this content, if one is.
     pub same: Option<PathBuf>,
     /// The source's hash, recorded once the install worked.
-    pub source: Option<Source>,
+    pub source: Option<Pending>,
 }
 
-/// Whether the mod about to install is one already installed anywhere under `root`.
-pub fn check(root: &Path, m: &crate::install_mod::InstallableMod) -> Check {
+/// A source's hash: made during the check, or beside the install when nothing installed has its size (`Later`, which
+/// leave_out_installed runs on one thread for the whole batch, in order, so big batches read one file at a time).
+pub enum Pending {
+    Done(Source),
+    Later(Box<dyn FnOnce() -> Option<Source> + Send>),
+    /// The nth result of that thread
+    Nth(usize),
+}
+
+/// Whether the mod about to install is one already installed among `mods` (`installed(root)`, listed once per batch).
+/// The source is hashed now only when a record or an installed mod has its size: no other can match, since both
+/// compare the size as well. Otherwise its hash is made beside the install, for the record.
+pub fn check(root: &Path, mods: &[Installed], m: &crate::install_mod::InstallableMod) -> Check {
     let (files, base) = source_files(m);
     let size: u64 = files.iter().map(|f| std::fs::metadata(f).map_or(0, |m| m.len())).sum();
-    let Ok(plain) = hash_files(&files, base.as_deref()) else { return Check { same: None, source: None } };
     let opts = [m.repak, m.force_legacy_pak, m.obfuscate, m.hybrid].map(|b| if b { '1' } else { '0' }).iter().collect::<String>();
-    let source = Source { size, hash: format!("{plain}|{opts}"), installed: 0, at: 0 };
-    let mods = installed(root);
+    let by_key: HashMap<String, &Installed> = mods.iter().map(|i| (key(root, &i.pak), i)).collect();
+    let sized_record = with_sources(|map| map.iter().any(|(k, s)| s.size == size && by_key.get(k).is_some_and(|i| fresh(s, i))));
+    let sized_copy = m.iostore && mods.iter().any(|i| i.size == size && i.files.len() == 3);
+    let source_of = move |plain: &str| Source { size, hash: format!("{plain}|{opts}"), installed: 0, at: 0 };
+    if !sized_record && !sized_copy {
+        // each file's size and change time now: a source changed before its turn on the hash thread gets no record
+        let seen = |files: &[PathBuf]| files.iter().map(|f| std::fs::metadata(f).ok().map(|m| (m.len(), m.modified().ok()))).collect::<Vec<_>>();
+        let before = seen(&files);
+        let later = move || hash_files(&files, base.as_deref()).ok().filter(|_| seen(&files) == before).map(|plain| source_of(&plain));
+        return Check { same: None, source: Some(Pending::Later(Box::new(later))) };
+    }
+    let Ok(plain) = hash_files(&files, base.as_deref()) else { return Check { same: None, source: None } };
+    let source = source_of(&plain);
+    // listed again after the hash, as before this batch listing existed: an install that finished meanwhile counts
+    let mods = &installed(root);
     let by_key: HashMap<String, &Installed> = mods.iter().map(|i| (key(root, &i.pak), i)).collect();
     let recorded = with_sources(|map| {
         map.iter().find(|(k, s)| s.size == source.size && s.hash == source.hash && by_key.get(*k).is_some_and(|i| fresh(s, i))).map(|(k, _)| by_key[k].pak.clone())
@@ -187,7 +210,7 @@ pub fn check(root: &Path, m: &crate::install_mod::InstallableMod) -> Check {
     // a ready IoStore mod installs as a copy: its installed files are the download byte for byte
     let copied = || m.iostore.then(|| mods.iter().find(|i| i.size == size && i.files.len() == 3 && installed_hash(i).as_deref() == Some(plain.as_str())).map(|i| i.pak.clone())).flatten();
     let same = recorded.or_else(copied);
-    Check { same, source: Some(source) }
+    Check { same, source: Some(Pending::Done(source)) }
 }
 
 /// After an install worked: the mod at `pak` came from `source`.
@@ -331,6 +354,10 @@ mod tests {
         assert_eq!(names, ["A_9999999_P.pak", "B_9999999_P.pak"]);
     }
 
+    fn chk(root: &Path, m: &crate::install_mod::InstallableMod) -> Check {
+        check(root, &installed(root), m)
+    }
+
     #[test]
     fn a_record_counts_only_while_its_mod_is_unchanged() {
         let dir = tempfile::tempdir().unwrap();
@@ -339,14 +366,15 @@ mod tests {
         let m = crate::install_mod::InstallableMod { mod_path: src.join("Skin.pak"), repak: true, ..Default::default() };
         let pak = root.join("Skin_9999999_P.pak");
         for (x, d) in [("pak", &b"built"[..]), ("utoc", b"t"), ("ucas", b"c")] { put(&pak.with_extension(x), d); }
-        let c = check(&root, &m);
+        let c = chk(&root, &m);
         assert_eq!(c.same, None);
-        record(&root, &pak, c.source.unwrap());
-        assert_eq!(check(&root, &m).same, Some(pak.clone()), "the same download again");
+        let Some(Pending::Later(hash)) = c.source else { panic!("no installed mod has its size: hashed beside the install") };
+        record(&root, &pak, hash().unwrap());
+        assert_eq!(chk(&root, &m).same, Some(pak.clone()), "the same download again");
         let other = crate::install_mod::InstallableMod { obfuscate: true, ..m.clone() };
-        assert_eq!(check(&root, &other).same, None, "other install options build another mod");
+        assert_eq!(chk(&root, &other).same, None, "other install options build another mod");
         put(&pak.with_extension("ucas"), b"updated"); // an update changed the installed mod
-        assert_eq!(check(&root, &m).same, None, "a stale record no longer counts");
+        assert_eq!(chk(&root, &m).same, None, "a stale record no longer counts");
     }
 
     #[test]
@@ -369,9 +397,9 @@ mod tests {
             put(&root.join(format!("Skin_9999999_P.{x}")), d);
         }
         let m = crate::install_mod::InstallableMod { mod_path: src.join("Skin.pak"), iostore: true, ..Default::default() };
-        assert_eq!(check(&root, &m).same, Some(root.join("Skin_9999999_P.pak")));
+        assert_eq!(chk(&root, &m).same, Some(root.join("Skin_9999999_P.pak")));
         put(&root.join("Skin_9999999_P.ucas"), b"xx");
-        assert_eq!(check(&root, &m).same, None, "a changed file is another mod");
+        assert_eq!(chk(&root, &m).same, None, "a changed file is another mod");
     }
 }
 
@@ -380,18 +408,24 @@ mod tests {
 /// path, and the path that was dropped). `sources` lines up with the mods left, for `record_installed`.
 pub struct LeftOut {
     pub same: usize,
-    sources: Vec<Option<Source>>,
+    sources: Vec<Option<Pending>>,
+    /// The batch's `Later` hashes, made beside the install
+    later: Option<std::thread::JoinHandle<Vec<Option<Source>>>>,
 }
 
 pub fn leave_out_installed(root: &Path, mods: &mut Vec<crate::install_mod::InstallableMod>, window: &tauri::Window) -> LeftOut {
     use tauri::Emitter;
     let (mut sources, mut same) = (Vec::new(), Vec::new());
+    let mut listed = installed(root);
     mods.retain(|m| {
         if !m.enabled {
             sources.push(None);
             return true;
         }
-        let c = check(root, m);
+        let c = check(root, &listed, m);
+        if matches!(c.source, Some(Pending::Done(_))) {
+            listed = installed(root); // that hash took a while: an install that finished meanwhile counts for the next mods too
+        }
         match c.same {
             Some(p) => {
                 same.push(serde_json::json!({ "name": m.mod_name, "path": p, "source": m.source }));
@@ -406,16 +440,62 @@ pub fn leave_out_installed(root: &Path, mods: &mut Vec<crate::install_mod::Insta
     if !same.is_empty() {
         let _ = window.emit("xtra_install_same", &same);
     }
-    LeftOut { same: same.len(), sources }
+    let mut jobs = Vec::new();
+    for s in sources.iter_mut() {
+        if let Some(Pending::Later(_)) = s {
+            let Some(Pending::Later(job)) = s.replace(Pending::Nth(jobs.len())) else { unreachable!() };
+            jobs.push(job);
+        }
+    }
+    // no thread to be had: those mods install without a record, as when a hash fails
+    let later = (!jobs.is_empty()).then(|| std::thread::Builder::new().spawn(move || jobs.into_iter().map(|job| std::panic::catch_unwind(std::panic::AssertUnwindSafe(job)).ok().flatten()).collect()).ok()).flatten();
+    LeftOut { same: same.len(), sources, later }
 }
 
 /// After the install: each mod that went in records the source it came from (its name is final by now).
 pub fn record_installed(root: &Path, left: LeftOut, mods: &[crate::install_mod::InstallableMod], results: &[crate::install_mod::install_mod_logic::ModInstallResult]) {
+    let mut hashed: Vec<Option<Source>> = left.later.and_then(|h| h.join().ok()).unwrap_or_default();
     for (m, s) in mods.iter().zip(left.sources) {
         let Some(s) = s else { continue };
         if results.iter().any(|r| r.success && r.mod_name == m.mod_name) {
+            let s = match s {
+                Pending::Done(s) => s,
+                Pending::Later(hash) => match hash() {
+                    Some(s) => s,
+                    None => continue,
+                },
+                Pending::Nth(i) => match hashed.get_mut(i).and_then(Option::take) {
+                    Some(s) => s,
+                    None => continue,
+                },
+            };
             let dir = if m.install_subfolder.is_empty() { root.to_path_buf() } else { root.join(&m.install_subfolder) };
             record(root, &dir.join(format!("{}.pak", m.mod_name)), s);
+        }
+    }
+}
+
+#[cfg(test)]
+mod bench {
+    /// Times the already-installed check of one mod against a real mods folder (reads only):
+    ///   REPAKXTRA_BENCH_MOD=<a .pak with .utoc/.ucas> REPAKXTRA_BENCH_ROOT=<~mods> cargo test -p repak-x --bin REPAK-X dupes_bench -- --ignored --nocapture
+    #[test]
+    #[ignore]
+    fn dupes_bench() {
+        let (Some(m), Some(root)) = (std::env::var_os("REPAKXTRA_BENCH_MOD"), std::env::var_os("REPAKXTRA_BENCH_ROOT")) else { return };
+        let root = std::path::PathBuf::from(root);
+        let m = crate::install_mod::InstallableMod { mod_path: m.into(), iostore: true, enabled: true, ..Default::default() };
+        let t = std::time::Instant::now();
+        let n = super::installed(&root).len();
+        println!("[dupes timing] library walk ({n} mods): {:.3} s", t.elapsed().as_secs_f32());
+        let t = std::time::Instant::now();
+        let (files, base) = super::source_files(&m);
+        let _ = super::hash_files(&files, base.as_deref());
+        println!("[dupes timing] source hash: {:.3} s", t.elapsed().as_secs_f32());
+        for i in 0..3 {
+            let t = std::time::Instant::now();
+            let c = super::check(&root, &super::installed(&root), &m);
+            println!("[dupes timing] check {i}: {:.3} s (same: {:?})", t.elapsed().as_secs_f32(), c.same);
         }
     }
 }

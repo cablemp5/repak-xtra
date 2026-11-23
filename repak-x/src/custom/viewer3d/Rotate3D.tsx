@@ -107,6 +107,7 @@ export function Viewer3D({ viewKey, paths, set, control, hint = true, name, onRe
       if (state === 'ready' && attempt === 0) return open() // Try again makes the files anew
       if (state === 'overridden' && attempt === 0) { setPhase('overridden'); return }
       setPhase('making')
+      void import('./scene').catch(() => undefined) // three.js fetched and parsed while the kit makes the model, not after
       const made = await invoke<string>('generate_mod_viewer', { paths, set: set ?? null })
       if (!live) return
       if (made === 'ready') return open()

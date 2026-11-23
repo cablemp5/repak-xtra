@@ -517,7 +517,7 @@ def unpack_together(work, cfg, entries):
 
 def prepare_viewer(a, out_dir):
     """--viewer --prepare (xtra_viewer.rs prepare_mod_viewer): what a 3D view of these mods would mount, unpacked now if
-    an encrypted mod in it is not kept yet, the exporter started beside it, and nothing else. The app asks while a loadout
+    an encrypted mod in it is not kept yet, the exporter started for any mod (plain ones too), and nothing else. The app asks while a loadout
     page or a mod's details are open, so a click on Rotate in 3D finds both ready: a first view of an encrypted mod took
     20 to 24 s with no helper open, most of it the unpack and the game's mount. Mounts what viewer() mounts, in its
     order, so the kept containers are the ones it looks for."""
@@ -525,6 +525,8 @@ def prepare_viewer(a, out_dir):
     wanted = lambda k: not (a.key and k not in a.key) and not (a.only and not re.search(a.only, k, re.I))
     mods = {k: v for k, v in installed(a.mods).items() if wanted(k)}
     jobs = [(a.set, list(mods))] if a.set else [(k, [k]) for k in mods]
+    if any(keys and not any(unreadable(mods[k][1]) for k in keys) for _, keys in jobs):
+        warm_exporter(cfg)   # every readable view, plain too: a first Rotate in 3D with no helper open waited 3.6 to 6 s on it
     for key, keys in jobs:
         if not any(obfuscated(mods[k][1]) for k in keys) or any(unreadable(mods[k][1]) for k in keys):
             continue   # nothing to unpack, or nothing that can be read

@@ -6,6 +6,7 @@
 mod asset_explorer;
 mod xtra_classify; // repakxtra: extra mod types, Project Galacta check
 mod xtra_dupes; // repakxtra: same-content installs and Check Conflicts' Duplicates
+mod xtra_unpacked; // repakxtra: a dropped archive is unpacked once
 mod xtra_activity; // repakxtra: what changed before a crash (installs, on and off, updates)
 mod xtra_ops; // repakxtra: game open, file in use, and name taken, one dialog each
 mod xtra_made; // repakxtra: installed mods keep when they were made (the Needs VFX update check)
@@ -1281,9 +1282,6 @@ async fn parse_dropped_files(
 
             // Check if it's an archive file (zip, rar, 7z)
             if ext == "zip" || ext == "rar" || ext == "7z" {
-                use crate::install_mod::install_mod_logic::archives::{
-                    extract_7z, extract_rar, extract_zip,
-                };
                 use walkdir::WalkDir;
 
                 let _ = window.emit(
@@ -1291,22 +1289,12 @@ async fn parse_dropped_files(
                     format!("[Detection] Archive detected: {} ({})", mod_name, ext),
                 );
 
-                // Extract archive to temp directory for analysis
-                let temp_dir = tempfile::tempdir().ok();
+                // repakxtra: unpacked once, and the folder is kept for Install once read (xtra_unpacked)
+                let temp_dir = crate::xtra_unpacked::unpack_for_drop(&path).ok();
                 if let Some(ref temp) = temp_dir {
-                    let temp_path = temp.path().to_str().unwrap();
+                    let temp_path = temp.dir.to_str().unwrap();
 
-                    // Extract based on type
-                    let extract_result = if ext == "zip" {
-                        extract_zip(path.to_str().unwrap(), temp_path)
-                    } else if ext == "rar" {
-                        extract_rar(path.to_str().unwrap(), temp_path)
-                            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))
-                    } else {
-                        extract_7z(path.to_str().unwrap(), temp_path)
-                    };
-
-                    if extract_result.is_ok() {
+                    {
                         let _ = window
                             .emit("install_log", "[Detection] Archive extracted successfully");
 
@@ -1324,7 +1312,7 @@ async fn parse_dropped_files(
                         // repakxtra: a mod loader in the archive is Setup's, never a row. An archive of only loaders lists nothing
                         let paks_found = pak_files_in_archive.len();
                         pak_files_in_archive.retain(|p| !crate::xtra_setup::is_managed_loader(p));
-                        if paks_found > 0 && pak_files_in_archive.is_empty() { continue; }
+                        if paks_found > 0 && pak_files_in_archive.is_empty() { temp.keep.set(false); continue; }
 
                         // repakxtra: with a loader left out, the rest lists by pak name as in a multi-pak archive (the install matches by it)
                         if pak_files_in_archive.len() > 1 || pak_files_in_archive.len() < paks_found {
@@ -1561,9 +1549,6 @@ async fn parse_dropped_files(
                                 info!("{}", summary);
                                 let _ = window.emit("install_log", &summary);
 
-                                // Clean up temp dir
-                                drop(temp_dir);
-
                                 // Check if files contain uassets or raw assets
                                 use crate::install_mod::{
                                     contains_raw_files, contains_uasset_files,
@@ -1635,9 +1620,6 @@ async fn parse_dropped_files(
                                     let summary = format!("[Detection] Archive folder results: texture={} (mesh fixes automatic)", has_texture);
                                     info!("{}", summary);
                                     let _ = window.emit("install_log", &summary);
-
-                                    // Clean up temp dir
-                                    drop(temp_dir);
 
                                     // Check if content files contain uassets or raw assets
                                     use crate::install_mod::{
@@ -2927,8 +2909,9 @@ async fn install_mods(
     window: Window,
     state: State<'_, Arc<Mutex<AppState>>>,
 ) -> Result<(), String> {
-    let _mutation = crate::xtra_mutation::edit()?;
-    crate::xtra_identity::upstream_guard()?; // repakxtra: not while Repak X is open (both change the same files)
+    // repakxtra: a refused install lets go of the drop's unpacked archives (xtra_unpacked), the panel is closed by now
+    let _mutation = crate::xtra_mutation::edit().inspect_err(|_| xtra_unpacked::forget())?;
+    crate::xtra_identity::upstream_guard().inspect_err(|_| xtra_unpacked::forget())?; // repakxtra: not while Repak X is open (both change the same files)
     use std::sync::atomic::{AtomicBool, AtomicI32};
     use std::sync::Arc as StdArc;
 
@@ -2985,6 +2968,7 @@ async fn install_mods(
     let mut installable_mods: Vec<_> = unique_paths.iter().flat_map(|p| {
         map_paths_to_mods(std::slice::from_ref(p)).into_iter().map(move |m| crate::install_mod::InstallableMod { source: p.clone(), ..m })
     }).collect();
+    xtra_unpacked::forget(); // repakxtra: drops of rows that were left out
     // repakxtra: a path that gave no mod at all (unreadable or gone since the card opened) is a failed one too, so a
     // partial install never reads as complete
     let unmapped: Vec<serde_json::Value> = unique_paths.iter().filter(|p| !installable_mods.iter().any(|m| &m.source == *p))
@@ -8879,6 +8863,7 @@ fn main() {
             xtra_trash::restore_trashed_mods,
             xtra_trash::list_trashed_mods,
             xtra_dupes::xtra_find_duplicates, // repakxtra
+            xtra_unpacked::forget_unpacked_archives, // repakxtra
             xtra_trash::empty_trashed_mods,
             xtra_previews::list_mod_previews, xtra_previews::delete_loadout_previews,
             xtra_previews::list_preview_files, // repakxtra: pictures load as files (asset protocol)
