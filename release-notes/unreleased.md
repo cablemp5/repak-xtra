@@ -33,3 +33,8 @@
 - Reduced repeated progress updates and work-folder cleanup delays in Mod Updater batches
 - Cached mod class listings across restarts and refreshed them when companion files changed
 - Deferred background texture checks until the Mod Updater finished its batch
+- Fixed Rotate in 3D waiting 4 to 6 seconds for the exporter on the first plain mod opened: it now starts while the details panel is open
+- Fixed a dropped archive being unpacked twice: Install reuses the folder from the drop (about 2 seconds saved on a 160 MB pack)
+- Fixed the already-installed check hashing every mod before an install: it now hashes only when a size matches and lists the library once
+- Changed Set up previews to install the kit and Blender at the same time on a new PC, each with its own progress line
+- Reduced the wait for the preview list, kit checks, and the first 3D view
