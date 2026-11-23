@@ -724,6 +724,7 @@ function App() {
       // Check if any dropped items are folders with uassets that need proper processing
       try {
         const modsData = await invoke('parse_dropped_files', { paths }) as DroppedModParse[]
+        invoke('forget_unpacked_archives').catch(() => undefined) // repakxtra: quick organize unpacks on its own, the drop's unpacked archives go
         const hasFolderWithUassets = modsData.some((mod: DroppedModParse) =>
           mod.is_dir === true && mod.contains_uassets !== false
         )
@@ -736,7 +737,6 @@ function App() {
             'Folder mods with UAssets need to be processed. Please drop them on the Install Mods area.',
             { duration: 8000 }
           )
-          invoke('forget_unpacked_archives').catch(() => undefined) // repakxtra: nothing installs, the drop's unpacked archives go
           return
         }
       } catch (parseError) {

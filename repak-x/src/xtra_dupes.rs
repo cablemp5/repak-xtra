@@ -193,7 +193,10 @@ pub fn check(root: &Path, mods: &[Installed], m: &crate::install_mod::Installabl
     let sized_copy = m.iostore && mods.iter().any(|i| i.size == size && i.files.len() == 3);
     let source_of = move |plain: &str| Source { size, hash: format!("{plain}|{opts}"), installed: 0, at: 0 };
     if !sized_record && !sized_copy {
-        let later = move || hash_files(&files, base.as_deref()).ok().map(|plain| source_of(&plain));
+        // each file's size and change time now: a source changed before its turn on the hash thread gets no record
+        let seen = |files: &[PathBuf]| files.iter().map(|f| std::fs::metadata(f).ok().map(|m| (m.len(), m.modified().ok()))).collect::<Vec<_>>();
+        let before = seen(&files);
+        let later = move || hash_files(&files, base.as_deref()).ok().filter(|_| seen(&files) == before).map(|plain| source_of(&plain));
         return Check { same: None, source: Some(Pending::Later(Box::new(later))) };
     }
     let Ok(plain) = hash_files(&files, base.as_deref()) else { return Check { same: None, source: None } };
@@ -410,13 +413,16 @@ pub struct LeftOut {
 pub fn leave_out_installed(root: &Path, mods: &mut Vec<crate::install_mod::InstallableMod>, window: &tauri::Window) -> LeftOut {
     use tauri::Emitter;
     let (mut sources, mut same) = (Vec::new(), Vec::new());
-    let listed = installed(root);
+    let mut listed = installed(root);
     mods.retain(|m| {
         if !m.enabled {
             sources.push(None);
             return true;
         }
         let c = check(root, &listed, m);
+        if matches!(c.source, Some(Pending::Done(_))) {
+            listed = installed(root); // that hash took a while: an install that finished meanwhile counts for the next mod
+        }
         match c.same {
             Some(p) => {
                 same.push(serde_json::json!({ "name": m.mod_name, "path": p, "source": m.source }));
@@ -439,7 +445,7 @@ pub fn leave_out_installed(root: &Path, mods: &mut Vec<crate::install_mod::Insta
         }
     }
     // no thread to be had: those mods install without a record, as when a hash fails
-    let later = (!jobs.is_empty()).then(|| std::thread::Builder::new().spawn(move || jobs.into_iter().map(|job| job()).collect()).ok()).flatten();
+    let later = (!jobs.is_empty()).then(|| std::thread::Builder::new().spawn(move || jobs.into_iter().map(|job| std::panic::catch_unwind(std::panic::AssertUnwindSafe(job)).ok().flatten()).collect()).ok()).flatten();
     LeftOut { same: same.len(), sources, later }
 }
 

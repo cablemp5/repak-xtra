@@ -8,12 +8,10 @@ use std::sync::Mutex;
 /// (the archive's stamp when it was unpacked, its folder)
 static KEPT: Mutex<Vec<(String, PathBuf)>> = Mutex::new(Vec::new());
 
-/// The archive as it is now: path, size, change time, and creation time, so a changed or replaced archive (also one copied
-/// over it with its old change time kept) is unpacked again.
+/// The archive as it is now: its path and a SHA-256 of its bytes, so any change to it (also one that keeps its size and
+/// times) unpacks it again. About 0.15 s for 162 MB, against the 1.8 to 2 s unpack it saves.
 fn stamp(archive: &Path) -> Option<String> {
-    let m = std::fs::metadata(archive).ok()?;
-    let ns = |t: std::io::Result<std::time::SystemTime>| t.ok().and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok()).map(|d| d.as_nanos());
-    Some(format!("{}|{}|{}|{:?}", archive.display(), m.len(), ns(m.modified())?, ns(m.created())))
+    Some(format!("{}|{}", archive.display(), crate::xtra_update::sha256_file(archive).ok()?))
 }
 
 /// Unpacks into a fresh run folder. A failed unpack leaves no folder behind.
@@ -119,8 +117,12 @@ mod tests {
         let gone = skipped.dir.clone();
         drop(skipped);
         assert!(!gone.exists() && dropped.exists());
-        std::fs::OpenOptions::new().append(true).open(&zip_path).unwrap().write_all(b" ").unwrap();
-        // a changed archive (size differs) never reuses the old folder
+        let mut bytes = std::fs::read(&zip_path).unwrap();
+        let at = std::fs::metadata(&zip_path).unwrap().modified().unwrap();
+        *bytes.last_mut().unwrap() ^= 1;
+        std::fs::write(&zip_path, bytes).unwrap();
+        std::fs::File::options().write(true).open(&zip_path).unwrap().set_modified(at).unwrap();
+        // the same size and change time with other bytes never reuses the old folder
         let after = super::take_or_unpack(&zip_path);
         assert!(after.map_or(true, |d| d != dropped));
         super::forget();
@@ -141,5 +143,8 @@ mod tests {
             println!("[unpack timing] {i}: {:.3} s", t.elapsed().as_secs_f32());
             let _ = std::fs::remove_dir_all(d);
         }
+        let t = std::time::Instant::now();
+        super::stamp(std::path::Path::new(&a)).unwrap();
+        println!("[unpack timing] stamp: {:.3} s", t.elapsed().as_secs_f32());
     }
 }
