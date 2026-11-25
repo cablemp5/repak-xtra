@@ -38,3 +38,16 @@
 - Fixed the already-installed check hashing every mod before an install: it now hashes only when a size matches and lists the library once
 - Changed Set up previews to install the kit and Blender at the same time on a new PC, each with its own progress line
 - Reduced the wait for the preview list, kit checks, and the first 3D view
+- Changed the header toolbar buttons to drop to icons with tooltips when the window gets narrow, keeping Launch labeled
+- Fixed dialogs and modals overlapping the top title bar
+- Added Clear all with an in-place confirmation to the Sounds tab, moved Built-in and Replace next to Clear with a divider, and shortened the drop hint
+- Changed toast notifications to pause their auto-dismiss timers while a modal is open and stay underneath dialogs
+- Changed the Mod Updater to expand Needs an update and Failed by default, use plain-English game mapping labels, and give Add .utoc a quiet look
+- Changed Setup to highlight one blue primary next step, show Incomplete chips in amber, and use a subtle red hover on Remove
+- Unified crash-finding wording across Settings, Crash reports, and Tools under Find the crashing mod
+- Added a reload error message to Project Galacta in Setup when checking its status fails
+- Changed mod priority to a 1 to 7 stepper with Unranked and a separate Special (!) switch, keeping priority and Special across reinstalls, tags, and previews
+- Moved Storage cleanup to its own Settings > Storage tab, moved Preview rim light into Settings > Library, and merged Reset into one Reset to defaults confirmation row
+- Made the Mods folder path editable directly in Settings with a leading fade, and added sidebar-label shortcuts to Settings search
+- Updated Settings > Done to a blue primary button, replaced remaining non-Lucide icons, and standardized sentence case across panels and dialogs
+- Removed redundant full-on dots from Loadout pages and widened the spacing before row remove buttons

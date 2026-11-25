@@ -11,7 +11,7 @@ import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
 import { open as pick } from '@tauri-apps/plugin-dialog'
 import { motion } from 'framer-motion'
-import { ArrowRight, Bell, Check, ChevronDown, CircleAlert, CircleCheck, CircleX, Gamepad2, ExternalLink, FileCode, FolderOpen, LoaderCircle, Lock, MousePointerClick, Package, Plus, ShieldCheck, ToggleRight, Upload, VolumeX } from 'lucide-react'
+import { ArrowRight, Bell, Check, ChevronDown, CircleAlert, CircleCheck, Gamepad2, ExternalLink, FileCode, FolderOpen, FolderPlus, LoaderCircle, Lock, MousePointerClick, Package, Plus, ShieldCheck, ToggleRight, Upload, VolumeX } from 'lucide-react'
 import type { useAlert } from '../components/AlertHandler'
 import Switch from '../components/ui/Switch'
 import { DoctorProblems } from './SetupPanel'
@@ -164,7 +164,7 @@ const ask: Page = {
     <div className="ob-choices">
       <Choice icon={<CircleCheck size={18} className="ob-yes" aria-hidden="true" />} onClick={() => f.answer(true)} stage={<Fan />}
         title="Yes, I have mods" text="Setup runs by itself, then your mods become loadouts." />
-      <Choice icon={<CircleX size={18} className="ob-no" aria-hidden="true" />} onClick={() => f.answer(false)} title="Not yet" text="Three short steps get mods working, then your first mod and loadout."
+      <Choice icon={<FolderPlus size={18} className="ob-no" aria-hidden="true" />} onClick={() => f.answer(false)} title="Not yet" text="Three short steps get mods working, then your first mod and loadout."
         stage={<span className="ob-fan ob-ghosts"><i /><i><Plus size={22} /></i><i /></span>} />
     </div>
   ),

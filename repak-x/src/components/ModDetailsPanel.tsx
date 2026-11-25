@@ -2,8 +2,7 @@ import { useState, useEffect, useMemo, useRef } from 'react'
 import { useHoverTextReveal } from '../hooks/useHoverTextReveal'
 import { invoke } from '@tauri-apps/api/core'
 import HoverTip from '../custom/HoverTip' // repakxtra: in place of MUI's Tooltip
-import { FaTag, FaExchangeAlt } from "react-icons/fa"
-import { VscListTree } from "react-icons/vsc"
+import { ArrowLeftRight, ListTree, Tag } from 'lucide-react' // repakxtra: one icon set
 import FileTree from './FileTree'
 import { formatFileSize } from '../utils/format'
 import { detectHeroesWithData } from '../utils/heroes'
@@ -192,7 +191,7 @@ export default function ModDetailsPanel({ mod, initialDetails, onClose, characte
             title="Replace this mod's file with another .pak"
             style={{ marginLeft: 'auto', flexShrink: 0 }}
           >
-            <FaExchangeAlt /> Replace file…
+            <ArrowLeftRight size="1em" /> Replace file…
           </button>
         )}
       </div>
@@ -335,7 +334,7 @@ export default function ModDetailsPanel({ mod, initialDetails, onClose, characte
                 <div className="tags-list">
                   {mod.custom_tags.map((tag, idx) => (
                     <span key={idx} className="tag">
-                      <FaTag />
+                      <Tag size="1em" />
                       {tag}
                     </span>
                   ))}
@@ -372,7 +371,7 @@ export default function ModDetailsPanel({ mod, initialDetails, onClose, characte
                       onClick={onShowInAssetExplorer}
                       title="Show in Asset Explorer"
                     >
-                      <VscListTree />
+                      <ListTree size="1em" />
                     </button>
                   )}
                 </div>

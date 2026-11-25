@@ -83,8 +83,10 @@ const ORIGINALS_NOTE: Record<Originals, string> = {
 }
 /** A rivals-depot USMAP's release, from its file name (5.3.2-3939753+++depot_marvel+S10.5_release-Marvel.usmap). */
 const usmapRelease = (name?: string | null) => name?.match(/\+([^+]+?)-Marvel\.usmap$/i)?.[1]?.replace(/_/g, ' ') ?? null
-// every group and Advanced start folded each time the window opens: a run unfolds what it works on, and that is not kept
+// every group and Advanced start folded each time the window opens, but Needs an update and Failed (what there is to do).
+// A run unfolds what it works on, a fold by hand sticks for the session, and none of it is kept
 const GROUP_IDS = ['added', 'needs', 'waiting', 'failed', 'all', 'updating', 'updated']
+const START_FOLDED = GROUP_IDS.filter(id => id !== 'needs' && id !== 'failed')
 const fileName = (p: string) => p.replace(/\\/g, '/').split('/').pop() ?? p
 const plural = (n: number, word: string, many = `${word}s`) => `${n.toLocaleString()} ${n === 1 ? word : many}`
 /** A folded panel's content: out of reach of Tab and screen readers (the React 18 types this app uses lack inert). */
@@ -146,6 +148,20 @@ function placedText(r: VfxReport) {
     + (p.replaced ? ' An earlier copy is in Recently deleted.' : '')
 }
 
+/** Rewrites technical USMAP/build error strings into plain English, keeping the build numbers for the tooltip. */
+function plainReportError(error: string): { text: string; tip?: string } {
+  const builds = [...error.matchAll(/game build (\d+)/g)].map(m => m[1])
+  const tip = builds.length >= 2 ? `Mappings for build ${builds[0]}, the game is on build ${builds[1]}` : builds.length === 1 ? `Game build ${builds[0]}` : undefined
+  const text = error
+    .replace(/the saved USMAP \(game build \d+\)/g, 'the current game mappings')
+    .replace(/once the USMAP for game build \d+ is out/g, 'once the mappings for this game update are out')
+    .replace(/the USMAP for game build \d+/g, 'the mappings for this game update')
+    .replace(/If the USMAP in Advanced is current/g, 'If the game mappings in Advanced are current')
+    .replace(/the USMAP in Advanced/g, 'the game mappings in Advanced')
+    .replace(/\bUSMAP\b/g, 'game mappings')
+  return { text, tip }
+}
+
 /** A run's report under its pill. A failed one says what happened to the original and offers the one next step that
  *  fits: Retry in Best effort (a rejection only Strict makes), Try again, or the mod's page for a newer copy. */
 function Report({ r, path, on, onRetry, onRetryBest, onUsmap, busy }: { r: VfxReport; path: string; on: boolean; onRetry: () => void; onRetryBest: () => void; onUsmap: () => void; busy: boolean }) {
@@ -159,13 +175,14 @@ function Report({ r, path, on, onRetry, onRetryBest, onUsmap, busy }: { r: VfxRe
   </ul>
   const next = r.status === 'failed' ? failedNext(r) : r.status === 'cancelled' ? 'again' : null
   const page = next === 'page' ? sourceOf(path) : undefined // by the mod's own file: Nexus sources are kept by its name
+  const err = r.error && r.status !== 'cancelled' ? plainReportError(r.error) : null
   return (
     <div className="vf-report">
       {r.status === 'fixed'
         ? <p className="vf-note">{r.counts.updated ? `Rebuilt ${r.counts.updated.toLocaleString()} of ${plural(r.assets.length, 'asset')} with ${plural(r.counts.changes, 'edit')}. ` : ''}{r.counts.left ? `${leftText(r)} ` : ''}{ownText(r) ? `${ownText(r)} ` : ''}{placedText(r)}</p>
-        // a cancelled run's pill already says so: no "Cancelled." under it. An error that sends the user to the USMAP
+        // a cancelled run's pill already says so: no "Cancelled." under it. An error that sends the user to the mappings
         // links to it (Advanced opens on it)
-        : r.error && r.status !== 'cancelled' && <p className="vf-note">{r.error}{/USMAP in Advanced/.test(r.error) && <>{' '}<button type="button" className="su-link" onClick={onUsmap}>Open the USMAP setting</button></>}</p>}
+        : err && <p className="vf-note" title={err.tip}>{err.text}{/USMAP in Advanced/.test(r.error!) && <>{' '}<button type="button" className="su-link" onClick={onUsmap}>Open the mappings setting</button></>}</p>}
       {(r.status === 'failed' || r.status === 'mappings') && !r.turnedOff && <p className="vf-note">No replacement was installed. The original keeps its name and loadouts, and is {on ? 'on' : 'off'} as before.</p>}
       {r.offError && <p className="vf-note">Safety could not turn it off ({r.offError.replace(/[.!]?\s*$/, '')}), so it is still on.</p>}
       {next === 'best' && <button type="button" className="row-action" disabled={busy} onClick={onRetryBest} title="Update this mod again with Best effort, which installs what could be rebuilt"><RotateCcw size={13} aria-hidden="true" /> Retry in Best effort</button>}
@@ -219,7 +236,7 @@ function Row({ mod, rowKey, loadouts, run, needs, partial, waits, made, picked, 
       {waits && !run?.report ? <span className="vf-needs is-waiting" tabIndex={0} title={needs}>Waiting for mappings</span>
         : needs && mod.risky && !run && <span className="vf-needs" tabIndex={0} title={`${needs} Update turns it off: nothing here can rebuild it.`}>May crash, turns off</span>}
       {made !== undefined && !run && !needs && <span className={`vf-made${made ? ' is-partial' : ''}`} tabIndex={0} title={made
-        ? "Updated here for this game version, without the Niagara files only the game's new USMAP can rebuild. They show the game's usual colors until then."
+        ? "Updated here for this game version, without the Niagara files only the game's new mappings can rebuild. They show the game's usual colors until then."
         : 'Updated here for this game version.'}>{made ? 'Partly updated' : 'Updated'}</span>}
       {mod.niagara && !partial && <span className="vf-niagara" tabIndex={0} title="Has Niagara effects (particle systems). When a game update changes them, the update rebuilds them on the new game files.">Niagara</span>}
       {partial && !run?.report ? (
@@ -258,7 +275,7 @@ function Group({ title, count, tone, open, onFold, all, none, busy, onPick, abou
   title: string; count: number; tone?: 'needs' | 'failed' | 'busy' | 'done' | 'waiting'; open: boolean; onFold: () => void; all: boolean; none: boolean; busy: boolean; onPick: (on: boolean) => void
   /** one line under the heading, folded with the rows */
   about?: string
-  /** false: its mods cannot be ticked (they wait), so no Select all / Clear */
+  /** false: nothing to tick there (its mods wait, update now, or are done), so no Select all / Clear */
   selectable?: boolean; children: React.ReactNode
 }) {
   return (
@@ -354,7 +371,9 @@ export function VfxUpdaterPanel() {
   const [picked, setPicked] = useState<Set<string>>(new Set()) // norm(utoc)
   const [q, setQ] = useState('')
   const [hero, setHero] = useState('') // '' = every hero (the same filter as a loadout's Add mods)
-  const [foldedIds, setFoldedIds] = useState<string[]>(GROUP_IDS)
+  const [foldedIds, setFoldedIds] = useState<string[]>(START_FOLDED)
+  const [filterClosed, setFilterClosed] = useState<string[]>([]) // manual folds while a search or hero filter is active
+  useEffect(() => { setFilterClosed([]) }, [q, hero])
   const loadouts = useLoadouts()
   const [open, setOpen] = useState<Set<string>>(new Set())
   const [paks, setPaks] = useState<string | null>(null)
@@ -574,7 +593,11 @@ export function VfxUpdaterPanel() {
       const key = norm(utocOf(r.placed?.fixed ?? r.mod))
       setRuns(rs => ({ ...rs, [key]: { status: r.status, report: r } }))
       setOpen(o => new Set(o).add(key))
-      setFoldedIds(f => f.filter(x => !['needs', 'waiting', 'failed', 'updated'].includes(x))) // wherever its row lands
+      setQ('')
+      setHero('') // clear active search or hero filters so the reported mod is always visible
+      const reportGroup = r.status === 'fixed' ? 'updated' : r.status === 'failed' ? 'failed' : r.status === 'mappings' ? 'waiting' : 'needs'
+      setFoldedIds(f => f.filter(x => x !== reportGroup)) // reveal only this report's group, keeping other manual folds
+      setFilterClosed(f => f.filter(x => x !== reportGroup))
       setReload(n => n + 1)
       setTimeout(() => document.querySelector(`[data-key="${CSS.escape(key)}"]`)?.scrollIntoView({ block: 'center', behavior: 'smooth' }), 600)
     }
@@ -632,7 +655,7 @@ export function VfxUpdaterPanel() {
   }
 
   const elsewhere = busy || !held || held.token === myToken.current ? null : held
-  const lock = busy ? null : elsewhere ? `Updating ${elsewhere.name ?? 'a mod'} elsewhere. Update waits for it.` : checking ? 'Checking for a newer USMAP…' : !usmap ? 'Choose a USMAP file in Advanced first' : usmapOk === false ? 'The USMAP file is missing' : !paks ? 'Set the game folder in Setup first' : null
+  const lock = busy ? null : elsewhere ? `Updating ${elsewhere.name ?? 'a mod'} elsewhere. Update waits for it.` : checking ? 'Checking for newer game mappings…' : !usmap ? 'Choose a game mappings file in Advanced first' : usmapOk === false ? 'The game mappings file is missing' : !paks ? 'Set the game folder in Setup first' : null
 
   const run = useCallback(async (keys?: string[], policy?: RepairPolicy) => {
     const byKey = new Map((modsRef.current ?? []).map(m => [norm(m.utoc), m]))
@@ -649,10 +672,11 @@ export function VfxUpdaterPanel() {
     const token = newRunToken()
     if (!(await claimRun(token, byKey.get(todo[0])?.name))) { addLog('Another update is running. Try again when it is done.', 'warning'); return }
     myToken.current = token
-    // the run in view: a search that hides a mod clears, and Updating, where its mods move, unfolds
-    if (todo.some(k => !groupOf.current.has(k))) setQ('')
+    // the run in view: a filter that hides a mod clears, and Updating, where its mods move, unfolds
+    if (todo.some(k => !groupOf.current.has(k))) { setQ(''); setHero('') }
     const unfold = new Set(['updating'])
     setFoldedIds(f => (f.some(id => unfold.has(id)) ? f.filter(id => !unfold.has(id)) : f))
+    setFilterClosed(f => (f.some(id => unfold.has(id)) ? f.filter(id => !unfold.has(id)) : f))
     setBusy(true); setBatch(todo); setLastTook(null); setEnded(null); cancel.current = false
     const startedAt = performance.now()
     todo.forEach(k => patch(k, { status: 'waiting', step: undefined, sub: undefined, report: undefined }))
@@ -865,6 +889,10 @@ export function VfxUpdaterPanel() {
   ]
   const inLoadouts = (m: Mod) => { const k = canonKey(modKey(m.path)); return loadouts.filter(l => l.on.some(x => canonKey(x) === k)).map(l => ({ id: l.id, name: l.name })) }
   const fold = (id: string) => setFoldedIds(f => (f.includes(id) ? f.filter(x => x !== id) : [...f, id]))
+  const filtering = Boolean(needle || hero)
+  const toggleGroup = (id: string) => filtering
+    ? setFilterClosed(f => (f.includes(id) ? f.filter(x => x !== id) : [...f, id]))
+    : fold(id)
   // a ticked mod that waits for the USMAP is skipped by Update, so it is not counted (its tick shows off)
   const todo = [...picked].filter(k => !isDone(runs[k]?.status) && !waits.has(k)).length
   const runningAt = batch.findIndex(k => runs[k]?.status === 'running')
@@ -918,7 +946,7 @@ export function VfxUpdaterPanel() {
             {q && <button type="button" className="lo-icon vf-search-clear" onClick={() => setQ('')} aria-label="Clear the search" title="Clear the search"><X size={14} /></button>}
           </label>
           <HeroFilter heroes={heroes} value={hero} onChange={setHero} always />
-          <button type="button" className="lo-text-btn is-primary vf-add" disabled={busy || mods === null} onClick={() => void addUtoc()}
+          <button type="button" className="lo-text-btn vf-add" disabled={busy || mods === null} onClick={() => void addUtoc()}
             title="Update a mod this list does not show: choose its .utoc file"><FilePlus size={14} aria-hidden="true" /> Add .utoc</button>
         </div>
         {loadError && (
@@ -945,8 +973,10 @@ export function VfxUpdaterPanel() {
         {behind && !usmapMissing && (
           <p className="vf-warn" role="note">
             <AlertTriangle size={14} aria-hidden="true" />
-            <span>The USMAP is for game build {cl} and the game is on {build!.cl}. {waits.size
-              ? `${plural(waits.size, 'mod')} ${waits.size === 1 ? 'uses' : 'use'} files this update changed and ${waits.size === 1 ? 'waits' : 'wait'} for the new USMAP. Every other mod updates now`
+            <span title={`Mappings for build ${cl}, the game is on build ${build!.cl}`}>{Boolean(usmapInfo && !usmapInfo.skipped && (usmapInfo.upToDate || usmapInfo.updated) && usmap && usmapInfo.localPath && norm(usmap) === norm(usmapInfo.localPath))
+              ? 'The game updated and its new mappings are not out yet.'
+              : 'The selected game mappings are older than the game.'} {waits.size
+              ? `${plural(waits.size, 'mod')} ${waits.size === 1 ? 'uses' : 'use'} files this update changed and ${waits.size === 1 ? 'waits' : 'wait'} for them. Every other mod updates now`
               : 'This update did not change the files any of these mods rebuild, so they all update now'}.{' '}
               <button type="button" className="su-link" disabled={checking || busy} onClick={() => usmapCheck(true)}>{checking ? 'Checking…' : 'Check for updates'}</button></span>
           </p>
@@ -954,11 +984,11 @@ export function VfxUpdaterPanel() {
         {mods === null
           ? <ModRowsSkeleton />
           : shown.length === 0
-            ? (loadError && !needle ? null : <p className="lp-empty">{needle || hero ? `No mods match${needle ? ` “${q.trim()}”` : ''}${hero ? ` for ${hero}` : ''}.` : 'No VFX mods in the mods folder. VFX mods and mods with material instances (MI_ files) appear here. Add .utoc takes any other mod.'}</p>)
+            ? (loadError ? null : <p className="lp-empty">{needle || hero ? `No mods match${needle ? ` “${q.trim()}”` : ''}${hero ? ` for ${hero}` : ''}.` : 'No VFX mods in the mods folder. VFX mods and mods with material instances (MI_ files) appear here. Add .utoc takes any other mod.'}</p>)
             : <div className="vf-groups">{groups.map(g => g.mods.length > 0 && (
               <Group key={g.id} title={g.title} count={g.count} tone={g.id === 'needs' ? 'needs' : g.id === 'failed' ? 'failed' : g.id === 'updating' ? 'busy' : g.id === 'updated' ? 'done' : g.id === 'waiting' ? 'waiting' : undefined} busy={busy} all={g.all} none={g.none}
-                about={g.id === 'waiting' ? MAPPINGS_NOTE : undefined} selectable={g.id !== 'waiting'}
-                open={Boolean(needle || hero) || !foldedIds.includes(g.id)} onFold={() => fold(g.id)} onPick={on => userPick(g.keys, on)}>
+                about={g.id === 'waiting' ? MAPPINGS_NOTE : undefined} selectable={!['waiting', 'updating', 'updated'].includes(g.id)}
+                open={filtering ? !filterClosed.includes(g.id) : !foldedIds.includes(g.id)} onFold={() => toggleGroup(g.id)} onPick={on => userPick(g.keys, on)}>
                 <ul className="mod-rows vf-rows">
                   {g.mods.map(m => {
                     const key = norm(m.utoc)
@@ -976,7 +1006,7 @@ export function VfxUpdaterPanel() {
         {usmapMissing && (
           <p className="vf-warn">
             <AlertTriangle size={14} aria-hidden="true" />
-            <span>{usmap ? 'The USMAP file is missing.' : 'No USMAP yet.'} Updates need the game's property layout.{' '}
+            <span>{usmap ? 'The game mappings file is missing.' : 'No game mappings yet.'} Updates need them to read the game's files.{' '}
               <button type="button" className="su-link" disabled={checking || busy} onClick={() => usmapCheck(true)}>Fetch latest</button> or{' '}
               <button type="button" className="su-link" disabled={busy} onClick={browseUsmap}>browse for one</button>.</span>
           </p>

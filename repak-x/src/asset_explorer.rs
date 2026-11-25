@@ -242,31 +242,16 @@ fn strip_one_priority_suffix(name: &str) -> String {
     name[..digits_start - 1].to_string()
 }
 
-/// Load priority for a mod, from its file stem.
-///
-/// Mirrors the rule `get_pak_files` applies: a `!` prefix is priority 0, and
-/// otherwise a `_999…_P` suffix of seven or more nines maps to a 1-based
-/// priority. Kept in sync by hand so the number the explorer shows on a
-/// conflicting asset is the same one the mods list shows.
+/// Load priority for a mod, from its file stem: a `_999…_P` suffix of seven or
+/// more nines maps to a 1-based priority (the install default `_9999999_P` is
+/// 1, eight nines is 2), 0 when it has none (unranked). A leading `!` (Special)
+/// is read apart, by `xtra_conflicts::rank`, so this is the number every window
+/// shows.
 pub fn mod_priority(file_stem: &str) -> usize {
-    if file_stem.starts_with('!') {
-        return 0;
-    }
-    let Some(base) = file_stem.strip_suffix("_P") else {
-        return 0;
-    };
-    let digits_start = match base.rfind(|c: char| !c.is_ascii_digit()) {
-        Some(i) if base[..i].len() == i && base.as_bytes()[i] == b'_' => i + 1,
-        _ => return 0,
-    };
-    let nines = &base[digits_start..];
-    if nines.is_empty() || !nines.chars().all(|c| c == '9') {
-        return 0;
-    }
-    if nines.len() >= 7 {
-        nines.len() - 6
-    } else {
-        0
+    let base = crate::install_mod::install_mod_logic::BASE_MOD_NINES;
+    match file_stem.strip_suffix("_P").and_then(|b| b.rsplit_once('_')) {
+        Some((_, n)) if n.len() >= base && n.bytes().all(|c| c == b'9') => n.len() + 1 - base,
+        _ => 0,
     }
 }
 
@@ -283,8 +268,8 @@ pub struct AssetExplorerMod {
     pub path: String,
     pub display_name: String,
     pub enabled: bool,
-    /// Load priority as the mods list computes it (0 = `!` prefix, then the
-    /// nines run). Shown on conflicting assets so the fix is one number away.
+    /// Load priority as the mods list computes it (the nines run, 0 =
+    /// unranked). Shown on conflicting assets so the fix is one number away.
     pub priority: usize,
     pub folder_id: Option<String>,
     pub category: String,
@@ -370,6 +355,8 @@ mod tests {
         assert_eq!(mod_priority("!Cool_Mod"), 0);
         assert_eq!(mod_priority("Cool_Mod_9999999_P"), 1);
         assert_eq!(mod_priority("Cool_Mod_99999999_P"), 2);
+        assert_eq!(mod_priority("!Cool_Mod_9999999_P"), 1, "! is read apart");
+        assert_eq!(mod_priority("Cool_Mod_9999999_P_9999999_P"), 1);
         // Fewer than seven nines, or digits that are not all nines, is not a
         // priority suffix.
         assert_eq!(mod_priority("Cool_Mod_999_P"), 0);

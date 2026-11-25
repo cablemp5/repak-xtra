@@ -36,7 +36,7 @@ const isOff = (path: string) => /\.bak_repak$/i.test(path)
 /** Mounted once in App: listens for openWhy. */
 /** `onSetPriority`: the Library's priority change (App.handleSetPriority), which guards a running game, reloads the list,
  *  refreshes the selection a rename left stale, and says when it fails. */
-export function WhyNotWorking({ alert, onSetPriority }: { alert: ReturnType<typeof useAlert>; onSetPriority: (modPath: string, priority: number) => Promise<void> }) {
+export function WhyNotWorking({ alert, onSetPriority }: { alert: ReturnType<typeof useAlert>; onSetPriority: (modPath: string, priority: number, special?: boolean) => Promise<void> }) {
   const [target, setTarget] = useState<Target | null>(null)
   const [found, setFound] = useState<Finding[] | null>(null)
   const [others, setOthers] = useState<Finding[] | null>(null) // the second pass

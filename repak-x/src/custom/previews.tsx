@@ -133,6 +133,24 @@ const syncPreviewList = () => invoke<string[]>('list_mod_previews').then(keys =>
   notify()
 }).catch(() => { listed = true; notify() })
 syncPreviewList()
+/** Refreshes the in-memory preview cache after a Special (!) rename moved files on disk. */
+export const refreshPreviewsAfterRename = (oldKey: string, newKey: string) => {
+  if (!oldKey || !newKey || oldKey === newKey) return
+  for (const base of [oldKey, newKey]) {
+    revs.delete(base)
+    dropCached(base)
+    for (let n = 2; n <= 8; n++) { const fk = `${base}@${n}`; revs.delete(fk); dropCached(fk) }
+  }
+  void invoke<string[]>('list_mod_previews').then(keys => {
+    listed = true
+    const now = new Set(keys)
+    for (const k of [newKey, ...[2, 3, 4, 5, 6, 7, 8].map(n => `${newKey}@${n}`)]) {
+      if (now.has(k)) revs.set(k, ++lastRev)
+    }
+    keys.forEach(k => { if (!revs.has(k)) revs.set(k, 0) })
+    notify()
+  }).catch(() => notify())
+}
 /** A character's other forms (Magik's Darkchylde, Hulk's other two), or an animation mod's other emotes: <key>@2, <key>@3 beside <key>. */
 export const formKeys = (key: string) => [2, 3, 4, 5, 6, 7, 8].map(n => `${key}@${n}`).filter(k => revs.has(k))
 // No generator on this PC (a friend's copy without the preview kit): Generate buttons stay hidden, existing previews still show

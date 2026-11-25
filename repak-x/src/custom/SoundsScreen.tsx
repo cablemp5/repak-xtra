@@ -19,6 +19,7 @@ import { modalOpen } from './dialogFocus'
 import { cue } from './sounds'
 import { Num } from './motion'
 import { PRESETS, renderPreset, type Preset } from './soundPresets'
+import ConfirmRow from './ConfirmRow'
 
 type Slot = { id: string; group: string; name: string }
 type State = { names: Record<string, string>; can_play_original: boolean }
@@ -149,9 +150,9 @@ export default function SoundsScreen({ alert, blocked, onInstall }: SoundsProps)
     return toWav(bytes).catch(() => { throw new Error(`${fileName(path)} could not be read as audio. Use a .wav, .mp3, or .ogg.`) })
   }, seq)
   /** A built-in sound into a slot, under its name. */
-  const pickPreset = (slot: Slot, p: Preset) => { setMenuFor(null); void put(slot, p.name, async () => ({ wav: encodeWav(await renderPreset(p)), cut: false }), ++dropSeq.current) }
+  const pickPreset = (slot: Slot, p: Preset) => { setMenuFor(null); if (clearingRef.current) return; void put(slot, p.name, async () => ({ wav: encodeWav(await renderPreset(p)), cut: false }), ++dropSeq.current) }
   const put = async (slot: Slot, name: string, load: () => Promise<{ wav: Uint8Array; cut: boolean }>, seq: number): Promise<boolean> => {
-    if (seq < (newest.current[slot.id] ?? 0)) return false // a later drop already filled this slot
+    if (clearingRef.current || seq < (newest.current[slot.id] ?? 0)) return false // clearing, or a later drop already filled this slot
     if (playingNow.current?.startsWith(`${slot.id}:`)) stop()
     newest.current[slot.id] = seq
     setReading(r => ({ ...r, [slot.id]: { name, n: (r[slot.id]?.n ?? 0) + 1 } }))
@@ -165,8 +166,9 @@ export default function SoundsScreen({ alert, blocked, onInstall }: SoundsProps)
       cue('warning'); alert.warning(slot.name, e instanceof Error ? e.message : String(e))
       return false
     } finally {
-      setReading(r => { const { [slot.id]: was, ...rest } = r; return was && was.n > 1 ? { ...r, [slot.id]: { ...was, n: was.n - 1 } } : rest })
-      await refresh()
+      try { await refresh() } finally {
+        setReading(r => { const { [slot.id]: was, ...rest } = r; return was && was.n > 1 ? { ...r, [slot.id]: { ...was, n: was.n - 1 } } : rest })
+      }
     }
   }
 
@@ -211,11 +213,11 @@ export default function SoundsScreen({ alert, blocked, onInstall }: SoundsProps)
     if (!shown) return
     type P = { paths?: string[]; position?: { x: number; y: number } }
     const offs = [
-      listen<P>('tauri://drag-over', e => setOver(modalOpen() ? null : slotAt(e.payload.position))),
+      listen<P>('tauri://drag-over', e => setOver(modalOpen() || clearingRef.current ? null : slotAt(e.payload.position))),
       listen('tauri://drag-leave', () => setOver(null)),
       listen<P>('tauri://drag-drop', e => {
         setOver(null)
-        if (modalOpen()) return // a dialog over the tab (Setup takes a preview kit zip) gets the drop, App.tsx sends it there
+        if (modalOpen() || clearingRef.current) return // a dialog over the tab gets the drop, and Clear all blocks new imports until done
         const paths = e.payload.paths ?? []
         const slot = SLOTS.find(s => s.id === slotAt(e.payload.position))
         const seq = ++dropSeq.current // numbered now, as dropped, not when the folder check below comes back
@@ -231,18 +233,46 @@ export default function SoundsScreen({ alert, blocked, onInstall }: SoundsProps)
   }, [shown]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const browse = async (slot: Slot) => {
+    if (clearingRef.current) return
     const path = await pick({ multiple: false, filters: [{ name: 'Audio', extensions: AUDIO }] })
-    if (typeof path === 'string') await assign(slot, path)
+    if (typeof path === 'string' && !clearingRef.current) await assign(slot, path)
   }
   const browseFolder = async () => {
+    if (clearingRef.current) return
     const path = await pick({ directory: true })
-    if (typeof path === 'string') await fillByName([path])
+    if (typeof path === 'string' && !clearingRef.current) await fillByName([path])
   }
   const clear = async (slot: Slot) => {
+    if (clearingRef.current) return
     newest.current[slot.id] = ++dropSeq.current // a folder import still running never fills it again
     if (playing?.startsWith(`${slot.id}:`)) stop()
     await invoke('sounds_clear', { slot: slot.id }).catch(e => alert.warning(slot.name, String(e)))
     await refresh()
+  }
+  const [askClear, setAskClear] = useState(false) // Clear all's in-place confirm
+  const [clearing, setClearing] = useState(false)
+  const clearingRef = useRef(false)
+  const importing = batches > 0 || Object.keys(reading).length > 0
+  useEffect(() => { if (!Object.keys(st.names).length) setAskClear(false) }, [st]) // nothing left to clear: the ask goes, never comes back on its own
+  /** Every filled slot back to the game's sound, waiting for imports first and blocking new ones until done. */
+  const clearAll = async () => {
+    if (clearingRef.current || importing) return
+    clearingRef.current = true
+    setMenuFor(null)
+    const cut = ++dropSeq.current
+    for (const s of SLOTS) newest.current[s.id] = cut // invalidates every slot, including empty ones
+    stop()
+    setClearing(true)
+    try {
+      const failed: string[] = []
+      for (const s of SLOTS) await invoke('sounds_clear', { slot: s.id }).catch(e => { failed.push(`${s.name}: ${String(e)}`) })
+      if (failed.length) { cue('warning'); alert.warning(failed.length === 1 ? 'One sound was not cleared' : `${failed.length} sounds were not cleared`, failed.join(', ')) }
+      await refresh()
+    } finally {
+      clearingRef.current = false
+      setClearing(false)
+      setAskClear(false)
+    }
   }
   const play = async (slot: Slot, kind: 'yours' | 'game') => {
     const key = `${slot.id}:${kind}`
@@ -276,7 +306,7 @@ export default function SoundsScreen({ alert, blocked, onInstall }: SoundsProps)
       setMaking(null)
     }
   }
-  const why = blocked ? 'Close Marvel Rivals first' : batches || Object.keys(reading).length ? 'Wait for the sounds being read'
+  const why = blocked ? 'Close Marvel Rivals first' : clearing ? 'Wait for the sounds being cleared' : batches || Object.keys(reading).length ? 'Wait for the sounds being read'
     : !count ? 'Add a sound to a slot first' : null
   const words = (t: string) => ` ${t.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()} ` // spaces kept: "overtime" is not "over time"
   const q = words(query).trim()
@@ -298,7 +328,13 @@ export default function SoundsScreen({ alert, blocked, onInstall }: SoundsProps)
           </label>
         </div></div>
         <div className="lo-head-tools">
-          <span className="snd-total">{count ? `${count} of ${SLOTS.length} sounds replaced` : 'Nothing replaced yet'}</span>
+          {askClear && count ? <ConfirmRow busy={clearing || importing} yes={clearing ? 'Clearing…' : 'Clear all'} onYes={() => void clearAll()} onNo={() => setAskClear(false)}
+            text={count === 1 ? "Clear your sound? Its slot plays the game's own again." : `Clear all ${count} sounds? Their slots play the game's own again.`} />
+            : <>
+              <span className="snd-total">{count ? `${count} of ${SLOTS.length} sounds replaced` : 'Nothing replaced yet'}</span>
+              {count > 0 && <button type="button" className="lo-text-btn snd-clear-all" disabled={clearing || importing} onClick={() => setAskClear(true)}
+                title={importing ? 'Wait for the sounds being read' : "Put every slot back to the game's sound"}>Clear all</button>}
+            </>}
           <button type="button" className={`lo-text-btn snd-make${making ? ' is-working' : why ? ' is-locked' : ' is-primary'}`}
             onClick={() => { if (!making && !why) void make() }} disabled={Boolean(making) || Boolean(why)} aria-busy={Boolean(making)}
             aria-disabled={!making && Boolean(why)} title={why ?? 'Build a mod with every sound you added, then choose how to install it'}>
@@ -321,7 +357,7 @@ export default function SoundsScreen({ alert, blocked, onInstall }: SoundsProps)
             )
           })}
         </div>
-        <button type="button" data-snd-slot="folder" className={`snd-folder${over === 'folder' ? ' is-over' : ''}`} onClick={() => void browseFolder()}
+        <button type="button" data-snd-slot="folder" className={`snd-folder${over === 'folder' ? ' is-over' : ''}`} disabled={clearing} onClick={() => void browseFolder()}
           title="Pick a folder of sounds">
           <span className="snd-folder-title"><FolderOpen size={16} aria-hidden />Drop a folder</span>
           <span className="snd-folder-note">Files named like a slot fill it, for example Double kill.wav</span>
@@ -342,12 +378,12 @@ export default function SoundsScreen({ alert, blocked, onInstall }: SoundsProps)
             const busy = reading[s.id]?.name
             return (
               <li key={s.id} data-snd-slot={s.id} className={`snd-slot${name ? ' is-set' : ''}${over === s.id ? ' is-over' : ''}`}
-                onClick={e => { if (!(e.target as HTMLElement).closest('button') && !busy) void browse(s) }}>
+                onClick={e => { if (!(e.target as HTMLElement).closest('button') && !busy && !clearing) void browse(s) }}>
                 <span className="snd-icon" aria-hidden><Volume2 size={16} /></span>
                 <span className="snd-text">
                   <span className="snd-name">{s.name}{q && <span className="snd-in"> · {groupOf(s)}</span>}</span>
                   <span className="snd-hint">{busy ? <span className="t-shimmer">Reading {busy}</span>
-                    : <span>{name ?? 'Drop a .wav, .mp3, or .ogg here, or click to browse'}</span>}</span>
+                    : <span>{name ?? 'Drop an audio file or click to browse'}</span>}</span>
                 </span>
                 <span className="snd-tools">
                   <button type="button" className="snd-play" disabled={!st.can_play_original} onClick={() => void play(s, 'game')}
@@ -356,16 +392,17 @@ export default function SoundsScreen({ alert, blocked, onInstall }: SoundsProps)
                     {playing === `${s.id}:game` ? <Square size={12} aria-hidden /> : <Play size={12} aria-hidden />}Game
                   </button>
                   {name && <>
-                    <button type="button" className="snd-play" onClick={() => void play(s, 'yours')} title={playing === `${s.id}:yours` ? 'Stop' : 'Play yours'} aria-label={`Play your ${s.name}`}>
+                    <button type="button" className="snd-play" disabled={clearing} onClick={() => void play(s, 'yours')} title={playing === `${s.id}:yours` ? 'Stop' : 'Play yours'} aria-label={`Play your ${s.name}`}>
                       {playing === `${s.id}:yours` ? <Square size={12} aria-hidden /> : <Play size={12} aria-hidden />}Yours
                     </button>
-                    <button type="button" className="lo-icon" disabled={Boolean(busy)} onClick={() => void clear(s)} title="Back to the game's sound" aria-label={`Remove your ${s.name}`}><X size={14} /></button>
+                    <span className="snd-sep" aria-hidden />{/* apart from Yours, so a play click never lands on clear */}
+                    <button type="button" className="lo-icon" disabled={Boolean(busy) || clearing} onClick={() => void clear(s)} title="Back to the game's sound" aria-label={`Remove your ${s.name}`}><X size={14} /></button>
                   </>}
-                  <button type="button" className="lo-text-btn snd-browse" aria-haspopup="menu" aria-expanded={menuFor?.slot.id === s.id} disabled={Boolean(busy)}
+                  <button type="button" className="lo-text-btn snd-browse" aria-haspopup="menu" aria-expanded={menuFor?.slot.id === s.id} disabled={Boolean(busy) || clearing}
                     onClick={e => { const anchor = e.currentTarget; setMenuFor(m => m?.slot.id === s.id ? null : { slot: s, anchor }) }} title="Pick one of the app's own sounds">
                     Built-in<ChevronDown size={14} aria-hidden />
                   </button>
-                  <button type="button" className="lo-text-btn snd-browse" disabled={Boolean(busy)} onClick={() => void browse(s)}>{name ? 'Replace' : 'Browse'}</button>
+                  <button type="button" className="lo-text-btn snd-browse" disabled={Boolean(busy) || clearing} onClick={() => void browse(s)}>{name ? 'Replace' : 'Browse'}</button>
                 </span>
               </li>
             )

@@ -14,7 +14,7 @@ export const size = (b: number) => b >= 1e9 ? `${(b / 1e9).toFixed(1)} GB` : b >
 const when = (s: number) => new Date(s * 1000).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
 const plural = (n: number, w: string) => `${n} ${w}${n === 1 ? '' : 's'}`
 
-export function SnapshotCard({ alert }: { alert: Alert }) {
+export function SnapshotCard({ alert, primary = true }: { alert: Alert; primary?: boolean }) {
   const [list, setList] = useState<Snapshot[] | null>(null)
   const [estimate, setEstimate] = useState<[number, number] | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
@@ -104,7 +104,7 @@ export function SnapshotCard({ alert }: { alert: Alert }) {
       </ul>}
       <div className="su-actions">
         {/* only once the list is read: its warning about the oldest one has to be right before a snapshot can drop it */}
-        <button type="button" className="btn-primary su-main" disabled={locked || !list || Boolean(failed)} onClick={make}><Archive size={14} aria-hidden="true" />{busy === 'make' ? 'Copying…' : 'Make a backup'}</button>
+        <button type="button" className={primary ? 'btn-primary su-main' : 'lo-text-btn su-main'} disabled={locked || !list || Boolean(failed)} onClick={make}><Archive size={14} aria-hidden="true" />{busy === 'make' ? 'Copying…' : 'Make a backup'}</button>
         <button type="button" className="lo-text-btn" disabled={locked || !list} onClick={importZip}><Import size={14} aria-hidden="true" />{busy === 'import' ? 'Importing…' : 'Import a backup'}</button>
         {list && <span className="su-meta">{estimate ? `${plural(estimate[0], 'file')}, about ${size(estimate[1])} each. ` : ''}{drops.length ? `Making one removes ${dropText}.` : 'The newest 3 are kept.'}</span>}
       </div>

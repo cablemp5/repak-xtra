@@ -490,6 +490,13 @@ html[data-show-header-icons] .header-actions-right .btn-vfx svg { margin-right: 
 .number-input-container { background: transparent !important; border-color: var(--panel-border) !important; }
 .number-btn { background: transparent !important; color: var(--text-secondary) !important; }
 .number-btn:hover:not(:disabled) { background: var(--quiet-active) !important; color: var(--text-primary) !important; transform: none !important; }
+/* Special (!): the stepper's hairline circle beside it, accent text only while on (custom/PriorityControl.tsx) */
+.prio { display: inline-flex; align-items: center; gap: 4px; flex: none; }
+.prio .number-display::placeholder { color: var(--text-secondary); opacity: 1; }
+.prio-special { display: inline-flex; align-items: center; justify-content: center; flex: none; width: 24px; height: 24px !important; min-height: 0 !important; padding: 0 !important; border-radius: 999px; border: 1px solid var(--panel-border); background: transparent; color: var(--text-secondary); font-family: inherit; font-size: 12px; font-weight: 700; line-height: 1; cursor: pointer; transition: color 0.15s ease, border-color 0.15s ease, background-color 0.15s ease; }
+.prio-special:hover:not(:disabled) { background: var(--quiet-active); color: var(--text-primary); }
+.prio-special.is-on { color: var(--focus-ring); border-color: color-mix(in srgb, var(--focus-ring) 45%, transparent); background: color-mix(in srgb, var(--focus-ring) 12%, transparent); }
+.prio-special:disabled { opacity: 0.3; cursor: not-allowed; }
 
 /* Bulk toolbar only when something is checked */
 .bulk-actions-toolbar.inactive { display: none !important; }
@@ -592,7 +599,7 @@ html[data-show-header-icons] .header-actions-right .btn-vfx svg { margin-right: 
 .header-title-group { gap: 4px !important; }   /* the version tag close beside the logo */
 
 /* ---------- optional controls, off unless enabled in Settings > Interface (custom/uiPrefs.tsx) ---------- */
-html:not([data-show-priority]) .mod-card .number-input-container { display: none !important; }
+html:not([data-show-priority]) .mod-card .prio { display: none !important; }
 html:not([data-show-tools]) [data-tour="tools-btn"] { display: none !important; }
 html:not([data-show-vfx-updater]) [data-tour="vfx-updater-btn"] { display: none !important; }
 html:not([data-show-galacta]) [data-tour="galacta-btn"] { display: none !important; }
@@ -1185,7 +1192,9 @@ html:not([data-view="library"]) .container > .vfx-notice { margin: 24px 0 4px; }
 .snd { flex: 1; min-height: 0; display: grid; grid-template-columns: 250px minmax(0, 1fr); }
 @media (max-width: 1000px) { .snd { grid-template-columns: 200px minmax(0, 1fr); } }
 .snd-side { display: flex; flex-direction: column; gap: 16px; padding: 0 16px 16px 0; border-right: 1px solid var(--panel-border); min-height: 0; }
-.snd-groups { display: flex; flex-direction: column; gap: 2px; }
+.snd-groups { display: flex; flex-direction: column; gap: 2px; flex: 1; min-height: 0; overflow-y: auto;   /* scrolls on a short window, so Drop a folder stays in view */
+  scrollbar-width: thin; scrollbar-color: rgba(255, 255, 255, 0.12) transparent; }
+.snd-groups .snd-group { flex: none; }
 .snd-group { display: flex; align-items: center; justify-content: space-between; gap: 8px; height: 36px !important; min-height: 0 !important; padding: 0 8px 0 12px !important;
   border: none !important; border-radius: var(--quiet-radius) !important; background: transparent !important; color: var(--text-secondary) !important;
   font: inherit; font-size: 13px !important; font-weight: 500 !important; text-align: left; cursor: pointer; transition: background-color 150ms ease, color 150ms ease; }
@@ -1201,6 +1210,7 @@ html:not([data-view="library"]) .container > .vfx-notice { margin: 24px 0 4px; }
 .snd-folder-title { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; }
 .snd-folder-title svg { color: var(--text-secondary); }
 .snd-folder-note { font-size: 12px; line-height: 1.5; color: var(--text-secondary); }
+.snd-folder { flex: none; }
 .snd-main { display: flex; flex-direction: column; min-height: 0; min-width: 0; padding-left: 24px; }
 .snd-head { display: flex; align-items: center; gap: 16px; min-height: 32px; margin-bottom: 12px; }
 .snd-title { display: flex; align-items: baseline; gap: 10px; min-width: 0; margin: 0 auto 0 0; font-size: 14px; font-weight: 600; color: var(--text-primary); white-space: nowrap; }
@@ -1232,6 +1242,10 @@ html:not([data-view="library"]) .container > .vfx-notice { margin: 24px 0 4px; }
 .snd-play:hover:not(:disabled) { background: var(--quiet-active) !important; color: var(--text-primary) !important; }
 .snd-play:disabled { opacity: 0.45; cursor: not-allowed; }
 .snd-browse { margin-left: 4px; }
+.snd-sep { flex: none; width: 1px; height: 16px; margin: 0 4px; background: var(--panel-border); }   /* Yours, then a gap and this hairline, then the clear x */
+.snd-screen .lo-head-tools .snd-clear-all { height: 36px !important; min-height: 0 !important; }   /* the head's row height, like Make mod */
+.snd-screen .lo-head-tools .su-confirm { height: 36px; box-sizing: border-box; padding: 0 4px 0 12px; white-space: nowrap; }
+.snd-screen .lo-head-tools .su-confirm .lo-text-btn { height: 28px !important; min-height: 0 !important; }
 .snd-preset-menu { width: 320px; max-height: min(420px, 70vh); overflow-y: auto; scrollbar-width: thin; scrollbar-color: rgba(255, 255, 255, 0.12) transparent; animation: t-dropdown-open var(--dropdown-open-dur) var(--dropdown-ease) backwards; }
 .snd-preset-row { display: flex; align-items: center; gap: 2px; }
 .snd-preset-row .lo-icon { width: 28px; height: 28px !important; display: grid; place-items: center; flex: none; }
@@ -1260,6 +1274,13 @@ html:not([data-view="library"]) .container > .vfx-notice { margin: 24px 0 4px; }
 .row-add-to .custom-dropdown-trigger { height: 28px !important; min-height: 0 !important; font-size: 12px !important; }
 .row-add-to .custom-dropdown-menu { min-width: 220px; right: 0; left: auto; }
 .row-remove { opacity: 1; }
+.mod-row .row-remove { margin-left: 8px; }
+/* Logs' All and Problems: the app's quiet segmented tabs (as All/On/Off), not blue chips */
+.log-drawer-chip-group { gap: 2px !important; padding: 2px; background: var(--bg-dark); border: 1px solid var(--panel-border); border-radius: var(--quiet-radius); }
+.log-drawer-chip { height: 24px; padding: 0 10px !important; border: none !important; border-radius: 6px !important; background: transparent !important;
+  color: var(--text-secondary) !important; font-size: 12px !important; font-weight: 500; }
+.log-drawer-chip:hover { color: var(--text-primary) !important; }
+.log-drawer-chip.active { background: var(--bg-lighter) !important; color: var(--text-primary) !important; }   /* clear of the row's switch and actions, so the remove x is its own target */
 
 /* New strip */
 .new-strip { margin-bottom: 28px; }
@@ -1361,10 +1382,14 @@ html:not([data-view="library"]) .container > .vfx-notice { margin: 24px 0 4px; }
 .lo-screen-head .lo-head-tools .lo-gen button, .lo-screen-head .lo-head-tools > .is-unavailable { max-width: 100%; overflow: hidden; }
 .lo-screen-head .lo-head-tools :is(.lo-gen-text, .lo-gen-label, .bulk-btn-label) { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .lo-screen-head .lo-head-tools :is(svg, .setup-chip) { flex: none; }
-@media (max-width: 1100px) { /* the one row needs about 1100px with the search at its narrowest */
+/* the one row needs about 1090px with the search at its narrowest (1140px in Geist Mono): under that, or whenever
+   custom/fit.ts finds the Loadouts row would not fit (a wider font, longer counts), the actions take their own row */
+@media (max-width: 1100px) {
   .lo-screen-head { grid-template-columns: minmax(160px, 360px) auto minmax(0, 1fr) auto; grid-template-areas: "title title title title" "search show . view" "tools tools tools tools"; }
-  .lo-screen-head .lo-head-tools { min-width: 0; } /* their own row: shorter than the buttons, Generate previews cuts its words */
+  .lo-screen-head .lo-head-tools { min-width: 0; justify-content: flex-start; } /* their own row, left-aligned under the search: shorter than the buttons, Generate previews cuts its words */
 }
+.lo-screen-head[data-compact] { grid-template-columns: minmax(160px, 360px) auto minmax(0, 1fr) auto; grid-template-areas: "title title title title" "search show . view" "tools tools tools tools"; }
+.lo-screen-head[data-compact] .lo-head-tools { min-width: 0; justify-content: flex-start; }
 .lo-search { width: 220px; padding-right: 4px; }
 .lo-search .lo-icon { width: 24px; height: 24px !important; }
 .lp-types { display: flex; flex-wrap: wrap; gap: 4px; }
@@ -1877,7 +1902,11 @@ html[data-motion="off"] .lo-skel, html[data-motion="off"] .lo-media.is-running .
 .su-card a:hover { text-decoration: underline; }
 .su-chip { flex: none; padding: 4px 12px; border-radius: 999px; font-size: 12px; font-weight: 600; background: var(--bg-lighter); color: var(--text-secondary); }
 .su-chip.is-installed { color: var(--text-primary); }
-.su-chip.is-update, .su-chip.is-missing, .su-chip.is-partial, .su-chip.is-other { color: #fff; background: color-mix(in srgb, var(--accent-primary), transparent 25%); }
+/* quiet tints: the card's one blue button is the call to act, its chip only names the state */
+.su-chip.is-update, .su-chip.is-missing, .su-chip.is-other { color: color-mix(in srgb, var(--accent-primary), white 30%); background: color-mix(in srgb, var(--accent-primary), transparent 85%); }
+[data-theme="light"] .su-chip.is-update, [data-theme="light"] .su-chip.is-missing, [data-theme="light"] .su-chip.is-other { color: color-mix(in srgb, var(--accent-primary), black 25%); background: color-mix(in srgb, var(--accent-primary), transparent 88%); }
+.su-chip.is-current { color: #3ecf6e; }
+[data-theme="light"] .su-chip.is-current { color: #1f8a46; }
 .su-note, .su-meta { font-size: 13px; color: var(--text-secondary); }
 .su-meta code { font: 12px var(--font-mono); color: var(--text-primary); }
 .su-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
@@ -2149,6 +2178,9 @@ html[data-motion="off"] .lo-row .fp-lead.is-busy .lo-on-dot { animation: none; }
   background: none !important; font: inherit !important; }
 .su-link:hover:not(:disabled), .su-trust a:hover { text-decoration: underline; }
 .su-link:disabled { opacity: 0.45; cursor: default; }
+/* Remove: the link's blue at rest, the muted red only under the pointer (it asks first with a ConfirmRow) */
+.su-link.is-remove:hover:not(:disabled), .su-link.is-remove:focus-visible { color: #ff8a8e !important; }
+[data-theme="light"] .su-link.is-remove:hover:not(:disabled), [data-theme="light"] .su-link.is-remove:focus-visible { color: #c8333a !important; }
 /* The Blender note (SetupPanel BlenderTrust): one quiet "Is Blender safe? ›" line, the note opening under it */
 .su-trust { margin: 0; font-size: 12px; line-height: 1.5; color: var(--text-secondary); }
 .su-trust-btn { display: inline-flex; align-items: center; gap: 8px; height: auto !important; min-height: 0 !important; padding: 2px 0 !important;
@@ -2497,8 +2529,9 @@ html[data-motion="off"] .lp-saved { animation: none !important; opacity: 1 !impo
 .settings-content .mod-state-filter.ui-scale button { font-size: 13px !important; }
 .settings-content .setting-toggle-actions > span { font-size: 13px !important; }
 .settings-content .cd-meta { font-size: 13px !important; }
-/* The mods folder field shows the path's end; its cut-off start fades instead of slicing a letter */
-.settings-content .integrated-input { -webkit-mask-image: linear-gradient(to right, transparent, #000 18px); mask-image: linear-gradient(to right, transparent, #000 18px); }
+/* A path field (TailInput.tsx) shows the path's end. Only while its start is cut off, that start fades out instead of
+   slicing a letter, and the whole path stays in the field */
+input[data-clipped] { -webkit-mask-image: linear-gradient(to right, transparent 6px, #000 36px); mask-image: linear-gradient(to right, transparent 6px, #000 36px); }
 /* Install panel: a switch's keyboard ring in its tile's color, close to the switch */
 .app .install-mod-card .install-toggle :focus-visible { outline: 2px solid color-mix(in srgb, var(--tile, #888), white 25%) !important; outline-offset: 2px !important; }
 /* Recently deleted: the row's own yes/no before deleting one mod for good */
@@ -2582,6 +2615,11 @@ button.btn-icon, .view-switcher .btn-icon-small, .copy-paths-btn.icon-only { wid
 
 /* ---------- Crash suspects (custom/CrashSuspects.tsx): the crash toast's two buttons, and the suspects list ---------- */
 .cs-toast-actions { display: inline-flex; gap: 8px; }
+/* Details: quiet beside the light See suspects, one primary per toast. An inset ring, so both stay the same size */
+.toast-action-btn.is-quiet, :root:not([data-theme="light"]) .toast-action-btn.is-quiet { background: transparent; color: inherit; font-weight: 500; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.18); }
+.toast-action-btn.is-quiet:hover, :root:not([data-theme="light"]) .toast-action-btn.is-quiet:hover { background: rgba(255, 255, 255, 0.08); }
+[data-theme="light"] .toast-action-btn.is-quiet { box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.18); }
+[data-theme="light"] .toast-action-btn.is-quiet:hover { background: rgba(0, 0, 0, 0.06); }
 /* The two buttons sit on the right of the text (cable 2026-11-04). The toast gets wider for them, and a long asset path
    breaks anywhere and stops at three lines instead of squeezing into a narrow column */
 .toast-container:has(.cs-toast-actions) { width: 560px; max-width: calc(100vw - 32px); }
@@ -2753,11 +2791,25 @@ html.is-dragging-card .lo-card:hover { border-color: var(--panel-border); }
   .lo-screen-head { flex-wrap: wrap; row-gap: 12px; }
   .lo-head-tools { flex-wrap: wrap; }
 }
-@media (max-width: 960px) {
-  /* Launch keeps its label (the one primary action), the rest become even 36px squares with the icon centered.
-     Keyed on Launch, not :first-child, since the scan status button can sit before it */
-  .header-actions-right .btn-settings:not([data-tour="launch-btn"]) { font-size: 0 !important; gap: 0 !important; width: 36px; padding: 0 !important; justify-content: center; }
-  .header-actions-right .btn-settings:not([data-tour="launch-btn"]) > svg { margin: 0 !important; }
+/* custom/fit.ts sets data-compact when the labeled buttons would not fit the window (any width, scale, or font): Launch
+   keeps its label (the one primary action), the rest become even 36px squares with the icon centered. Keyed on Launch,
+   not :first-child, since the scan status button can sit before it */
+.header[data-compact] { padding-left: 12px !important; padding-right: 12px !important; }
+.header[data-compact] .header-branding { flex-shrink: 0; }
+.header[data-compact] .version { display: none; }
+.header[data-compact] .wm { height: 18px !important; width: auto !important; }
+.header[data-compact] .view-tabs { margin-left: 10px !important; }
+.header[data-compact] .view-tabs button { padding-left: 8px !important; padding-right: 8px !important; font-size: 12.5px !important; }
+.header[data-compact] .header-actions-right { gap: 4px; padding-left: 6px; }
+.header[data-compact] .header-actions-right .btn-settings[data-tour="launch-btn"] { padding: 0 9px !important; font-size: 12.5px !important; }
+.header[data-compact] .header-actions-right .btn-settings:not([data-tour="launch-btn"]) { font-size: 0 !important; gap: 0 !important; width: 36px; padding: 0 !important; justify-content: center; }
+.header[data-compact] .header-actions-right .btn-settings:not([data-tour="launch-btn"]) > svg { margin: 0 !important; }
+.header[data-compact] .scan-status { width: 36px; min-width: 0; padding: 0 !important; justify-content: center; font-size: 0 !important; gap: 0 !important; }
+.header[data-compact] .scan-status .scan-status-in { font-size: 0 !important; gap: 0 !important; }
+.header[data-compact] .scan-status svg { margin: 0 !important; }
+@media (max-width: 860px) {
+  .header[data-compact] .header-actions-right .btn-settings:not([data-tour="launch-btn"]),
+  .header[data-compact] .scan-status { width: 32px; }
 }
 /* Light theme (no Settings entry now; an older settings.json can still pick it): the same blue accent, never the
    upstream red the app sets inline */
@@ -2919,6 +2971,8 @@ html[data-motion="off"] .vfx-dot { animation: none; }
 /* Settings save as they change: a quiet note where Cancel and Save were */
 .settings-live-footer { justify-content: space-between !important; align-items: center; }
 .settings-live-note { font-size: 13px; color: var(--text-secondary); }
+.settings-live-footer .btn-primary { height: 32px !important; min-height: 0 !important; padding: 0 20px !important; font-size: 13px !important; width: auto !important; flex: none;
+  border-radius: var(--quiet-radius) !important; }   /* Check conflicts' Done */
 
 /* ---------- Numbers in a colored bubble: one centering rule for all of them (the conflicts count, the All / On / Off
    counts, a collection's count, the setup step numbers, the selection numbers). Tabular digits, so a 1 sits in the
@@ -3218,13 +3272,12 @@ html[data-motion="off"] .ct-pop, html[data-motion="off"] .ct-btn svg { animation
 .ko-hero-group .ko-group-head { display: flex; align-items: center; gap: 6px; }
 
 /* The beta notice (custom/BetaNote.tsx) */
-.beta-note { --beta: #f04b4b; display: grid; grid-template-columns: 33px 1fr; column-gap: 12px; align-items: center; margin: 0; padding: 12px 16px; box-sizing: border-box;
-  font-size: 13px; line-height: 1.5; color: var(--beta); border: 1px solid color-mix(in srgb, var(--beta), transparent 70%); border-radius: 10px; background: color-mix(in srgb, var(--beta), transparent 91%); }
-/* red on purpose (cable, 2026-11-02): the one warning that is not meant to blend in */
-:root[data-theme="light"] .beta-note { --beta: #b3261e; }
-/* the mark beside the warning: its picture as a mask, in the note's red */
-.beta-mark { display: block; width: 33px; height: 33px; background: var(--beta); mask: center / contain no-repeat; -webkit-mask: center / contain no-repeat; }
-.beta-note a { color: inherit; text-decoration: underline; text-underline-offset: 2px; }
+/* a quiet hairline info strip: no tint and no red, grey words and mark (cable, 2026-11-24, was red since 2026-11-02) */
+.beta-note { display: grid; grid-template-columns: 20px 1fr; column-gap: 12px; align-items: center; margin: 0; padding: 10px 14px; box-sizing: border-box;
+  font-size: 13px; line-height: 1.5; color: var(--text-secondary); border: 1px solid var(--panel-border); border-radius: 10px; background: transparent; }
+/* the mark beside the note: its picture as a mask, in the note's grey */
+.beta-mark { display: block; width: 20px; height: 20px; background: currentColor; mask: center / contain no-repeat; -webkit-mask: center / contain no-repeat; }
+.beta-note a { color: var(--text-primary); text-decoration: underline; text-underline-offset: 2px; }
 .wi-beta { margin: 0 28px 20px; }
 
 .mod-type-badge.broken-badge.is-unknown { background: transparent !important; }
@@ -3237,6 +3290,10 @@ html[data-motion="off"] .ct-pop, html[data-motion="off"] .ct-btn svg { animation
 .settings-search-clear:hover { background: var(--quiet-hover); color: var(--text-primary); }
 .settings-content [hidden] { display: none !important; }
 .settings-content .setting-section[data-first-shown] { border-top: none; padding-top: 0; margin-top: 0; }
+/* a page's start mark sits between two pages' sections while searching: the separator still goes between them */
+.settings-content [data-page] + .setting-section:not([data-first-shown]) { border-top: 1px solid var(--panel-border); padding-top: 20px; margin-top: 4px; }
+/* while searching, pages with nothing that matches step back in the list (Enter opens the first page that matches) */
+.settings-nav-item.no-match { opacity: 0.45; }
 .settings-search-empty { margin: 0; color: var(--text-secondary); font-size: 0.9rem; }
 
 /* The mod checks' progress in the header (ScanStatus.tsx): a quiet pill that rises in (transitions.dev Stagger) while a
@@ -3287,7 +3344,10 @@ html[data-motion="off"] .ct-pop, html[data-motion="off"] .ct-btn svg { animation
 .bs-alert > svg { flex: none; margin-top: 2px; color: #f5a524; }
 .bs-alert p { margin: 0; font-size: 13px; line-height: 1.5; }
 /* toasts about other things wait behind the test dialog instead of covering its buttons; its own problems show inside */
-body:has(.bs-modal) .toast-container { z-index: 1999; }
+body:has(.bs-modal) .toast-container:not(.has-modal-toast) { z-index: 1999; }
+/* any dialog: toasts from before it opened wait behind it (kept, back in front once it closes) instead of covering its
+   footer. One shown while it is open (.has-modal-toast, AlertHandler.tsx) is about it and stays in front */
+body:has(:is(.modal-overlay, .install-mod-overlay, .input-prompt-overlay, .quick-organize-overlay, .extension-overlay)) .toast-container:not(.has-modal-toast) { z-index: 999; }
 .bs-resumed { color: var(--text-secondary); }
 /* the two answers: red for a crash and green for no crash (cable 2026-11-04), icon and a quiet tint, white words */
 .bs-ans { display: inline-flex; align-items: center; gap: 6px; }
@@ -3307,12 +3367,9 @@ body:has(.bs-modal) .toast-container { z-index: 1999; }
    Page side-by-side for each step, Texts reveal for lists, Number pop-in for the test number and done checks) */
 .bs-roles { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .bs-role { padding: 12px 14px; border: 1px solid var(--panel-border); border-radius: 10px; }
-.bs-role.is-app { background: color-mix(in srgb, var(--accent-primary), transparent 93%); border-color: color-mix(in srgb, var(--accent-primary), transparent 70%); }
 .bs-role h3 { margin: 0 0 6px; font-size: 12px; font-weight: 600; color: var(--text-secondary); }
-.bs-role.is-app h3 { color: var(--accent-primary); }
 .bs-role :is(ol, ul) { display: flex; flex-direction: column; gap: 4px; margin: 0; padding: 0; list-style: none; }
 .bs-role li > svg { flex: none; color: var(--text-secondary); }
-.bs-role.is-app li > svg { color: var(--accent-primary); }
 .bs-role li { display: flex; align-items: center; gap: 8px; font-size: 13px; line-height: 1.5; color: var(--text-primary); }
 .bs-modal .cs-footer > .bs-stop { margin-left: auto; }
 .bs-stop { display: inline-flex; align-items: center; gap: 6px; }
@@ -3660,3 +3717,13 @@ html[data-motion="off"] .ms-cell.is-picked .ms-check { animation: none; }
    under one quiet line that says so */
 .lib-close-label { margin: 0; padding: 4px 4px 8px; font-size: 12px; line-height: 1.4; color: var(--text-secondary); }
 .lo-close-label { padding-inline: 0; }
+
+/* Every window over the app starts under the 32px title bar (TitleBar.tsx), so the bar still drags, minimizes, maximizes,
+   and closes the app, and a dialog centers in the room left. The tallest (90vh) fit that room with the overlay's 24px
+   padding (SettingsPanel.css) on a short or zoomed window */
+:is(.modal-overlay, .install-mod-overlay, .input-prompt-overlay, .quick-organize-overlay, .extension-overlay) { top: 32px !important; }
+/* scoped to their overlay so a stylesheet loaded later (install.css, capture.css) cannot undo it */
+:is(.modal-overlay, .install-mod-overlay) :is(.su-modal, .fr-modal, .ip-modal, .cp-modal, .install-mod-panel) { max-height: min(90vh, calc(100vh - 80px)); }
+.modal-overlay .ms-modal { max-height: min(88vh, calc(100vh - 80px)); }
+.modal-overlay .v3d-window { height: min(860px, 90vh, calc(100vh - 80px)); max-height: min(90vh, calc(100vh - 80px)); }
+.modal-overlay .settings-modal-split { height: min(85vh, calc(100vh - 80px)); }

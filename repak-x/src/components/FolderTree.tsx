@@ -230,7 +230,7 @@ const FolderTree = ({ folders, selectedFolderId, onSelect, onDelete, getCount, h
                         <span className="node-icon folder-icon">
                             <VscLibrary />
                         </span>
-                        <span className="node-label">All Mods</span>
+                        <span className="node-label">All mods</span>
                         <span className="folder-count">
                             {getCount('all').toLocaleString() /* repakxtra: 1,284 */}
                         </span>

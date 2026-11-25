@@ -6,13 +6,14 @@ import { MdMinimize } from "react-icons/md";
 import { GrClose } from 'react-icons/gr';
 import './TitleBar.css';
 import ModularLogo from './ui/ModularLogo';
+import { APP_NAME } from '../custom/edition' // repakxtra
 
 interface TitleBarProps {
     title?: string;
     hideMaximize?: boolean;
 }
 
-const TitleBar = ({ title = "repakxtra", hideMaximize = false }: TitleBarProps) => {
+const TitleBar = ({ title = APP_NAME, hideMaximize = false }: TitleBarProps) => {
     const [appWindow, setAppWindow] = useState<ReturnType<typeof getCurrentWindow> | null>(null);
     const [isMaximized, setIsMaximized] = useState(false);
     const [isFocused, setIsFocused] = useState(true);

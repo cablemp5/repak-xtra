@@ -5,13 +5,14 @@ import { Component, type ReactNode } from 'react'
 import { REPAKXTRA_VERSION } from './version'
 import { scrub } from './scrub'
 import { invoke } from '@tauri-apps/api/core'
+import { APP_NAME } from './edition'
 
 // CopySetupReport's copyText, without its imports: the crash may have come from one of them
 const copyText = (text: string) => Promise.resolve().then(() => navigator.clipboard.writeText(text)).catch(() => invoke('copy_to_clipboard', { text }))
 
 /** What Copy error details copies. Pure. */
 export const errorDetails = (error: Error, where = '') => scrub([
-  `repakxtra ${REPAKXTRA_VERSION}: the window hit an error`,
+  `${APP_NAME} ${REPAKXTRA_VERSION}: the window hit an error`,
   `${error.name}: ${error.message}`,
   ...(error.stack ?? '').split('\n').slice(1, 9).map(l => l.trim()).filter(Boolean),
   ...(where ? ['In:', ...where.split('\n').map(l => l.trim()).filter(Boolean).slice(0, 6)] : []),

@@ -7,7 +7,9 @@ import type { ReactNode } from 'react'
 import { motion } from 'framer-motion'
 import { Check, Download, ExternalLink } from 'lucide-react'
 import { REPAKXTRA_VERSION } from './version'
+import { GlideFill } from './GlideFill'
 import { useDialogFocus } from './dialogFocus'
+import { APP_NAME, RELEASE_PREFIX } from './edition'
 import './updates.css'
 
 const openUrl = (url: string) => import('@tauri-apps/plugin-shell').then(m => m.open(url)).catch(() => window.open(url, '_blank'))
@@ -88,22 +90,22 @@ export function UpdateModal({ isOpen, updateInfo, downloadProgress, downloadedPa
         <div className="modal-header">
           <div>
             <h2>{ready ? 'Ready to install' : 'Update available'}</h2>
-            <p className="upd-sub">repakxtra v{updateInfo.latest} · you have v{REPAKXTRA_VERSION}</p>
+            <p className="upd-sub">{APP_NAME} v{updateInfo.latest} · you have v{REPAKXTRA_VERSION}</p>
           </div>
           <button className="modal-close" onClick={onClose} aria-label="Close">×</button>
         </div>
         <div className="modal-body upd-body">
           {ready
-            ? <p className="upd-ready"><Check size={16} aria-hidden="true" />Downloaded. Install and restart closes repakxtra, updates it and opens v{updateInfo.latest}.</p>
-            : downloading
-              ? (
-                <div className="upd-progress" role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100}>
-                  <div className="upd-bar"><i style={{ width: `${pct}%` }} /></div>
-                  <span>{pct}%</span>
-                </div>
-              )
-              : <ReleaseNotes text={updateInfo.changelog || ''} />}
+            ? <p className="upd-ready"><Check size={16} aria-hidden="true" />Downloaded. Install and restart closes {APP_NAME}, updates it, and opens v{updateInfo.latest}.</p>
+            : <ReleaseNotes text={updateInfo.changelog || ''} />}
         </div>
+        {/* the notes stay to read while it downloads, the bar under them in view however far they scroll */}
+        {downloading && !ready && (
+          <div className="upd-progress" role="progressbar" aria-label="Downloading the update" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100}>
+            <div className="upd-bar"><GlideFill pct={pct} /></div>
+            <span>{pct}%</span>
+          </div>
+        )}
         <div className="modal-footer upd-footer">
           {!ready && !downloading && updateInfo.url && (
             <button type="button" className="lo-text-btn upd-left" onClick={() => onOpenReleasePage(updateInfo.url || '')}><ExternalLink size={14} /> View release</button>
@@ -130,7 +132,7 @@ export function WhatsNewModal({ isOpen, version, changelog, onClose }: { isOpen:
         <div className="modal-header">
           <div>
             <h2>What's new</h2>
-            <p className="upd-sub">repakxtra v{version.replace(/^v/, '')}</p>
+            <p className="upd-sub">{APP_NAME} {RELEASE_PREFIX}{version.replace(/^v/, '')}</p>
           </div>
           <button className="modal-close" onClick={onClose} aria-label="Close">×</button>
         </div>

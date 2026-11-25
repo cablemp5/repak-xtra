@@ -315,7 +315,7 @@ export default function LogDrawer({
                 <input
                   type="text"
                   value={search}
-                  placeholder="Filter..."
+                  placeholder="Filter logs" aria-label="Filter logs"
                   onChange={(e) => setSearch(e.target.value)}
                   spellCheck={false}
                 />

@@ -191,7 +191,7 @@ pub(crate) fn outdated_elsewhere(path: &Path, paks: &Path) -> Option<String> {
 
 fn stale_reason(saved: Option<&Saved>, build: &str) -> Option<String> {
     (saved.and_then(|s| s.built_for.as_deref()) != Some(build)).then(|| {
-        "Made for an older game version, and repakxtra does not rebuild it. It can crash the game. Turn it off until the app that made it builds it again.".to_string()
+        format!("Made for an older game version, and {} does not rebuild it. It can crash the game. Turn it off until the app that made it builds it again.", crate::xtra_edition::APP_NAME)
     })
 }
 
@@ -558,14 +558,17 @@ pub(crate) fn usmap_arrived(paks: &Path) -> bool {
     here
 }
 
-pub(crate) const MAPPINGS_BEHIND: &str = "Not active yet. The game updated and repakxtra waits for the support files for it. It checks for them at every start";
+/// BuiltinMods.tsx retryable reads the "Not active yet." start: no Try again while it waits.
+pub(crate) fn mappings_behind() -> String {
+    format!("Not active yet. The game updated and {} waits for the support files for it. It checks for them at every start", crate::xtra_edition::APP_NAME)
+}
 
 fn read_json(p: &Path) -> Result<Value, String> {
     let t = std::fs::read_to_string(p).map_err(|e| format!("{}: {e}", p.display()))?;
     let v: Value = serde_json::from_str(t.trim_start_matches('\u{feff}')).map_err(|e| format!("{}: {e}", p.display()))?;
     // UAssetTool keeps an export it cannot decode as raw bytes: the USMAP is older than the installed game
     if v["Exports"][0]["$type"].as_str().is_some_and(|t| t.contains("RawExport")) {
-        return Err(MAPPINGS_BEHIND.to_string());
+        return Err(mappings_behind());
     }
     Ok(v)
 }

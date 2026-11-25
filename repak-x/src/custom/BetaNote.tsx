@@ -1,4 +1,4 @@
-// repakxtra: the beta notice, on the welcome screen's first page and at the top of Settings > General.
+// repakxtra: the beta notice, a quiet hairline strip on the welcome screen's first page only.
 import { open as openUrl } from '@tauri-apps/plugin-shell'
 import { APP_NAME } from './edition'
 import mark from './beta-mark.png'

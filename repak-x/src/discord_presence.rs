@@ -9,7 +9,9 @@ const DISCORD_APP_ID: &str = "1563325728416604231"; // repakxtra: its own Discor
 
 // repakxtra: the line under the app's name, and one logo for every accent (the asset key uploaded under Rich Presence >
 // Art Assets of the app above)
-const DETAILS: &str = "Modding with repakxtra";
+fn details() -> String {
+    format!("Modding with {}", crate::xtra_edition::APP_NAME)
+}
 const LOGO_ASSET: &str = "repakxtra_logo";
 
 // repakxtra: one worker thread owns the Discord pipe. Every call queues a job and returns at once, so a Discord that
@@ -136,7 +138,7 @@ impl DiscordPresenceManager {
             let mut activity_builder = activity::Activity::new()
                 .state(&state)
                 .timestamps(activity::Timestamps::new().start(start))
-                .assets(activity::Assets::new().large_image(LOGO_ASSET).large_text("repakxtra, a Marvel Rivals mod manager"));
+                .assets(activity::Assets::new().large_image(LOGO_ASSET).large_text(format!("{}, a Marvel Rivals mod manager", crate::xtra_edition::APP_NAME)));
             if let Some(d) = details.as_deref() {
                 activity_builder = activity_builder.details(d);
             }
@@ -150,7 +152,7 @@ impl DiscordPresenceManager {
     }
 
     pub fn set_idle(&self) -> Result<(), String> {
-        self.set_activity("Idle", Some(DETAILS))
+        self.set_activity("Idle", Some(&details()))
     }
 
     pub fn set_managing_mods(&self, mod_count: usize) -> Result<(), String> {
@@ -159,11 +161,11 @@ impl DiscordPresenceManager {
             mod_count,
             if mod_count == 1 { "" } else { "s" }
         );
-        self.set_activity(&state, Some(DETAILS))
+        self.set_activity(&state, Some(&details()))
     }
 
     pub fn set_installing_mod(&self) -> Result<(), String> {
-        self.set_activity("Installing mods", Some(DETAILS))
+        self.set_activity("Installing mods", Some(&details()))
     }
 
     pub fn clear_activity(&self) -> Result<(), String> {

@@ -7,7 +7,7 @@ import {
     InsertDriveFileOutlined,
     CheckCircleOutline
 } from '@mui/icons-material'
-import NumberInput from './ui/NumberInput'
+import { PriorityControl } from '../custom/PriorityControl' // repakxtra
 import Switch from './ui/Switch'
 import './ClashPanel.css'
 
@@ -25,7 +25,7 @@ type ModRecord = {
 type ClashPanelProps = {
     clashes: ClashRecord[]
     mods?: ModRecord[]
-    onSetPriority?: (modPath: string, priority: number) => void
+    onSetPriority?: (modPath: string, priority: number, special?: boolean) => void
     onToggleMod?: (modPath: string) => void
     onClose: () => void
 }
@@ -105,12 +105,8 @@ const ClashPanel = ({ clashes, mods = [], onSetPriority, onToggleMod, onClose }:
 
                                                     {mod && (
                                                         <div className="clash-priority-wrapper">
-                                                            <NumberInput
-                                                                value={mod.priority || 0}
-                                                                min={0}
-                                                                max={99}
-                                                                onChange={(val) => onSetPriority && onSetPriority(currentPath, val)}
-                                                            />
+                                                            <PriorityControl path={currentPath} priority={mod.priority}
+                                                                onChange={(p, special) => onSetPriority?.(currentPath, p, special)} />
                                                         </div>
                                                     )}
 

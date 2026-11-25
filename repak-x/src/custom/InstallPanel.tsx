@@ -416,7 +416,7 @@ export default function InstallPanel({ mods, folders = [], currentFolderId, onCr
                         <div className="ip-details">
                           <div className="ip-detail-row">
                             <label className="ip-name-wrap">
-                              <input className="ip-name" value={s.customName} placeholder="Enter a mod name" title={`Leave empty to keep ${plainName(mod.mod_name)}`} aria-label="Mod name" spellCheck={false}
+                              <input className="ip-name" value={s.customName} placeholder={plainName(mod.mod_name)} title={`Leave empty to keep ${plainName(mod.mod_name)}`} aria-label="Mod name" spellCheck={false}
                                 onChange={e => update(i, { customName: e.target.value })} onKeyDown={enterCommits(() => update(i, { customName: committedName(s.customName) ?? '' }))} />
                               <span className="ip-suffix" title="Every installed mod ends in its load priority">_9999999_P</span>
                             </label>

@@ -43,10 +43,10 @@ export function VfxDot({ mods }: { mods: Mod[] }) {
 /** The strip's headline: the risk, then which update. */
 export const noticeHead = (n: number, when: string) =>
   `${n === 1 ? '1 mod may' : `${n} mods may`} crash the game or not load correctly after the ${when} update`
-/** Its second line: what can be done now, and what waits for the game's new USMAP. */
+/** Its second line: what can be done now, and what waits for the game's new mappings. */
 export const noticeDetail = (n: number, ready: number, waiting: number, off = 0) => (!waiting
   ? `${n === 1 ? 'It was' : 'They were'} made for game files this update changed. Update rebuilds ${n === 1 ? 'it' : 'them'} on the new ones.`
-  : `${ready ? `${ready} can be updated now. ` : ''}${waiting === n ? (n === 1 ? 'It waits' : 'They all wait') : `${waiting} wait`} for the game's new USMAP before ${waiting === 1 ? 'it' : 'they'} can be updated.`)
+  : `${ready ? `${ready} can be updated now. ` : ''}${waiting === n ? (n === 1 ? 'It waits' : 'They all wait') : `${waiting} ${waiting === 1 ? 'waits' : 'wait'}`} for the game's new mappings before ${waiting === 1 ? 'it' : 'they'} can be updated.`)
   + (off ? ` ${off === n ? (n === 1 ? 'It' : 'They') : off} cannot be rebuilt here, so Update turns ${off === 1 ? 'it' : 'them'} off.` : '')
 
 export default function VfxNotice({ mods, reload }: { mods: Mod[]; reload: () => void }) {
@@ -141,8 +141,9 @@ if (import.meta.env.DEV) {
   console.assert(!noticeDismissed('{bad', 100, [key]), 'invalid saved data cannot hide a warning')
   console.assert(noticeHead(101, 'Oct 29') === '101 mods may crash the game or not load correctly after the Oct 29 update', 'headline', noticeHead(101, 'Oct 29'))
   console.assert(noticeHead(1, 'Oct 29').startsWith('1 mod may crash'), 'one mod')
-  console.assert(noticeDetail(101, 1, 100) === "1 can be updated now. 100 wait for the game's new USMAP before they can be updated.", 'some wait', noticeDetail(101, 1, 100))
-  console.assert(noticeDetail(3, 0, 3) === "They all wait for the game's new USMAP before they can be updated.", 'all wait')
+  console.assert(noticeDetail(101, 1, 100) === "1 can be updated now. 100 wait for the game's new mappings before they can be updated.", 'some wait', noticeDetail(101, 1, 100))
+  console.assert(noticeDetail(3, 2, 1) === "2 can be updated now. 1 waits for the game's new mappings before it can be updated.", 'one waits', noticeDetail(3, 2, 1))
+  console.assert(noticeDetail(3, 0, 3) === "They all wait for the game's new mappings before they can be updated.", 'all wait')
   console.assert(noticeDetail(2, 2, 0).startsWith('They were made for game files'), 'none wait')
   console.assert(noticeDetail(3, 3, 0, 1).endsWith(' 1 cannot be rebuilt here, so Update turns it off.'), 'May crash ones turn off', noticeDetail(3, 3, 0, 1))
 }

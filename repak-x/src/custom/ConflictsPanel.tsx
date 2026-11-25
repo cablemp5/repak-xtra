@@ -6,7 +6,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { motion } from 'framer-motion'
 import { invoke } from '@tauri-apps/api/core'
 import { Check, ChevronRight, LoaderCircle } from 'lucide-react'
-import NumberInput from '../components/ui/NumberInput'
+import { PriorityControl, isSpecial, outranks, rankKey } from './PriorityControl'
 import Switch from '../components/ui/Switch'
 import { resolveHeroImage, useHeroImages } from '../utils/heroImages'
 import { nameKey } from './loadoutStore'
@@ -27,8 +27,8 @@ type Hidden = { hidden: string; winner: string; files: string[] }
 /** Any app's built-in keeps its name (xtra_builtins.rs fixed_place), so its priority cannot change. */
 const fixedName = (path: string) => /[\\/]\.repakxtra-builtin[\\/]/i.test(path)
 const fileOf = (path: string) => path.split(/[\\/]/).pop() ?? ''
-/** set_mod_priority only rewrites a name ending in exactly _P: anything else would get a second suffix. */
-const renamable = (path: string) => !fixedName(path) && /_P\.[^.]+$/.test(fileOf(path))
+/** Any name but a built-in's takes a priority (set_mod_priority strips only its own suffixes), Unranked too. */
+const renamable = (path: string) => !fixedName(path)
 
 /** A mod's path without its on/off extension: the same mod before and after a switch. */
 const stemOf = (p: string) => p.replace(/\.(pak|bak_repak|pak_disabled)$/i, '')
@@ -37,10 +37,14 @@ const sameMod = (p: string) => nameKey(p).replace(/^!/, '').toLowerCase()
 /** The same mod in its folder: two folders can each hold a "Skin", and those are two mods. */
 const sameModIn = (p: string) => `${p.replace(/[\\/][^\\/]*$/, '').toLowerCase()}|${sameMod(p)}`
 
-/** A group is resolved once no two of its mods that are still on share a priority: one left on, or each at its own. */
+/** A group is resolved once at most one mod is left on, or every enabled mod has a known distinct order (same Special
+ *  state, all numbered, distinct numbers). Toggling ! on one of two tied mods makes their order unknown, not resolved. */
 export const resolved = (g: ConflictGroup, find: (path: string) => Mod | undefined) => {
   const on = g.mods.map(find).filter((m): m is Mod => Boolean(m && m.enabled !== false))
-  return new Set(on.map(m => m.priority ?? 0)).size === on.length
+  if (on.length <= 1) return true
+  const sp = isSpecial(on[0].path)
+  return on.every(m => isSpecial(m.path) === sp && (m.priority ?? 0) > 0)
+    && new Set(on.map(m => m.priority)).size === on.length
 }
 
 /** The groups to show after a check: the ones shown before keep their place (the fresh copy when the check still has
@@ -53,15 +57,16 @@ export function keepSeen(before: ConflictGroup[], now: ConflictGroup[]) {
   return [...before.map(g => fresh.get(id(g)) ?? g), ...now.filter(g => !old.has(id(g)))]
 }
 
-/** A hidden pair is fixed once the hidden mod outranks its winner, or either one is off. A ! name loads in an order
- *  the app does not know (xtra_why.rs rank), so it never counts as fixed by priority. */
+/** A hidden pair is fixed once the hidden mod outranks its winner, or either one is off. A ! mod against one without
+ *  it, or an unranked one, loads in an order the app does not set (xtra_conflicts.rs ordered), so it never counts as
+ *  fixed by priority. */
 export const unhidden = (h: Hidden, find: (path: string) => Mod | undefined) => {
   const a = find(h.hidden), b = find(h.winner)
   if (!a || !b || a.enabled === false || b.enabled === false) return true
-  return !fileOf(a.path).startsWith('!') && !fileOf(b.path).startsWith('!') && (a.priority ?? 0) > (b.priority ?? 0)
+  return outranks(a, b)
 }
 
-/** Load on top: one above every mod that hides it, so a single click fixes all its pairs. */
+/** Load on top: one above every mod that hides it, so a single click fixes all its pairs. It never adds a !. */
 export const topFor = (path: string, hidden: Hidden[], find: (path: string) => Mod | undefined) =>
   Math.max(0, ...hidden.filter(h => find(h.hidden) === find(path) && !unhidden(h, find)).map(h => find(h.winner)?.priority ?? 0)) + 1
 
@@ -138,7 +143,7 @@ export function describe(g: ConflictGroup, heroes: Hero[]) {
 function Group({ g, heroes, find, done, hidden, onSetPriority, onToggleMod, onKeep, onClose }: {
   g: ConflictGroup; heroes: Hero[]; find: (path: string) => Mod | undefined; done: boolean
   hidden?: { top: number }
-  onSetPriority?: (path: string, priority: number) => void; onToggleMod?: (path: string) => void
+  onSetPriority?: (path: string, priority: number, special?: boolean) => void; onToggleMod?: (path: string) => void
   onKeep?: (keep: string, others: Mod[]) => unknown; onClose: () => void
 }) {
   const [open, setOpen] = useState(false)
@@ -175,12 +180,20 @@ function Group({ g, heroes, find, done, hidden, onSetPriority, onToggleMod, onKe
           const on = mod?.enabled !== false
           const name = nameKey(now)
           const othersOn = g.mods.map(find).filter((m): m is Mod => Boolean(m && m !== mod && m.enabled !== false))
+          const hiddenA = hidden ? find(g.mods[0]) : undefined
+          const hiddenB = hidden ? find(g.mods[1]) : undefined
+          const stillHidden = Boolean(hidden && !done && hiddenA && hiddenB && outranks(hiddenB, hiddenA))
+          const tiedNow = Boolean(hidden && !done && hiddenA && hiddenB && rankKey(hiddenA) === rankKey(hiddenB))
+          const orderUnknown = Boolean(hidden && !done && hiddenA && hiddenB && !stillHidden && !tiedNow)
+          const canLoadOnTop = stillHidden || (tiedNow && (hiddenB?.priority ?? 0) > 0)
           return (
             <li key={stemOf(path)} className={`cf-mod${on ? '' : ' is-off'}`}>
               <span className="cf-mod-name" title={now}><ModName name={name} /></span>
-              {hidden && !done && <span className={`cf-role ${i === 0 ? 'is-hidden' : 'is-wins'}`}>{i === 0 ? 'Hidden' : 'Wins'}</span>}
+              {stillHidden && <span className={`cf-role ${i === 0 ? 'is-hidden' : 'is-wins'}`}>{i === 0 ? 'Hidden' : 'Wins'}</span>}
+              {tiedNow && i === 0 && <span className="cf-role">Tied</span>}
+              {orderUnknown && i === 0 && <span className="cf-role">Order unknown</span>}
               <LoadoutTag path={now} onOpen={onClose} />
-              {hidden && i === 0 && mod && on && !done && onSetPriority && renamable(now) && (
+              {hidden && i === 0 && mod && on && canLoadOnTop && onSetPriority && renamable(now) && (
                 <button type="button" className="lo-text-btn cf-keep" onClick={() => onSetPriority(now, hidden.top)}
                   title={`Give it priority ${hidden.top}, one above every mod that hides it`}>
                   Load on top
@@ -193,9 +206,8 @@ function Group({ g, heroes, find, done, hidden, onSetPriority, onToggleMod, onKe
                 </button>
               )}
               {mod && onSetPriority && (
-                <span className="cf-priority" role="group" aria-label={`Priority of ${name}`}
-                  title="Priority: a higher number wins; 0 (a ! before the name) is above them all">
-                  <NumberInput value={mod.priority || 0} min={0} max={(mod.priority || 0) > 7 ? (mod.priority || 0) + 1 : 7} onChange={v => onSetPriority(now, v)} />
+                <span className="cf-priority">
+                  <PriorityControl path={now} priority={mod.priority} onChange={(p, special) => onSetPriority(now, p, special)} />
                 </span>
               )}
               {mod && onToggleMod && (
@@ -213,7 +225,7 @@ function Group({ g, heroes, find, done, hidden, onSetPriority, onToggleMod, onKe
 /** `scope`: a mod's own conflict check, whose hidden section lists only that mod's pairs. */
 export default function ConflictsPanel({ clashes, mods = [], characterData = [], scope, onSetPriority, onToggleMod, onKeep, onRemoveDuplicates, onClose }: {
   clashes: Clash[]; mods?: Mod[]; characterData?: Hero[]; scope?: string | null
-  onSetPriority?: (path: string, priority: number) => void; onToggleMod?: (path: string) => void
+  onSetPriority?: (path: string, priority: number, special?: boolean) => void; onToggleMod?: (path: string) => void
   onKeep?: (keep: string, others: Mod[]) => unknown; onClose: () => void
   onRemoveDuplicates?: (paths: string[]) => Promise<unknown> // repakxtra: Duplicates' copies to Recently deleted
 }) {
@@ -340,7 +352,14 @@ if (import.meta.env.DEV) {
   const pairs = [{ hidden: 'm/A_9999999_P.pak', winner: 'm/B_99999999_P.pak', files: [] }, { hidden: 'm/A_9999999_P.pak', winner: 'm/C_999999999_P.pak', files: [] }]
   const lib = live([{ path: 'm/A_9999999_P.pak', priority: 1 }, { path: 'm/B_99999999_P.pak', priority: 2 }, { path: 'm/C_999999999_P.pak', priority: 3 }])
   console.assert(topFor('m/A_9999999_P.pak', pairs, lib) === 4 && !unhidden(pairs[0], lib), 'Load on top goes above every mod that hides it')
-  console.assert(!unhidden({ hidden: 'm/A_9999999_P.pak', winner: 'm/!B_9999999_P.pak', files: [] }, live([{ path: 'm/A_9999999_P.pak', priority: 1 }, { path: 'm/!B_9999999_P.pak', priority: 0 }])), 'a ! winner is never outranked by number')
+  const bang = live([{ path: 'm/A_99999999_P.pak', priority: 2 }, { path: 'm/!B_9999999_P.pak', priority: 1 }])
+  console.assert(!unhidden({ hidden: 'm/A_99999999_P.pak', winner: 'm/!B_9999999_P.pak', files: [] }, bang), 'a ! winner is never outranked by number')
+  console.assert(unhidden({ hidden: 'm/!A_99999999_P.pak', winner: 'm/!B_9999999_P.pak', files: [] }, live([{ path: 'm/!A_99999999_P.pak', priority: 2 }, { path: 'm/!B_9999999_P.pak', priority: 1 }])), 'two ! mods order by number')
   console.assert(unhidden(pairs[0], live([{ path: 'm/A_9999999_P.pak', priority: 3 }, { path: 'm/B_99999999_P.pak', priority: 2 }])), 'outranking its winner fixes the pair')
+  console.assert(!resolved({ mods: ['!A_9999999_P.pak', 'B_9999999_P.pak'], files: [] }, live([{ path: '!A_9999999_P.pak', priority: 1 }, { path: 'B_9999999_P.pak', priority: 1 }])), 'toggling ! on one of two tied mods makes order unknown, not resolved')
+  console.assert(!resolved({ mods: ['!A.pak', 'B.pak'], files: [] }, live([{ path: '!A.pak', priority: 0 }, { path: 'B.pak', priority: 0 }])), 'unranked and ! have unknown order, not resolved')
+  console.assert(resolved({ mods: ['!A_P.pak', '!B_P.pak'], files: [] }, live([{ path: '!A_P.pak', priority: 2 }, { path: '!B_P.pak', priority: 1 }])), 'two ! mods at distinct numbers are resolved')
+  console.assert(!resolved({ mods: ['!A_P.pak', '!B_P.pak'], files: [] }, live([{ path: '!A_P.pak', priority: 1 }, { path: '!B_P.pak', priority: 1 }])), 'two ! mods at one number are tied')
+  console.assert(renamable('m/Plain.pak') && !renamable('m/.repakxtra-builtin/X.pak'), 'an Unranked mod can Load on top, a built-in cannot')
   console.assert(after.length === 3 && after[0] === ab && after[1].files[0] === 'x' && after[2].mods[0] === 'm/E.pak', 'a fixed group stays, a still open one is refreshed, a new one goes last', after)
 }

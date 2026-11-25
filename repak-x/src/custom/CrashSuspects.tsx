@@ -2,7 +2,7 @@
 // crash (xtra_crash.rs xtra_crash_tiers): the ones holding the asset that crashed, then the ones changing the same skin,
 // then the same hero. When none match, the hero detection the Library uses (multi-hero mods). Checked ones turn off
 // together, with Undo.
-import { Fragment, type ReactNode, useEffect, useState } from 'react'
+import { Fragment, type ReactNode, useEffect, useRef, useState } from 'react'
 import { invoke } from '@tauri-apps/api/core'
 import { motion } from 'framer-motion'
 import Checkbox from '../components/ui/Checkbox'
@@ -14,6 +14,7 @@ import { ModName, plural } from './modName'
 import { type Tier, type Tiered, grouped, ordered, prechecked, reasonFor } from './crashTiers'
 import BisectPanel from './BisectPanel'
 import { OPEN_BISECT } from './crashBisect'
+import { APP_NAME } from './edition'
 
 type Mod = { path: string; enabled?: boolean }
 type Details = { character_id?: string | null; character_name?: string | null; files?: string[] }
@@ -27,12 +28,14 @@ const OPEN = 'repakxtra-crash-suspects'
  *  toast and the check's answer arrive does not matter. */
 export const previousCrashes = new Set<string>()
 
-/** The crash toast's buttons: upstream's own action, then See suspects. Short labels: they never break inside a word. */
-export function withSuspects(details: { label: string; onClick: () => void }, payload: CrashPayload): ReactNode {
+/** The crash toast's buttons: upstream's own action, then See suspects. Short labels: they never break inside a word.
+ *  See suspects closes the toast (`dismiss`), so it never sits over the dialog it opens. It is the light primary,
+ *  Details the quiet one beside it. */
+export function withSuspects(details: { label: string; onClick: () => void }, payload: CrashPayload, dismiss?: () => void): ReactNode {
   return (
     <span className="cs-toast-actions">
-      <button type="button" className="toast-action-btn is-short" onClick={e => { e.stopPropagation(); details.onClick() }}>{details.label}</button>
-      <button type="button" className="toast-action-btn is-short" onClick={e => { e.stopPropagation(); window.dispatchEvent(new CustomEvent(OPEN, { detail: { payload, previous: previousCrashes.has(payload.crash_folder ?? '') } })) }}>See suspects</button>
+      <button type="button" className="toast-action-btn is-short is-quiet" onClick={e => { e.stopPropagation(); details.onClick() }}>{details.label}</button>
+      <button type="button" className="toast-action-btn is-short" onClick={e => { e.stopPropagation(); dismiss?.(); window.dispatchEvent(new CustomEvent(OPEN, { detail: { payload, previous: previousCrashes.has(payload.crash_folder ?? '') } })) }}>See suspects</button>
     </span>
   )
 }
@@ -75,6 +78,15 @@ export default function CrashSuspects({ deps, mods, details, heroes }: {
   const [picked, setPicked] = useState<Set<string>>(new Set())
   const [busy, setBusy] = useState(false)
   const [showFile, setShowFile] = useState(false)
+  const [copied, setCopied] = useState(false) // Copy says Copied for 2 s
+  const copiedTimer = useRef<ReturnType<typeof setTimeout>>()
+  const copySeq = useRef(0) // scopes clipboard completion and feedback to the open report
+  useEffect(() => {
+    copySeq.current++
+    clearTimeout(copiedTimer.current)
+    setCopied(false)
+    return () => { copySeq.current++; clearTimeout(copiedTimer.current) }
+  }, [crash])
   // focus moves into the dialog, Tab stays in it, and it goes back to the toast's button on close
   const { ref, onKeyDown } = useDialogFocus(Boolean(crash), () => setCrash(null))
   useEffect(() => {
@@ -121,7 +133,13 @@ export default function CrashSuspects({ deps, mods, details, heroes }: {
                 {showFile && <div className="cs-details">
                   {/* the path may break only before a slash, never inside a folder name */}
                   <p className="cs-sub">{p.crash_type && <>{p.crash_type}<br /></>}{(p.asset_path ?? 'The crash report names no asset.').split('/').map((s, i) => <Fragment key={i}>{i > 0 && <><wbr />/</>}{s}</Fragment>)}</p>
-                  <button type="button" className="lo-text-btn" onClick={() => void navigator.clipboard.writeText([p.crash_type, p.asset_path].filter(Boolean).join('\n'))}>Copy</button>
+                  <button type="button" className="lo-text-btn" onClick={() => {
+                    const seq = ++copySeq.current
+                    void navigator.clipboard.writeText([p.crash_type, p.asset_path].filter(Boolean).join('\n')).then(() => {
+                      if (seq !== copySeq.current) return
+                      setCopied(true); clearTimeout(copiedTimer.current); copiedTimer.current = setTimeout(() => setCopied(false), 2000)
+                    }, () => {})
+                  }}>{copied ? 'Copied' : 'Copy'}</button>
                 </div>}
               </details>
             )}
@@ -129,11 +147,11 @@ export default function CrashSuspects({ deps, mods, details, heroes }: {
           <button className="modal-close" onClick={close} aria-label="Close">×</button>
         </div>
         <div className="modal-body cs-body">
-          {crash.previous && <p className="cs-note">This crash happened before repakxtra started, and its report does not say which mods were on. These are the mods that are on now.</p>}
+          {crash.previous && <p className="cs-note">This crash happened before {APP_NAME} started, and its report does not say which mods were on. These are the mods that are on now.</p>}
           {suspects === null
             ? <p className="cs-empty">Looking through the mods that are on…</p>
             : suspects.length === 0
-              ? <p className="cs-empty">{failed ? 'The mods could not be checked just now. Open this again, or find the mod by testing the game.' : 'repakxtra can still find it by testing: it switches groups of mods off while you launch the game, and puts them all back at the end.'}</p>
+              ? <p className="cs-empty">{failed ? 'The mods could not be checked just now. Open this again, or find the mod by testing the game.' : `${APP_NAME} can still find it by testing: it switches groups of mods off while you launch the game, and puts them all back at the end.`}</p>
               // one group per match strength, closest first: a heading instead of the same reason on every row (common
               // region, chunking), and a word when only hero matches came up (they are the weakest)
               : <>
@@ -155,7 +173,7 @@ export default function CrashSuspects({ deps, mods, details, heroes }: {
                     </section>
                   ))}
                   {/* the matches are a guess from file names: the test finds the mod for sure */}
-                  <p className="cs-note">Not sure it is one of these? <button type="button" className="bs-link" onClick={() => { close(); window.dispatchEvent(new Event(OPEN_BISECT)) }}>Test my mods</button> finds it by playing.</p>
+                  <p className="cs-note">Not sure it is one of these? <button type="button" className="bs-link" onClick={() => { close(); window.dispatchEvent(new Event(OPEN_BISECT)) }}>Find the crashing mod</button> by playing.</p>
                 </>}
         </div>
         <div className="modal-footer cs-footer">
@@ -163,7 +181,7 @@ export default function CrashSuspects({ deps, mods, details, heroes }: {
           {Boolean(suspects?.length) && <span className="cs-undo">You can undo this from the notice that follows.</span>}
           <button type="button" className="lo-text-btn" onClick={close}>{suspects?.length ? 'Cancel' : 'Close'}</button>
           {suspects?.length === 0 && (
-            <button type="button" className="btn-primary" onClick={() => { close(); window.dispatchEvent(new Event(OPEN_BISECT)) }}>Test my mods</button>
+            <button type="button" className="btn-primary" onClick={() => { close(); window.dispatchEvent(new Event(OPEN_BISECT)) }}>Find the crashing mod</button>
           )}
           {Boolean(suspects?.length) && (
             <button type="button" className="btn-primary" disabled={busy || picked.size === 0} onClick={turnOff}>

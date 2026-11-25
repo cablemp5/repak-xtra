@@ -1,4 +1,4 @@
-// repakxtra: Settings > General > Previews, the rim light on preview renders, on or off (backend: xtra_previews.rs). Off by
+// repakxtra: Settings > Library > Previews, the rim light on preview renders, on or off (backend: xtra_previews.rs). Off by
 // default, and changing it never renders anything: it applies to previews made from then on, so the person regenerates
 // the ones they want to see change. Also Outline in 3D (viewerOutline.ts): Rotate in 3D's outline, on by default, applied
 // to an open viewer at once.
@@ -12,7 +12,12 @@ export function PreviewRimSetting() {
   const [on, setOn] = useState(false)
   const [changed, setChanged] = useState(false)
   const [outline, setOutline] = useState(viewerOutlineOn)
-  useEffect(() => { invoke<boolean>('preview_rim_get').then(setOn).catch(() => undefined) }, [])
+  useEffect(() => {
+    invoke<boolean>('preview_rim_get').then(setOn).catch(() => undefined)
+    const sync = (e: Event) => { setOn(Boolean((e as CustomEvent<boolean>).detail)); setChanged(false) }
+    window.addEventListener('repakxtra-preview-rim-changed', sync)
+    return () => window.removeEventListener('repakxtra-preview-rim-changed', sync)
+  }, [])
   const change = (next: boolean) => {
     setOn(next)
     invoke('preview_rim_set', { on: next }).then(() => setChanged(true)).catch(() => setOn(!next))

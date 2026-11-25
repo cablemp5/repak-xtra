@@ -5,6 +5,7 @@ import { invoke } from '@tauri-apps/api/core'
 import { useSyncExternalStore } from 'react'
 import type { useAlert } from '../components/AlertHandler'
 import { nameKey as displayName } from './loadoutStore'
+import { APP_NAME } from './edition'
 
 let paths = new Set<string>()
 const subs = new Set<() => void>()
@@ -20,7 +21,7 @@ export async function checkUnreadable(alert: ReturnType<typeof useAlert>, move: 
   for (const path of list) {
     if (offered.has(norm(path))) continue
     offered.add(norm(path))
-    const id = alert.warning('Could not be read', `${displayName(path)} closed repakxtra the last time it was read, so it is skipped until the file changes. Delete moves it to Recently deleted.`, {
+    const id = alert.warning('Could not be read', `${displayName(path)} closed ${APP_NAME} the last time it was read, so it is skipped until the file changes. Delete moves it to Recently deleted.`, {
       duration: 0,
       action: { label: 'Delete', onClick: () => { alert.dismissAlert(id); void move(path) } },
     })
@@ -30,5 +31,5 @@ export async function checkUnreadable(alert: ReturnType<typeof useAlert>, move: 
 export const useUnreadable = (path: string) => useSyncExternalStore(subscribe, () => paths.has(norm(path)))
 
 export function UnreadableBadge() {
-  return <span className="mod-type-badge broken-badge is-broken" title="This mod closed repakxtra the last time it was read, so it is skipped until the file changes. Delete it, or replace it with a fixed copy.">Could not be read</span>
+  return <span className="mod-type-badge broken-badge is-broken" title={`This mod closed ${APP_NAME} the last time it was read, so it is skipped until the file changes. Delete it, or replace it with a fixed copy.`}>Could not be read</span>
 }

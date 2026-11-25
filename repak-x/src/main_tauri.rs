@@ -517,7 +517,14 @@ async fn set_game_path(
     window: Window,
     watcher_state: State<'_, WatcherState>,
 ) -> Result<String, String> {
-    let mods_path = xtra_setup::mods_folder_for(&PathBuf::from(&path))?; // repakxtra: the install folder means its ~mods
+    let input = PathBuf::from(&path);
+    if !input.is_absolute() {
+        return Err("Enter a full folder path, such as C:\\Games\\MarvelRivals.".to_string());
+    }
+    if !input.is_dir() {
+        return Err(format!("Folder does not exist: {path}"));
+    }
+    let mods_path = xtra_setup::mods_folder_for(&input)?; // repakxtra: the install folder means its ~mods
 
     {
         let mut state = state.lock().unwrap();
@@ -765,33 +772,9 @@ async fn get_pak_files(state: State<'_, Arc<Mutex<AppState>>>) -> Result<Vec<Mod
                 .map(|d| d.as_secs())
                 .unwrap_or(0);
 
-            // Calculate priority
-            // Priority 0 = "!" prefix (highest priority)
-            // Priority 1-N = 7-N+6 nines displayed as 1-based (7 nines → Priority 1, 8 nines → Priority 2, etc.)
-            let mut priority = 0;
-            let file_stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or("");
-
-            // Check for "!" prefix (highest priority)
-            if file_stem.starts_with("!") {
-                priority = 0; // Highest priority
-            } else if file_stem.ends_with("_P") {
-                let base_no_p = file_stem.strip_suffix("_P").unwrap();
-                // Check for _999... suffix
-                static RE_NUMS: std::sync::OnceLock<Regex> = std::sync::OnceLock::new(); // repakxtra: compiled once
-                let re_nums = RE_NUMS.get_or_init(|| Regex::new(r"_(\d+)$").unwrap());
-                if let Some(caps) = re_nums.captures(base_no_p) {
-                    let nums = &caps[1];
-                    // Verify they are all 9s
-                    if nums.chars().all(|c| c == '9') {
-                        let actual_nines = nums.len();
-                        // Convert actual nines count to UI priority (1-based)
-                        // 7 nines → Priority 1, 8 nines → Priority 2, etc.
-                        if actual_nines >= 7 {
-                            priority = actual_nines - 6;
-                        }
-                    }
-                }
-            }
+            // repakxtra: 7 nines is 1, 8 is 2, none is 0 (unranked), on or off (.pak.bak_repak too). The UI reads a leading !
+            // (Special) from the path.
+            let priority = crate::xtra_conflicts::rank_of(path).1;
 
             let key = get_mod_key(&path);
             let custom_tags = mod_tags.get(&key).cloned().unwrap_or_default();
@@ -902,25 +885,7 @@ async fn get_pak_files_in_folder(
                 .map(|d| d.as_secs())
                 .unwrap_or(0);
 
-            // Calculate priority
-            let mut priority = 0;
-            let file_stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or("");
-
-            if file_stem.starts_with("!") {
-                priority = 0;
-            } else if file_stem.ends_with("_P") {
-                let base_no_p = file_stem.strip_suffix("_P").unwrap();
-                let re_nums = Regex::new(r"_(\d+)$").unwrap();
-                if let Some(caps) = re_nums.captures(base_no_p) {
-                    let nums = &caps[1];
-                    if nums.chars().all(|c| c == '9') {
-                        let actual_nines = nums.len();
-                        if actual_nines >= 7 {
-                            priority = actual_nines - 6;
-                        }
-                    }
-                }
-            }
+            let priority = crate::xtra_conflicts::rank_of(path).1; // repakxtra
 
             let key = get_mod_key(&path);
             let custom_tags = state.mod_tags.get(&key).cloned().unwrap_or_default();
@@ -946,70 +911,142 @@ async fn get_pak_files_in_folder(
 }
 
 #[tauri::command]
+/// repakxtra: `priority` 1 is _9999999_P (7 nines), each step one more nine, 0 is Unranked (no suffix). `special` sets
+/// or clears only the leading ! (Special), None keeps it (xtra_conflicts::priority_stem). Returns the mod's path after.
 async fn set_mod_priority(
     mod_path: String,
     priority: usize,
+    special: Option<bool>,
     state: State<'_, Arc<Mutex<AppState>>>,
-) -> Result<(), String> {
+) -> Result<String, String> {
     crate::xtra_builtins::fixed_place(Path::new(&mod_path))?; // repakxtra
     let _mutation = crate::xtra_mutation::edit()?;
     crate::xtra_identity::upstream_guard()?; // repakxtra: not while Repak X is open (both change the same files)
     let path = PathBuf::from(&mod_path);
+    let Some(planned_path) = priority_target_path(&path, priority, special)? else {
+        return Ok(mod_path); // No change
+    };
+    if planned_path.exists() {
+        return Err("A mod with this priority already exists".to_string());
+    }
+    let game_path = {
+        let state_guard = state.lock().unwrap();
+        state_guard.game_path.clone()
+    };
+    let old_preview_key = crate::xtra_previews::mod_key(&path);
+    let new_preview_key = crate::xtra_previews::mod_key(&planned_path);
+    // Reserve and migrate previews BEFORE renaming the pak; roll back preview migration if pak rename fails
+    let preview_hold = if old_preview_key != new_preview_key {
+        Some(crate::xtra_previews::reserve_rename()?)
+    } else {
+        None
+    };
+    let preview_key_shared = preview_hold.is_some()
+        && another_mod_uses_key(&game_path, &path, &old_preview_key, crate::xtra_previews::mod_key);
+    let preview_migration = if let Some(ref hold) = preview_hold {
+        crate::xtra_previews::migrate_key_with_hold(hold, &old_preview_key, &new_preview_key, preview_key_shared)?
+    } else {
+        None
+    };
+
+    let new_path = match rename_priority(&path, priority, special) {
+        Ok(Some(p)) => p,
+        Ok(None) => {
+            if let Some(m) = preview_migration { m.rollback(); }
+            return Ok(mod_path);
+        }
+        Err(e) => {
+            if let Some(m) = preview_migration { m.rollback(); }
+            return Err(e);
+        }
+    };
+
+    // Invalidate cache for old path. Tags follow a ! change, retaining the old key if another installed mod still uses it.
+    let old_tag_key = get_mod_key(&path);
+    let tag_key_shared = old_tag_key != get_mod_key(&new_path)
+        && another_mod_uses_key(&game_path, &new_path, &old_tag_key, get_mod_key);
+    {
+        let mut state_guard = state.lock().unwrap();
+        state_guard.mod_details_cache.remove(&path);
+        xtra_details_cache::mark_dirty(); // repakxtra: the saved copy follows
+        if migrate_tags(&mut state_guard.mod_tags, &path, &new_path, tag_key_shared) {
+            let _ = save_state(&state_guard);
+        }
+    }
+
+    Ok(new_path.to_string_lossy().into_owned())
+}
+
+/// repakxtra: true when another installed mod under `mods_dir` (other than `exclude`) shares `key`.
+fn another_mod_uses_key(mods_dir: &Path, exclude: &Path, key: &str, key_fn: fn(&Path) -> String) -> bool {
+    if !mods_dir.is_dir() {
+        return false;
+    }
+    let excl = std::fs::canonicalize(exclude).ok();
+    for entry in WalkDir::new(mods_dir).into_iter().filter_entry(|e| {
+        !e.file_type().is_dir() || !e.file_name().to_str().is_some_and(|n| n.starts_with(".repakxtra-"))
+    }).flatten() {
+        if !entry.file_type().is_file() { continue }
+        let p = entry.path();
+        let name = p.file_name().and_then(|n| n.to_str()).unwrap_or("");
+        let lower = name.to_ascii_lowercase();
+        if !(lower.ends_with(".pak") || lower.ends_with(".bak_repak") || lower.ends_with(".pak_disabled")) {
+            continue;
+        }
+        if p == exclude || excl.as_ref().is_some_and(|c| std::fs::canonicalize(p).ok().as_ref() == Some(c)) {
+            continue;
+        }
+        if key_fn(p) == key {
+            return true;
+        }
+    }
+    false
+}
+
+/// repakxtra: migrates a mod's saved tags from its old name's key to the new one's (a ! change gives it a new key).
+/// When `keep_old` is true (another installed mod still uses `old`), tags are copied instead of moved.
+fn migrate_tags(tags: &mut std::collections::HashMap<String, Vec<String>>, old: &Path, new: &Path, keep_old: bool) -> bool {
+    let (from, to) = (get_mod_key(old), get_mod_key(new));
+    if from == to || tags.contains_key(&to) {
+        return false;
+    }
+    if keep_old {
+        match tags.get(&from).cloned() {
+            Some(t) => tags.insert(to, t).is_none(),
+            None => false,
+        }
+    } else {
+        match tags.remove(&from) {
+            Some(t) => tags.insert(to, t).is_none(),
+            None => false,
+        }
+    }
+}
+
+/// repakxtra: computes the target path for a priority/Special change without mutating disk, or None when unchanged.
+fn priority_target_path(path: &Path, priority: usize, special: Option<bool>) -> Result<Option<PathBuf>, String> {
     if !path.exists() {
         return Err("Mod file does not exist".to_string());
     }
-
-    let extension = path.extension().and_then(|s| s.to_str()).unwrap_or("");
-    let stem = path
-        .file_stem()
-        .and_then(|s| s.to_str())
-        .ok_or("Invalid filename")?;
-
-    // Strip leading "!" if present (highest priority marker)
-    let stem_no_exclaim = stem.strip_prefix("!").unwrap_or(stem);
-
-    // 1. Strip _P if present
-    let base_no_p = if stem_no_exclaim.ends_with("_P") {
-        stem_no_exclaim.strip_suffix("_P").unwrap()
-    } else {
-        stem_no_exclaim
-    };
-
-    // 2. Strip _999... if present
-    let re = Regex::new(r"^(.*)_(\d+)$").unwrap();
-    let clean_base = if let Some(caps) = re.captures(base_no_p) {
-        let prefix = &caps[1];
-        let numbers = &caps[2];
-        if numbers.chars().all(|c| c == '9') {
-            prefix.to_string()
-        } else {
-            base_no_p.to_string()
-        }
-    } else {
-        base_no_p.to_string()
-    };
-
-    // 3. Construct new name with new priority
-    // Priority 0 = "!" prefix (highest priority) with minimum 7 nines
-    // Priority 1-N = 7-N+6 nines (1→7 nines, 2→8 nines, etc.)
-    let new_stem = if priority == 0 {
-        // Highest priority: use "!" prefix with minimum 7 nines
-        let min_nines = "9".repeat(7);
-        format!("!{}_{}_P", clean_base, min_nines)
-    } else {
-        // Convert UI priority (1-based) to actual nines count (7-based)
-        // Remove "!" prefix if present (since priority > 0)
-        let actual_nines = priority + 6; // Priority 1 → 7 nines, Priority 2 → 8 nines, etc.
-        let new_nines = "9".repeat(actual_nines);
-        format!("{}_{}_P", clean_base, new_nines)
-    };
-
-    let new_filename = format!("{}.{}", new_stem, extension);
-    let new_path = path.with_file_name(&new_filename);
-
+    let file_name = path.file_name().and_then(|s| s.to_str()).ok_or("Invalid filename")?;
+    let stem = crate::xtra_bundle::stem(file_name);
+    let extension = &file_name[stem.len()..];
+    let new_stem = crate::xtra_conflicts::priority_stem(stem, priority, special);
+    let new_path = path.with_file_name(format!("{new_stem}{extension}"));
     if new_path == path {
-        return Ok(()); // No change
+        Ok(None)
+    } else {
+        Ok(Some(new_path))
     }
+}
+
+/// repakxtra: renames the mod and its .utoc/.ucas to the new priority, keeping its whole extension (.pak, .bak_repak,
+/// .pak.bak_repak or .pak_disabled). The new path, or None when the name already is that priority.
+fn rename_priority(path: &Path, priority: usize, special: Option<bool>) -> Result<Option<PathBuf>, String> {
+    let Some(new_path) = priority_target_path(path, priority, special)? else {
+        return Ok(None);
+    };
+    let path = path.to_path_buf();
 
     if new_path.exists() {
         return Err("A mod with this priority already exists".to_string());
@@ -1030,15 +1067,7 @@ async fn set_mod_priority(
         true => xtra_ops::io(&std::io::Error::from_raw_os_error(32)).unwrap_or(e),
         false => format!("Failed to rename mod: {}", e),
     })?;
-
-    // Invalidate cache for old path
-    {
-        let mut state_guard = state.lock().unwrap();
-        state_guard.mod_details_cache.remove(&path);
-        xtra_details_cache::mark_dirty(); // repakxtra: the saved copy follows
-    }
-
-    Ok(())
+    Ok(Some(new_path))
 }
 
 #[derive(Clone, serde::Serialize, serde::Deserialize)]
@@ -3623,17 +3652,12 @@ async fn update_mod(
         old_custom_name, old_custom_tags, old_folder_id
     );
 
-    // Get the old mod's base name (for naming the new mod if preserve_name is true)
-    let old_mod_name = actual_old_path
-        .file_stem()
-        .and_then(|s| s.to_str())
-        .map(|s| {
-            // Strip .bak_repak or _disabled suffix if present
-            s.trim_end_matches(".bak_repak")
-                .trim_end_matches("_disabled")
-                .to_string()
-        })
-        .unwrap_or_else(|| "Unknown".to_string());
+    // Get the old mod's full stem (handles .pak.bak_repak as well as .pak)
+    let old_mod_name = crate::xtra_bundle::stem(
+        actual_old_path.file_name().and_then(|s| s.to_str()).unwrap_or("Unknown"),
+    )
+    .to_string();
+    let (old_special, old_priority) = crate::xtra_conflicts::rank_of(&actual_old_path);
 
     // ========================================================================
     // Step 2 (repakxtra): nothing is deleted up front. The install below builds the new version in a private folder
@@ -3650,15 +3674,18 @@ async fn update_mod(
 
     info!("Installing new mod from: {:?}", new_source);
 
-    // Determine the mod name to use
+    // Determine the mod name to use, preserving the replaced mod's exact priority and Special (!) state
     let mod_name = if preserve_name {
         old_custom_name.clone().unwrap_or(old_mod_name.clone())
     } else {
-        new_source
-            .file_stem()
-            .and_then(|s| s.to_str())
-            .map(|s| s.to_string())
-            .unwrap_or_else(|| "NewMod".to_string())
+        let raw_name = new_source.file_name().and_then(|s| s.to_str()).unwrap_or("NewMod");
+        let stripped = crate::xtra_bundle::stem(raw_name);
+        let new_stem = if stripped == raw_name {
+            new_source.file_stem().and_then(|s| s.to_str()).unwrap_or("NewMod")
+        } else {
+            stripped
+        };
+        crate::xtra_conflicts::priority_stem(new_stem, old_priority, Some(old_special))
     };
 
     // Use the existing install_mods logic
@@ -3684,6 +3711,7 @@ async fn update_mod(
     // Apply settings to the installable mod
     if let Some(installable) = installable_mods.get_mut(0) {
         installable.mod_name = mod_name.clone();
+        installable.keep_exact_name = true;
         installable.install_subfolder = install_subfolder.clone();
         installable.obfuscate = obfuscate;
     }
@@ -3733,7 +3761,7 @@ async fn update_mod(
 
     // Determine the new mod's path
     // repakxtra: the name install_mods gave it (mod_name may already end in _9999999_P: it came from the old file)
-    let new_mod_filename = format!("{}.pak", crate::install_mod::install_mod_logic::normalize_mod_base_name(&mod_name, crate::install_mod::install_mod_logic::BASE_MOD_NINES));
+    let new_mod_filename = format!("{}.pak", installable_mods.first().map_or_else(|| crate::install_mod::install_mod_logic::normalize_mod_base_name(&mod_name, crate::install_mod::install_mod_logic::BASE_MOD_NINES), |m| m.mod_name.clone()));
     let new_mod_path = if install_subfolder.is_empty() {
         mod_directory.join(&new_mod_filename)
     } else {
@@ -4176,6 +4204,61 @@ mod toggle_and_delete_tests {
         let q = |n: &str| both.path().join(n);
         assert_eq!(delete_set(q("M_P.pak").to_str().unwrap()).1, vec![q("M_P.pak")]);
         assert_eq!(delete_set(q("M_P.bak_repak").to_str().unwrap()).1, vec![q("M_P.bak_repak")]);
+    }
+
+    #[test]
+    fn a_priority_change_moves_the_set_and_special_is_only_the_bang() {
+        let dir = folder(&["My Skin_9999999_P.pak", "My Skin_9999999_P.utoc", "My Skin_9999999_P.ucas", "Off_9999999_P.bak_repak"]);
+        let p = |n: &str| dir.path().join(n);
+        let names = || { let mut v: Vec<String> = std::fs::read_dir(dir.path()).unwrap().map(|e| e.unwrap().file_name().to_string_lossy().into()).collect(); v.sort(); v };
+        let some = |n: &str| Ok(Some(p(n)));
+        assert_eq!(super::rename_priority(&p("My Skin_9999999_P.pak"), 3, None), some("My Skin_999999999_P.pak"));
+        assert_eq!(names(), ["My Skin_999999999_P.pak", "My Skin_999999999_P.ucas", "My Skin_999999999_P.utoc", "Off_9999999_P.bak_repak"], "the .utoc and .ucas follow");
+        assert_eq!(super::rename_priority(&p("My Skin_999999999_P.pak"), 3, Some(true)), some("!My Skin_999999999_P.pak"));
+        assert!(p("!My Skin_999999999_P.ucas").exists(), "Special adds ! to the whole set");
+        assert_eq!(super::rename_priority(&p("!My Skin_999999999_P.pak"), 3, Some(true)), Ok(None), "no change");
+        assert_eq!(super::rename_priority(&p("!My Skin_999999999_P.pak"), 0, None), some("!My Skin.pak"), "Unranked keeps the !");
+        assert_eq!(super::rename_priority(&p("!My Skin.pak"), 0, Some(false)), some("My Skin.pak"));
+        assert_eq!(names(), ["My Skin.pak", "My Skin.ucas", "My Skin.utoc", "Off_9999999_P.bak_repak"], "Special off takes only the !");
+        assert_eq!(super::rename_priority(&p("Off_9999999_P.bak_repak"), 2, None), some("Off_99999999_P.bak_repak"), "an off mod stays off");
+    }
+
+    #[test]
+    fn an_off_pak_bak_repak_keeps_its_whole_extension() {
+        let dir = folder(&["Skin_9999999_P.pak.bak_repak", "Skin_9999999_P.utoc", "Skin_9999999_P.ucas"]);
+        let p = |n: &str| dir.path().join(n);
+        assert_eq!(crate::xtra_conflicts::rank_of(&p("Skin_9999999_P.pak.bak_repak")), (false, 1));
+        assert_eq!(super::rename_priority(&p("Skin_9999999_P.pak.bak_repak"), 2, None), Ok(Some(p("Skin_99999999_P.pak.bak_repak"))));
+        assert!(p("Skin_99999999_P.utoc").exists() && p("Skin_99999999_P.ucas").exists(), "its .utoc and .ucas follow");
+        assert_eq!(super::rename_priority(&p("Skin_99999999_P.pak.bak_repak"), 2, Some(true)), Ok(Some(p("!Skin_99999999_P.pak.bak_repak"))));
+    }
+
+    #[test]
+    fn tags_follow_a_special_change() {
+        let mut tags = std::collections::HashMap::from([("Skin".to_string(), vec!["red".to_string()]), ("!Kept".to_string(), vec!["a".to_string()]), ("Kept".to_string(), vec!["b".to_string()])]);
+        let p = std::path::Path::new;
+        assert!(super::migrate_tags(&mut tags, p("m/Skin_9999999_P.pak"), p("m/!Skin_9999999_P.pak"), false));
+        assert_eq!(tags.get("!Skin"), Some(&vec!["red".to_string()]));
+        assert!(!tags.contains_key("Skin"));
+        assert!(!super::migrate_tags(&mut tags, p("m/!Skin_9999999_P.pak"), p("m/!Skin_99999999_P.pak"), false), "a number change keeps the key");
+        assert!(!super::migrate_tags(&mut tags, p("m/Kept.pak"), p("m/!Kept.pak"), false), "tags the new key has stay");
+        assert_eq!(tags.get("Kept"), Some(&vec!["b".to_string()]));
+
+        let mut shared = std::collections::HashMap::from([("Skin".to_string(), vec!["fav".to_string()])]);
+        assert!(super::migrate_tags(&mut shared, p("A/Skin.pak"), p("A/!Skin.pak"), true));
+        assert_eq!(shared.get("Skin"), Some(&vec!["fav".to_string()]), "shared old key is retained");
+        assert_eq!(shared.get("!Skin"), Some(&vec!["fav".to_string()]), "new key gets a copy");
+
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(dir.path().join("A")).unwrap();
+        std::fs::create_dir_all(dir.path().join("B")).unwrap();
+        let a_new = dir.path().join("A").join("!Skin.pak");
+        let b_copy = dir.path().join("B").join("Skin.pak");
+        std::fs::write(&a_new, "x").unwrap();
+        std::fs::write(&b_copy, "x").unwrap();
+        assert!(super::another_mod_uses_key(dir.path(), &a_new, "Skin", super::get_mod_key));
+        std::fs::remove_file(&b_copy).unwrap();
+        assert!(!super::another_mod_uses_key(dir.path(), &a_new, "Skin", super::get_mod_key));
     }
 }
 
@@ -7903,7 +7986,7 @@ async fn get_asset_explorer_index(
     state: State<'_, Arc<Mutex<AppState>>>,
 ) -> Result<asset_explorer::AssetExplorerIndex, String> {
     use asset_explorer::{
-        classify_asset, clean_mod_display_name, is_metadata_path, mod_priority,
+        classify_asset, clean_mod_display_name, is_metadata_path,
         normalize_asset_path, AssetExplorerFailure, AssetExplorerMod,
     };
 
@@ -8013,7 +8096,7 @@ async fn get_asset_explorer_index(
             path: path.to_string_lossy().to_string(),
             display_name,
             enabled: ext == Some("pak"),
-            priority: mod_priority(path.file_stem().and_then(|s| s.to_str()).unwrap_or("")),
+            priority: crate::xtra_conflicts::rank_of(path).1, // repakxtra: an off mod too
             folder_id,
             category: details.category,
             character_name: details.character_name,
@@ -8129,27 +8212,8 @@ fn scan_mod_clashes(quiet: bool, game_path: &Path, state: &Arc<Mutex<AppState>>)
             continue;
         }
 
-        // Calculate priority (same as get_pak_files)
-        let mut priority = 0;
-        let file_stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or("");
-
-        // Check for "!" prefix (highest priority)
-        if file_stem.starts_with("!") {
-            priority = 0; // Highest priority
-        } else if file_stem.ends_with("_P") {
-            let base_no_p = file_stem.strip_suffix("_P").unwrap();
-            let re_nums = Regex::new(r"_(\d+)$").unwrap();
-            if let Some(caps) = re_nums.captures(base_no_p) {
-                let nums = &caps[1];
-                if nums.chars().all(|c| c == '9') {
-                    let actual_nines = nums.len();
-                    // Convert actual nines count to UI priority (1-based)
-                    if actual_nines >= 7 {
-                        priority = actual_nines - 6;
-                    }
-                }
-            }
-        }
+        // repakxtra: ! and the nines, so a ! mod and an unranked one never count as tied
+        let priority = crate::xtra_conflicts::rank_of(path);
 
         // Check if it's IoStore
         let mut utoc_path = path.to_path_buf();
@@ -8201,7 +8265,7 @@ fn scan_mod_clashes(quiet: bool, game_path: &Path, state: &Arc<Mutex<AppState>>)
 
     for (i, j, overlapping_files) in crate::xtra_conflicts::find(&mods_info) {
         let (mod1, mod2) = (&mods_info[i], &mods_info[j]);
-        let priority = mod1.priority;
+        let priority = crate::xtra_conflicts::rank_label(mod1.priority); // repakxtra
         {
             {
                 {
@@ -8307,27 +8371,9 @@ fn single_mod_conflicts(target_path: PathBuf, game_path: PathBuf) -> Result<Vec<
     use std::collections::{HashMap, HashSet};
     info!("Checking conflicts for mod: {}", target_path.display());
 
-    // Helper to calculate priority from filename
-    fn calculate_priority(path: &Path) -> usize {
-        let mut priority = 0;
-        let file_stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or("");
-
-        if file_stem.starts_with("!") {
-            priority = 0;
-        } else if file_stem.ends_with("_P") {
-            let base_no_p = file_stem.strip_suffix("_P").unwrap();
-            let re_nums = Regex::new(r"_(\d+)$").unwrap();
-            if let Some(caps) = re_nums.captures(base_no_p) {
-                let nums = &caps[1];
-                if nums.chars().all(|c| c == '9') {
-                    let actual_nines = nums.len();
-                    if actual_nines >= 7 {
-                        priority = actual_nines - 6;
-                    }
-                }
-            }
-        }
-        priority
+    // repakxtra: ! and the number apart (xtra_conflicts::rank)
+    fn calculate_priority(path: &Path) -> crate::xtra_conflicts::Rank {
+        crate::xtra_conflicts::rank_of(path)
     }
 
     // Helper to get files from a PAK or IoStore
@@ -8363,7 +8409,7 @@ fn single_mod_conflicts(target_path: PathBuf, game_path: PathBuf) -> Result<Vec<
     info!(
         "Target mod has {} files at priority {}",
         target_files.len(),
-        target_priority
+        crate::xtra_conflicts::rank_label(target_priority)
     );
 
     let mut conflicts: Vec<SingleModConflict> = Vec::new();
@@ -8412,18 +8458,12 @@ fn single_mod_conflicts(target_path: PathBuf, game_path: PathBuf) -> Result<Vec<
 
         // Calculate priority comparison
         let other_priority = calculate_priority(path);
-        let priority_comparison = if target_priority == other_priority {
-            "Same priority (conflict!)".to_string()
-        } else if target_priority < other_priority {
-            format!(
-                "Target has higher priority ({} vs {})",
-                target_priority, other_priority
-            )
-        } else {
-            format!(
-                "Target has lower priority ({} vs {})",
-                target_priority, other_priority
-            )
+        // repakxtra: more nines win (the old check had it backwards), and a ! or unranked mod has no order the app sets
+        let (a, b) = (crate::xtra_conflicts::rank_label(target_priority), crate::xtra_conflicts::rank_label(other_priority));
+        let priority_comparison = match crate::xtra_conflicts::ordered(target_priority, other_priority) {
+            _ if target_priority == other_priority => "Same priority (conflict!)".to_string(),
+            Some(o) => format!("Target has {} priority ({a} vs {b})", if o.is_gt() { "higher" } else { "lower" }),
+            None => format!("Load order not set by priority ({a} vs {b})"),
         };
 
         // Extract affected characters from overlapping files

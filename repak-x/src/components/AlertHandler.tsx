@@ -72,6 +72,7 @@ type Toast = {
     action?: ToastAction | React.ReactNode;
     isLoading?: boolean;
     progressValue?: number;
+    ownerModal?: HTMLElement | null; // repakxtra: the dialog open when this toast fired, if any
     [key: string]: unknown;
 };
 
@@ -131,13 +132,24 @@ export function AlertProvider({ children, placement = DEFAULT_CONFIG.placement }
     const [toasts, setToasts] = useState<Toast[]>([]);
     const toastsNow = useRef(toasts); // repakxtra: read by dismissals, so their onDismiss runs once, outside a state update
     toastsNow.current = toasts;
+    const clocksRef = useRef<Map<number, ToastClock>>(new Map()); // repakxtra: elapsed countdown per toast ID, kept across modal/background deck moves
+    const [activeModal, setActiveModal] = useState<HTMLElement | null>(() => topModal()); // repakxtra: tracks open dialogs to layer and pause background toasts
+    useEffect(() => {
+        const sync = () => setActiveModal(prev => { const next = topModal(); return prev === next ? prev : next; });
+        const mo = new MutationObserver(sync);
+        mo.observe(document.body, { childList: true, subtree: true });
+        sync();
+        return () => mo.disconnect();
+    }, []);
 
     // Add a new toast
     const showAlert = useCallback((alertConfig: AlertOptions) => {
         if (quietToast(alertConfig)) return -1; // repakxtra: Minimal toasts skips everyday confirmations
-        // repakxtra: the same problem again while its toast is up (a retry loop, two listeners) is one notice
+        // repakxtra: the same problem again in the same stack while its toast is up is one notice (never deduplicate a dialog error against one hidden behind it)
+        const owner = topModal();
         const same = toastsNow.current.find(t => (t.color === 'danger' || t.color === 'warning') && t.color === alertConfig.color
-            && t.title === alertConfig.title && (t.fullText ?? t.description) === alertConfig.description && !t.isLoading);
+            && t.title === alertConfig.title && (t.fullText ?? t.description) === alertConfig.description && !t.isLoading
+            && (t.ownerModal ?? null) === (owner ?? null));
         if (same) return same.id;
         const id = Date.now() + Math.random();
         const toast: Toast = {
@@ -149,9 +161,11 @@ export function AlertProvider({ children, placement = DEFAULT_CONFIG.placement }
             duration: typeof alertConfig.duration === 'number'
                 ? alertConfig.duration
                 : DEFAULT_CONFIG.defaultDuration,
-            createdAt: Date.now()
+            createdAt: Date.now(),
+            ownerModal: owner // repakxtra: layered above its owning dialog only (older background toasts stay behind)
         };
 
+        clocksRef.current.set(id, { elapsed: 0, since: null }); // repakxtra
         toastsNow.current = [...toastsNow.current, toast]; // repakxtra: a second call in the same tick sees it
         setToasts(prev => [...prev, toast]);
         alertSound(toast.color, toast.isLoading); // repakxtra
@@ -162,6 +176,7 @@ export function AlertProvider({ children, placement = DEFAULT_CONFIG.placement }
     const dismissAlert = useCallback((id: number) => {
         // repakxtra: a toast's own `onDismiss` hears it was closed (custom/scanProgress.ts stops showing it)
         const t = toastsNow.current.find(toast => toast.id === id);
+        clocksRef.current.delete(id); // repakxtra
         toastsNow.current = toastsNow.current.filter(toast => toast.id !== id); // repakxtra: the same problem right after shows again
         setToasts(prev => prev.filter(toast => toast.id !== id));
         if (typeof t?.onDismiss === 'function') (t.onDismiss as () => void)();
@@ -170,6 +185,7 @@ export function AlertProvider({ children, placement = DEFAULT_CONFIG.placement }
     // Dismiss all toasts
     const dismissAllAlerts = useCallback(() => {
         const all = toastsNow.current; // repakxtra: Clear all tells each toast too
+        clocksRef.current.clear(); // repakxtra
         toastsNow.current = [];
         setToasts([]);
         for (const t of all) if (typeof t.onDismiss === 'function') (t.onDismiss as () => void)();
@@ -178,17 +194,20 @@ export function AlertProvider({ children, placement = DEFAULT_CONFIG.placement }
     // Update an existing toast
     const updateToast = useCallback((id: number, updates: AlertOptions) => {
         // repakxtra: Minimal toasts: a progress toast that finished as an everyday success goes away instead
-        if (updates.color && quietToast(updates)) { setToasts(prev => prev.filter(toast => toast.id !== id)); return; }
+        if (updates.color && quietToast(updates)) { clocksRef.current.delete(id); setToasts(prev => prev.filter(toast => toast.id !== id)); return; }
         // repakxtra: a loading toast that ends as a problem lands in Logs once (outside the updater, which may run twice)
         const was = toastsNow.current.find(toast => toast.id === id);
         // repakxtra: a loading toast that ends as the same problem another toast already shows goes away (an install's
         // failure toast from the backend and the install's own result)
         const end = was && { ...was, ...updates };
+        const owner = was?.ownerModal ?? null;
         if (end && updates.color && (end.color === 'danger' || end.color === 'warning') && toastsNow.current.some(t => t.id !== id && t.color === end.color
-            && t.title === end.title && (t.fullText ?? t.description) === end.description)) {
+            && t.title === end.title && (t.fullText ?? t.description) === end.description && (t.ownerModal ?? null) === owner)) {
+            clocksRef.current.delete(id);
             toastsNow.current = toastsNow.current.filter(toast => toast.id !== id);
             setToasts(prev => prev.filter(toast => toast.id !== id)); return;
         }
+        if (was?.isLoading && updates.isLoading === false) clocksRef.current.set(id, { elapsed: 0, since: null }); // repakxtra: fresh countdown after loading finishes
         if (updates.color) alertSound(updates.color, updates.isLoading); // repakxtra: a loading toast that finished (after the fold: one notice, one sound)
         const logged = updates.color && was && !was.logId ? logProblem({ ...was, ...updates }, () => dismissAlert(id)) : null;
         toastsNow.current = toastsNow.current.map(toast => toast.id === id ? { ...toast, ...updates, ...logged } : toast); // repakxtra: in step for a same-tick call
@@ -218,7 +237,7 @@ export function AlertProvider({ children, placement = DEFAULT_CONFIG.placement }
         return showAlert({
             color: 'danger',
             icon: Icons.crash,
-            title: title || 'Game Crashed',
+            title: title || 'Game crashed',
             description,
             duration: 0, // Persistent by default
             ...options
@@ -289,14 +308,29 @@ export function AlertProvider({ children, placement = DEFAULT_CONFIG.placement }
         promise
     }), [showAlert, dismissAlert, dismissAllAlerts, updateToast, success, error, warning, info, crash, promise]);
 
+    // repakxtra: separate background toasts from toasts owned by the active dialog so older toasts never jump over an open dialog
+    const isModalToast = (t: Toast) => Boolean(activeModal && t.ownerModal === activeModal);
+    const modalToasts = activeModal ? toasts.filter(isModalToast) : [];
+    const bgToasts = activeModal ? toasts.filter(t => !isModalToast(t)) : toasts;
+
     return (
         <AlertContext.Provider value={contextValue}>
             {children}
             <ToastContainer
-                toasts={toasts}
+                toasts={bgToasts}
                 onDismiss={dismissAlert}
-                onDismissAll={dismissAllAlerts}
+                onDismissAll={() => bgToasts.forEach(t => dismissAlert(t.id))}
                 placement={placement}
+                behindModal={Boolean(activeModal)}
+                clocks={clocksRef.current}
+            />
+            <ToastContainer
+                toasts={modalToasts}
+                onDismiss={dismissAlert}
+                onDismissAll={() => modalToasts.forEach(t => dismissAlert(t.id))}
+                placement={placement}
+                overModal
+                clocks={clocksRef.current}
             />
             <ToastAnnouncer toasts={toasts} />{/* repakxtra: results read out once, failures at once */}
         </AlertContext.Provider>
@@ -354,7 +388,7 @@ export function stackBack(index: number, ownH: number, frontH: number) {
 }
 
 // Toast Container - renders all active toasts with card stacking
-function ToastContainer({ toasts, onDismiss, onDismissAll, placement }: { toasts: Toast[]; onDismiss: (id: number) => void; onDismissAll: () => void; placement: string }) {
+function ToastContainer({ toasts, onDismiss, onDismissAll, placement, behindModal = false, overModal = false, clocks }: { toasts: Toast[]; onDismiss: (id: number) => void; onDismissAll: () => void; placement: string; behindModal?: boolean; overModal?: boolean; clocks: Map<number, ToastClock> }) {
     // repakxtra: Banner stacking's spread is pointer geometry, not :hover. The pointer inside the collapsed stack spreads
     // it, and it holds until the pointer leaves the taller spread column (the wrapper takes the pointer while spread, so
     // the gaps between spread toasts count as inside)
@@ -424,7 +458,7 @@ function ToastContainer({ toasts, onDismiss, onDismissAll, placement }: { toasts
 
     return (
         <div
-            className={`toast-container ${placement}`}
+            className={`toast-container ${placement}${overModal ? ' has-modal-toast' : ''}`} /* repakxtra */
             onPointerMove={onPointerMove}
             onPointerLeave={() => setSpread(false)}
             onFocus={onFocus} onBlur={onBlur} // repakxtra
@@ -453,10 +487,12 @@ function ToastContainer({ toasts, onDismiss, onDismissAll, placement }: { toasts
                             index={index}
                             footerLift={isBottom && toasts.length > 1 ? 36 : 0}
                             isHovered={isHovered}
+                            behindModal={behindModal}
                             placement={placement}
                             spread={spread[index]}
                             frontH={frontH} ownH={heights[toast.id] ?? 72}
                             onHeight={reportHeight}
+                            clocks={clocks}
                         />
                     ))}
                 </AnimatePresence>
@@ -484,7 +520,7 @@ function ToastContainer({ toasts, onDismiss, onDismissAll, placement }: { toasts
 }
 
 // Individual Toast Item with card stacking effect - memoized to prevent unnecessary re-renders
-const ToastItem = memo(function ToastItem({ toast, onDismiss, index, footerLift, isHovered, placement, spread = index * 100, frontH = 72, ownH = 72, onHeight }: any) {
+const ToastItem = memo(function ToastItem({ toast, onDismiss, index, footerLift, isHovered, behindModal = false, placement, spread = index * 100, frontH = 72, ownH = 72, onHeight, clocks }: any) {
     const itemRef = useRef<HTMLDivElement>(null);
     const isPresent = useToastExit(itemRef); // repakxtra
     useEffect(() => { // repakxtra: report this toast's height so the hovered stack spaces by it
@@ -494,37 +530,42 @@ const ToastItem = memo(function ToastItem({ toast, onDismiss, index, footerLift,
         ro.observe(el);
         return () => ro.disconnect();
     }, [toast.id, onHeight]);
-    const progress = useMotionValue(1); // repakxtra: the countdown updates its bar without rerendering the toast
+    const initialClock: ToastClock = clocks?.get(toast.id) ?? { elapsed: 0, since: null };
+    const progress = useMotionValue(toast.duration > 0 ? Math.max(0, 1 - clockElapsed(initialClock, Date.now()) / toast.duration) : 1); // repakxtra: the countdown updates its bar without rerendering the toast
     const [isPaused, setIsPaused] = useState(false);
     const [hasFocus, setHasFocus] = useState(false); // repakxtra: focus in the toast holds its timer, like the pointer
-    const held = isPaused || hasFocus || isHovered; // repakxtra: a spread stack is being read, gaps included
-    const clock = useRef<ToastClock>({ elapsed: 0, since: null }); // repakxtra: time run so far, kept across holds
+    const held = isPaused || hasFocus || isHovered || Boolean(behindModal) || !isPresent; // repakxtra: paused while hovered, focused, leaving, or hidden behind a dialog
 
     const { id, title, description, color, variant, icon, hideIcon, duration, endContent, action, isLoading, progressValue } = toast;
 
     // Only the front toast (index 0) should auto-dismiss
     const shouldAutoDismiss = index === 0;
 
-    // Handle auto-dismiss with progress (repakxtra: held while hovered or focused, either one)
+    // Handle auto-dismiss with progress (repakxtra: held while hovered or focused, elapsed time kept across deck moves)
     useEffect(() => {
         if (!shouldAutoDismiss || duration <= 0 || held) return;
-        clock.current = holdClock(clock.current, false, Date.now());
+        const read = (): ToastClock => clocks?.get(id) ?? { elapsed: 0, since: null };
+        const started = holdClock(read(), false, Date.now());
+        if (clocks?.has(id)) clocks.set(id, started);
 
-        const interval = setInterval(() => {
-            const remaining = Math.max(0, 100 - (clockElapsed(clock.current, Date.now()) / duration) * 100);
+        const tick = () => {
+            const remaining = Math.max(0, 100 - (clockElapsed(clocks?.get(id) ?? started, Date.now()) / duration) * 100);
             progress.set(remaining / 100);
-
             if (remaining <= 0) {
-                clearInterval(interval);
                 onDismiss(id);
+                return true;
             }
-        }, 50);
+            return false;
+        };
+        if (tick()) return;
+
+        const interval = setInterval(() => { if (tick()) clearInterval(interval); }, 50);
 
         return () => {
             clearInterval(interval);
-            clock.current = holdClock(clock.current, true, Date.now());
+            if (clocks?.has(id)) clocks.set(id, holdClock(clocks.get(id) ?? started, true, Date.now()));
         };
-    }, [id, duration, held, onDismiss, shouldAutoDismiss, progress]);
+    }, [id, duration, held, onDismiss, shouldAutoDismiss, progress, clocks]);
 
     // Get the appropriate icon
     const getIcon = () => {

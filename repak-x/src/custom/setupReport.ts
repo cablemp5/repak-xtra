@@ -1,4 +1,4 @@
-import { LOADER_NAME } from './edition'
+import { APP_NAME, LOADER_NAME } from './edition'
 // repakxtra: Copy setup report (Settings > Help & Community, and Setup). Plain text a helper can read in Discord: what to
 // check next first, then why mods might not load (the setup), then what the newest crash shows, recent activity, and the
 // mods that are on, so the summary survives Discord's 2,000 character cut. The newest crash's redacted game log comes
@@ -67,7 +67,7 @@ export function buildReport(r: ReportInput) {
   const crashed = r.crashRef !== undefined
   const lines = [
     '```',
-    `repakxtra ${r.version}${r.repakx ? ` (RepakX ${r.repakx})` : ''}, ${r.launcher}`,
+    `${APP_NAME} ${r.version}${r.repakx ? ` (RepakX ${r.repakx})` : ''}, ${r.launcher}`,
     ...(r.made ? [`Report made ${r.made}`] : []),
     '',
     'What to check next:',

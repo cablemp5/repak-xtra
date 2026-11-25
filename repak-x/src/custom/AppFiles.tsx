@@ -5,6 +5,7 @@ import { invoke } from '@tauri-apps/api/core'
 import { FileCheck, Wrench } from 'lucide-react'
 import type { useAlert } from '../components/AlertHandler'
 import { BUILD, REPAKXTRA_VERSION } from './version'
+import { APP_NAME, RELEASE_PREFIX } from './edition'
 
 type Report = { missing: string[]; different: string[]; total: number }
 
@@ -61,14 +62,14 @@ export default function AppFiles({ alert }: { alert: ReturnType<typeof useAlert>
       <div className="xs-text">
         <span className="xs-label">App files</span>
         <span className="setting-subtext">
-          {reason || `Compares repakxtra's files with release v${REPAKXTRA_VERSION} and changes nothing. Your mods, loadouts, and settings are never part of it, and files the release does not hold are left alone.`}
+          {reason || `Compares ${APP_NAME}'s files with release ${RELEASE_PREFIX}${REPAKXTRA_VERSION} and changes nothing. Your mods, loadouts, and settings are never part of it, and files the release does not hold are left alone.`}
         </span>
         {report && <span className="xs-label xs-app-report">{reportText(report)}</span>}
       </div>
       <div className="xs-buttons">
         {off > 0 && (
           <button type="button" className="action-btn" disabled={!!busy || !!reason} onClick={repair}
-            title="Puts back only the missing or different files, then restarts repakxtra. If it does not start, the previous files go back.">
+            title={`Puts back only the missing or different files, then restarts ${APP_NAME}. If it does not start, the previous files go back.`}>
             <Wrench size={14} /> {busy === 'repair' ? 'Repairing…' : 'Repair'}
           </button>
         )}

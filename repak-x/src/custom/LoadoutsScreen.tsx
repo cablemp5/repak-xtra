@@ -32,6 +32,7 @@ import { savedItem } from './storageCarryOver'
 import { useUpstreamWatch } from './upstream'
 import { useUiPref } from './uiPrefs'
 import { useNearCards } from './nearCards'
+import { fitGrid } from './fit'
 
 type GroupBy = 'group' | 'hero'
 const GROUP_BY_KEY = 'repakxtra.loadoutGroupBy'
@@ -542,7 +543,7 @@ function LoadoutsHome(p: LoadoutProps) {
       {hidden}
       {/* repakxtra: three parts that never collide: the title row and the view controls on top, the actions on their own
           row under the title (one line of nine buttons wrapped unevenly at most window widths) */}
-      <header className="lo-screen-head">
+      <header className="lo-screen-head" ref={fitGrid}>{/* fit.ts: the actions take their own row when the one row would not fit */}
         <div className="lo-head-main">
           <div className="lo-title-row">
             <h2>Loadouts</h2>

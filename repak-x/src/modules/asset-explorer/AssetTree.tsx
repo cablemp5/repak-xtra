@@ -28,6 +28,7 @@ import type { ExplorerMod } from './types'
 import { KIND_BADGES, KIND_LABELS } from './types'
 import { chainAt, findActive, treeKey, type KeyRows } from '../../custom/treeKeys' // repakxtra
 import { useMenuKeys } from '../../custom/menuKeys' // repakxtra
+import { APP_NAME } from '../../custom/edition' // repakxtra
 import '../../components/ContextMenu.css' // repakxtra: the row actions menu uses the Library menu's look
 
 export const ROW_HEIGHT = 26
@@ -214,7 +215,7 @@ export default function AssetTree({
                 { label: 'Copy name without extension', run: () => copy(key, path, true, true) },
             )
         }
-        if (mod) items.push({ label: 'Select mod in repakxtra', run: () => onRevealMod(mod.path) })
+        if (mod) items.push({ label: `Select mod in ${APP_NAME}`, run: () => onRevealMod(mod.path) })
         return items
     }
 
