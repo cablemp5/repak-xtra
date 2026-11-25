@@ -6,7 +6,7 @@ import RecentlyDeleted from '../custom/RecentlyDeleted' // repakxtra: Settings >
 import CrashReports from '../custom/CrashReports' // repakxtra: Settings > Crash reports
 import { ArchiveRestore, Bug, CircleHelp, ExternalLink, FileText, FolderOpen, FolderSearch, Gauge, GraduationCap, HardDrive, Keyboard, Library, LifeBuoy, List, Palette, RefreshCw, Rocket, RotateCcw, Settings, Settings2, SlidersHorizontal, Tags, TriangleAlert, Users, WandSparkles } from 'lucide-react' // repakxtra: one icon set, brand logos below stay
 import { useDialogFocus } from '../custom/dialogFocus' // repakxtra
-import { SettingsSearch, useSettingsFilter } from '../custom/settingsSearch' // repakxtra: Settings search
+import { SettingsSearch, matches, useSettingsFilter } from '../custom/settingsSearch' // repakxtra: Settings search
 import TailInput from './ui/TailInput'
 import ConfirmRow from '../custom/ConfirmRow' // repakxtra: Auto-detect asks before it replaces a saved folder
 import { FaDiscord, FaSteam } from "react-icons/fa"
@@ -80,6 +80,7 @@ type SettingsPanelProps = {
   onKeepGamePath?: () => void;
   onAutoDetectGamePath: () => void;
   onBrowseGamePath: () => void;
+  onSetGamePath?: (path: string) => void | Promise<void>;
   isGamePathLoading: boolean;
   setParallelProcessing: (enabled: boolean) => void;
   onCheckForUpdates: () => void;
@@ -90,7 +91,7 @@ type SettingsPanelProps = {
 };
 
 
-export default function SettingsPanel({ settings, onSave, onClose, theme, setTheme, accentColor, setAccentColor, gamePath, foundGamePath, onUseFoundGamePath, onKeepGamePath, onAutoDetectGamePath, onBrowseGamePath, isGamePathLoading, setParallelProcessing, onCheckForUpdates, onViewChangelog, isCheckingUpdates, onReplayTour, onOpenShortcuts }: SettingsPanelProps) {
+export default function SettingsPanel({ settings, onSave, onClose, theme, setTheme, accentColor, setAccentColor, gamePath, foundGamePath, onUseFoundGamePath, onKeepGamePath, onAutoDetectGamePath, onBrowseGamePath, onSetGamePath, isGamePathLoading, setParallelProcessing, onCheckForUpdates, onViewChangelog, isCheckingUpdates, onReplayTour, onOpenShortcuts }: SettingsPanelProps) {
   const alert = useAlert();
   const [activeCategory, setActiveCategory] = useState<CategoryId>('general');
   const focus = useDialogFocus(); // repakxtra
@@ -99,6 +100,11 @@ export default function SettingsPanel({ settings, onSave, onClose, theme, setThe
   const contentRef = useRef<HTMLDivElement>(null);
   const [matchPages, setMatchPages] = useState<string[]>([]); // repakxtra: the pages a search found something on
   useSettingsFilter(contentRef, query, setMatchPages);
+  // sidebar label matches take priority over body text (including unmounted pages like Recently deleted and Crash reports)
+  const exactLabel = searching ? CATEGORIES.find(c => c.label.toLowerCase() === query.trim().toLowerCase())?.id : undefined;
+  const labelMatches = searching ? CATEGORIES.filter(c => matches(c.label, query)).map(c => c.id) : [];
+  const matchedPages = searching ? [...new Set([...(exactLabel ? [exactLabel] : []), ...labelMatches, ...matchPages])] : [];
+  const excludedMatches = searching ? CATEGORIES.filter(c => (c.id === 'trash' || c.id === 'crashes') && labelMatches.includes(c.id)) : [];
   const shows = (id: CategoryId) => searching ? id !== 'trash' && id !== 'crashes' : activeCategory === id;
   const mark = (id: CategoryId) => searching && <span data-page={id} hidden />; // where a page starts, for the search
   const openPage = (id: CategoryId) => { setActiveCategory(id); setQuery('') };
@@ -141,6 +147,9 @@ export default function SettingsPanel({ settings, onSave, onClose, theme, setThe
       showSubfolderMods: true, enableAnimations: true, holdToDelete: false, bypassGameRunningLock: false, allowModOverwrite: false })
     setHideSuffix(true); setAutoOpenDetails(false); setShowHeroIcons(true); setShowHeroBg(true); setShowModType(true)
     setShowSubfolderMods(true); setEnableAnimations(true); setHoldToDelete(false); setBypassGameRunningLock(false); setAllowModOverwrite(false)
+    void invoke('preview_rim_set', { on: false })
+      .then(() => window.dispatchEvent(new CustomEvent('repakxtra-preview-rim-changed', { detail: false })))
+      .catch(e => alert.warning('Could not reset Rim lighting', String(e)))
   }} />
 
   // Sync local state with props when opening/changing
@@ -192,12 +201,12 @@ export default function SettingsPanel({ settings, onSave, onClose, theme, setThe
 
         <div className="settings-layout">
           <nav className="settings-sidebar" aria-label="Settings categories">
-            <SettingsSearch value={query} onChange={setQuery} onEnter={() => { if (matchPages[0]) openPage(matchPages[0] as CategoryId) }} />{/* repakxtra */}
+            <SettingsSearch value={query} onChange={setQuery} onEnter={() => { if (matchedPages[0]) openPage(matchedPages[0] as CategoryId) }} />{/* repakxtra */}
             {CATEGORIES.map(({ id, label, icon: Icon }) => (
               <button
                 key={id}
                 type="button"
-                className={`settings-nav-item ${activeCategory === id && !searching ? 'active' : ''}${searching && !matchPages.includes(id) ? ' no-match' : ''}`}
+                className={`settings-nav-item ${activeCategory === id && !searching ? 'active' : ''}${searching && !matchedPages.includes(id) ? ' no-match' : ''}`}
                 onClick={() => openPage(id)}
                 aria-current={activeCategory === id && !searching ? 'page' : undefined}
               >
@@ -208,6 +217,14 @@ export default function SettingsPanel({ settings, onSave, onClose, theme, setThe
           </nav>
 
           <div className="modal-body settings-content" key={searching ? 'search' : activeCategory} ref={contentRef}>
+            {searching && excludedMatches.map(({ id, label, icon: Icon }) => (
+              <div key={id} className="setting-section">
+                <h3 className="setting-icon-label"><Icon size={18} aria-hidden="true" />{label}</h3>
+                <div className="setting-group">
+                  <div><button type="button" className="action-btn" onClick={() => openPage(id)}>Open {label}</button></div>
+                </div>
+              </div>
+            ))}
             {searching && <p className="settings-search-empty" hidden>No settings match “{query.trim()}”.</p>}
             {shows('general') && (
               <>
@@ -221,6 +238,7 @@ export default function SettingsPanel({ settings, onSave, onClose, theme, setThe
                         value={gamePath || ''}
                         placeholder="No game path set"
                         className="integrated-input"
+                        onCommit={onSetGamePath}
                       />
                       <div className="input-actions">
                         <button
@@ -330,7 +348,7 @@ export default function SettingsPanel({ settings, onSave, onClose, theme, setThe
                         title="Check for updates now"
                         style={{ minWidth: '140px' }}
                       >
-                        <RefreshCw size={16} className={isCheckingUpdates ? 'spin-icon' : ''} aria-hidden="true" />
+                        <RefreshCw size={16} className={isCheckingUpdates ? 'spin-animation' : ''} aria-hidden="true" />
                         {isCheckingUpdates ? 'Checking…' : 'Check now'}
                       </button>
                       <button
@@ -551,14 +569,23 @@ export default function SettingsPanel({ settings, onSave, onClose, theme, setThe
 /** repakxtra: Reset, asked in the app's one in-place confirm (nothing else in Settings is undoable in one step). */
 function ResetInterface({ onReset }: { onReset: () => void }) {
   const [sure, setSure] = useState(false)
+  const btnRef = useRef<HTMLButtonElement>(null)
+  const restoreFocus = useRef(false)
+  useEffect(() => {
+    if (!sure && restoreFocus.current) {
+      restoreFocus.current = false
+      btnRef.current?.focus()
+    }
+  }, [sure])
+  const close = () => { restoreFocus.current = true; setSure(false) }
   return (
     <div className="setting-section">
       <h3 className="setting-icon-label"><RotateCcw size={18} aria-hidden="true" />Reset</h3>
       <div className="setting-group">
         <p className="setting-hint">Puts every setting on the Interface and Library pages back to how {APP_NAME} starts. Your mods folder, launcher, loadouts, and mods stay as they are.</p>
         {sure
-          ? <ConfirmRow text="Reset every Interface and Library setting?" yes="Reset" onYes={() => { onReset(); setSure(false) }} onNo={() => setSure(false)} />
-          : <div><button type="button" className="action-btn settings-reset-btn" onClick={() => setSure(true)}><RotateCcw size={15} aria-hidden="true" /> Reset Interface and Library to defaults</button></div>}
+          ? <ConfirmRow text="Reset every Interface and Library setting?" yes="Reset" onYes={() => { onReset(); close() }} onNo={close} />
+          : <div><button ref={btnRef} type="button" className="action-btn settings-reset-btn" onClick={() => setSure(true)}><RotateCcw size={15} aria-hidden="true" /> Reset Interface and Library to defaults</button></div>}
       </div>
     </div>
   )

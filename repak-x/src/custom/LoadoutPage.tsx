@@ -12,8 +12,8 @@ import { deleteMedia } from './loadoutMedia'
 import CustomDropdown from '../components/CustomDropdown'
 import { HeroFilter, heroOfName } from './heroFilter'
 import {
-  type Loadout, type Mod, OTHER, OTHER_LABEL, loadoutable, addGroup, captureKey, addModToLoadout, displayName, duplicateLoadout, groupKey, setLoadoutGroup,
-  useGroups, hotkeyOf, hotkeySlots, isActive, modKey, openLoadout, patchLoadout, pinHotkey, readLoadouts, removeModFromLoadout,
+  type Loadout, type Mod, OTHER, OTHER_LABEL, loadoutable, addGroup, captureKey, addModToLoadout, changesToTurnOff, changesToTurnOn, displayName, duplicateLoadout, groupKey, setLoadoutGroup,
+  useGroups, hotkeyOf, hotkeySlots, modKey, openLoadout, patchLoadout, pinHotkey, readLoadouts, removeModFromLoadout,
   renameModKey, repakXOpen, takeFresh, useLoadouts, memberName, nameKey, pickMember, modsByKey, coverFills, pickCover,
 } from './loadoutStore'
 import { candidatesFor, keysByName, memberFolder } from './loadoutIdentity'
@@ -176,9 +176,11 @@ export default function LoadoutPage({ p, l, busy, onToggle, onBack, onPickMedia,
   const heroes = [...new Set(others.map(heroOf).filter(Boolean))].sort()
   const needle = q.trim().toLowerCase()
   const matches = others.filter(k => (!needle || memberName(k).toLowerCase().includes(needle)) && (!type || categoryOf(k) === type) && (!hero || heroOf(k) === hero))
-  const active = isActive(l, p.mods)
-  const onNow = mine.filter(k => byKey.get(k)?.enabled).length
-  const present = mine.length - missing.length - unsure.length
+  const onMods = changesToTurnOff(l, p.mods)
+  const offMods = changesToTurnOn(l, p.mods)
+  const onNow = onMods.length
+  const present = onMods.length + offMods.length
+  const active = present > 0 && offMods.length === 0
   const partial = !active && onNow > 0 // partly on: a click turns it off, the way a half-checked box clears
   const switchTitle = present === 0 ? 'No installed mods' : active || partial ? `Turn ${l.name}'s mods off` : `Turn ${l.name}'s mods on`
   const hasMedia = Boolean(l.mediaRev || l.image)

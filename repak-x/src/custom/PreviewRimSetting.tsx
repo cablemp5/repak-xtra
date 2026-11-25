@@ -12,7 +12,12 @@ export function PreviewRimSetting() {
   const [on, setOn] = useState(false)
   const [changed, setChanged] = useState(false)
   const [outline, setOutline] = useState(viewerOutlineOn)
-  useEffect(() => { invoke<boolean>('preview_rim_get').then(setOn).catch(() => undefined) }, [])
+  useEffect(() => {
+    invoke<boolean>('preview_rim_get').then(setOn).catch(() => undefined)
+    const sync = (e: Event) => { setOn(Boolean((e as CustomEvent<boolean>).detail)); setChanged(false) }
+    window.addEventListener('repakxtra-preview-rim-changed', sync)
+    return () => window.removeEventListener('repakxtra-preview-rim-changed', sync)
+  }, [])
   const change = (next: boolean) => {
     setOn(next)
     invoke('preview_rim_set', { on: next }).then(() => setChanged(true)).catch(() => setOn(!next))

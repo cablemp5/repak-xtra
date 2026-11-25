@@ -2167,6 +2167,25 @@ function App() {
     }
   }
 
+  const applyGamePath = async (selected: string) => {
+    try {
+      const stored = await invoke<string>('set_game_path', { path: selected }) // repakxtra: the game folder means its ~mods
+      setGamePath(stored)
+      launcherFor(stored)
+      uiLog.info('GamePath', `Mods folder set to ${stored}`)
+      setStatus('Game path set: ' + stored)
+      await loadMods()
+      await loadFolders()
+      // repakxtra: a folder with no game files next to it is kept (a mods folder can live anywhere), but said
+      const build = await invoke<{ updated: number }>('xtra_game_build').catch(() => null)
+      if (build && !build.updated) alert.warning('Not the game folder?', 'No Marvel Rivals files were found with this folder, so mods put here may not load.', { action: { label: 'Choose again', onClick: () => { void handleBrowseGamePath() } } })
+    } catch (error) {
+      setStatus('Error setting game path: ' + error)
+      alert.error('Game folder not set', String(error)) // repakxtra: a toast, not only the log bar's status line
+      throw error
+    }
+  }
+
   const handleBrowseGamePath = async () => {
     try {
       const selected = await open({
@@ -2175,18 +2194,7 @@ function App() {
         title: 'Select Marvel Rivals Installation Directory'
       })
 
-      if (selected) {
-        const stored = await invoke<string>('set_game_path', { path: selected }) // repakxtra: the game folder means its ~mods
-        setGamePath(stored)
-        launcherFor(stored)
-        uiLog.info('GamePath', `Mods folder set to ${stored}`)
-        setStatus('Game path set: ' + stored)
-        await loadMods()
-        await loadFolders()
-        // repakxtra: a folder with no game files next to it is kept (a mods folder can live anywhere), but said
-        const build = await invoke<{ updated: number }>('xtra_game_build').catch(() => null)
-        if (build && !build.updated) alert.warning('Not the game folder?', 'No Marvel Rivals files were found with this folder, so mods put here may not load.', { action: { label: 'Choose again', onClick: () => { void handleBrowseGamePath() } } })
-      }
+      if (selected && typeof selected === 'string') await applyGamePath(selected)
     } catch (error) {
       setStatus('Error setting game path: ' + error)
       alert.error('Game folder not set', String(error)) // repakxtra: a toast, not only the log bar's status line
@@ -3767,6 +3775,7 @@ function App() {
           foundGamePath={foundGamePath} onUseFoundGamePath={() => void handleAutoDetect(false, true)} onKeepGamePath={() => setFoundGamePath(null)}
           onAutoDetectGamePath={() => handleAutoDetect()}
           onBrowseGamePath={handleBrowseGamePath}
+          onSetGamePath={applyGamePath}
           isGamePathLoading={loading}
           setParallelProcessing={handleSetParallelProcessing}
           onCheckForUpdates={() => void handleCheckForUpdates(false)} /* repakxtra: the click event was read as silent */

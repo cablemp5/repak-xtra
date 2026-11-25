@@ -166,6 +166,6 @@
 @media (max-width: 640px) {
   .ip-hero { flex-direction: column; padding-right: 24px; }
   .ip-cover { width: 88px; }
-  .ip-switches { grid-template-columns: minmax(0, 1fr); }
+  .ip-switches { grid-auto-flow: row; grid-template-columns: minmax(0, 1fr); }
   .ip-badges .additional-badge { display: none !important; }
 }
