@@ -56,7 +56,7 @@ fn strip_rank_suffix(body: &str) -> Option<&str> {
 /// toggle is a pure prefix change. A new number takes off every priority suffix (a name with two still ends up with
 /// one) and a bare `_P`, as an install does, and nothing else: `Skin_9` stays `Skin_9`.
 pub fn priority_stem(stem: &str, priority: usize, special: Option<bool>) -> String {
-    let bare = stem.strip_prefix('!').unwrap_or(stem);
+    let bare = stem.trim_start_matches('!');
     let bang = if special.unwrap_or(stem.starts_with('!')) { "!" } else { "" };
     if priority == crate::asset_explorer::mod_priority(bare) {
         return format!("{bang}{bare}");
@@ -208,6 +208,7 @@ mod tests {
     fn special_is_a_pure_prefix_toggle() {
         assert_eq!(priority_stem("Skin", 0, Some(true)), "!Skin", "Special on an unranked mod adds only the !");
         assert_eq!(priority_stem("!Skin", 0, Some(false)), "Skin");
+        assert_eq!(priority_stem("!!New", 0, Some(false)), "New", "multiple leading ! all clear when Special is off");
         assert_eq!(priority_stem("Skin_9999999_P", 1, Some(true)), "!Skin_9999999_P");
         assert_eq!(priority_stem("!Skin_9999999_P", 1, Some(false)), "Skin_9999999_P");
         assert_eq!(priority_stem("Skin_9999999_P_9999999_P", 1, Some(true)), "!Skin_9999999_P_9999999_P", "the rest of the name stays");
