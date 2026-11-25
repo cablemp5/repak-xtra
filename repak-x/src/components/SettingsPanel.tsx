@@ -104,7 +104,7 @@ export default function SettingsPanel({ settings, onSave, onClose, theme, setThe
   const exactLabel = searching ? CATEGORIES.find(c => c.label.toLowerCase() === query.trim().toLowerCase())?.id : undefined;
   const labelMatches = searching ? CATEGORIES.filter(c => matches(c.label, query)).map(c => c.id) : [];
   const matchedPages = searching ? [...new Set([...(exactLabel ? [exactLabel] : []), ...labelMatches, ...matchPages])] : [];
-  const excludedMatches = searching ? CATEGORIES.filter(c => (c.id === 'trash' || c.id === 'crashes') && labelMatches.includes(c.id)) : [];
+  const labelOnlyMatches = searching ? CATEGORIES.filter(c => labelMatches.includes(c.id) && !matchPages.includes(c.id)) : [];
   const shows = (id: CategoryId) => searching ? id !== 'trash' && id !== 'crashes' : activeCategory === id;
   const mark = (id: CategoryId) => searching && <span data-page={id} hidden />; // where a page starts, for the search
   const openPage = (id: CategoryId) => { setActiveCategory(id); setQuery('') };
@@ -217,7 +217,7 @@ export default function SettingsPanel({ settings, onSave, onClose, theme, setThe
           </nav>
 
           <div className="modal-body settings-content" key={searching ? 'search' : activeCategory} ref={contentRef}>
-            {searching && excludedMatches.map(({ id, label, icon: Icon }) => (
+            {searching && labelOnlyMatches.map(({ id, label, icon: Icon }) => (
               <div key={id} className="setting-section">
                 <h3 className="setting-icon-label"><Icon size={18} aria-hidden="true" />{label}</h3>
                 <div className="setting-group">

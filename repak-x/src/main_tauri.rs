@@ -517,7 +517,11 @@ async fn set_game_path(
     window: Window,
     watcher_state: State<'_, WatcherState>,
 ) -> Result<String, String> {
-    let mods_path = xtra_setup::mods_folder_for(&PathBuf::from(&path))?; // repakxtra: the install folder means its ~mods
+    let input = PathBuf::from(&path);
+    if !input.is_dir() {
+        return Err(format!("Folder does not exist: {path}"));
+    }
+    let mods_path = xtra_setup::mods_folder_for(&input)?; // repakxtra: the install folder means its ~mods
 
     {
         let mut state = state.lock().unwrap();
