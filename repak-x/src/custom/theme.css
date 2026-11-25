@@ -2767,13 +2767,23 @@ html.is-dragging-card .lo-card:hover { border-color: var(--panel-border); }
 /* custom/fit.ts sets data-compact when the labeled buttons would not fit the window (any width, scale, or font): Launch
    keeps its label (the one primary action), the rest become even 36px squares with the icon centered. Keyed on Launch,
    not :first-child, since the scan status button can sit before it */
-.header[data-compact] .header-actions-right { gap: 6px; padding-left: 8px; }
-.header[data-compact] .view-tabs button { padding-left: 10px !important; padding-right: 10px !important; }
+.header[data-compact] { padding-left: 12px !important; padding-right: 12px !important; }
+.header[data-compact] .header-branding { flex-shrink: 0; }
+.header[data-compact] .version { display: none; }
+.header[data-compact] .wm { height: 18px !important; width: auto !important; }
+.header[data-compact] .view-tabs { margin-left: 10px !important; }
+.header[data-compact] .view-tabs button { padding-left: 8px !important; padding-right: 8px !important; font-size: 12.5px !important; }
+.header[data-compact] .header-actions-right { gap: 4px; padding-left: 6px; }
+.header[data-compact] .header-actions-right .btn-settings[data-tour="launch-btn"] { padding: 0 9px !important; font-size: 12.5px !important; }
 .header[data-compact] .header-actions-right .btn-settings:not([data-tour="launch-btn"]) { font-size: 0 !important; gap: 0 !important; width: 36px; padding: 0 !important; justify-content: center; }
 .header[data-compact] .header-actions-right .btn-settings:not([data-tour="launch-btn"]) > svg { margin: 0 !important; }
 .header[data-compact] .scan-status { width: 36px; min-width: 0; padding: 0 !important; justify-content: center; font-size: 0 !important; gap: 0 !important; }
 .header[data-compact] .scan-status .scan-status-in { font-size: 0 !important; gap: 0 !important; }
 .header[data-compact] .scan-status svg { margin: 0 !important; }
+@media (max-width: 860px) {
+  .header[data-compact] .header-actions-right .btn-settings:not([data-tour="launch-btn"]),
+  .header[data-compact] .scan-status { width: 32px; }
+}
 /* Light theme (no Settings entry now; an older settings.json can still pick it): the same blue accent, never the
    upstream red the app sets inline */
 :root[data-theme="light"] { --accent-primary: #346bf1 !important; --accent-secondary: #346bf1 !important; }

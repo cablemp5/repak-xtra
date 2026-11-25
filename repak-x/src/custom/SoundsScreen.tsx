@@ -166,8 +166,9 @@ export default function SoundsScreen({ alert, blocked, onInstall }: SoundsProps)
       cue('warning'); alert.warning(slot.name, e instanceof Error ? e.message : String(e))
       return false
     } finally {
-      setReading(r => { const { [slot.id]: was, ...rest } = r; return was && was.n > 1 ? { ...r, [slot.id]: { ...was, n: was.n - 1 } } : rest })
-      await refresh()
+      try { await refresh() } finally {
+        setReading(r => { const { [slot.id]: was, ...rest } = r; return was && was.n > 1 ? { ...r, [slot.id]: { ...was, n: was.n - 1 } } : rest })
+      }
     }
   }
 
@@ -258,12 +259,13 @@ export default function SoundsScreen({ alert, blocked, onInstall }: SoundsProps)
     if (clearingRef.current || importing) return
     clearingRef.current = true
     setMenuFor(null)
-    const ids = Object.keys(st.names)
     const cut = ++dropSeq.current
     for (const s of SLOTS) newest.current[s.id] = cut // invalidates every slot, including empty ones
     stop()
     setClearing(true)
     try {
+      const latest = await invoke<State>('sounds_state').catch(() => null)
+      const ids = latest ? [...new Set([...Object.keys(st.names), ...Object.keys(latest.names)])] : SLOTS.map(s => s.id)
       const failed: string[] = []
       for (const id of ids) await invoke('sounds_clear', { slot: id }).catch(e => { failed.push(`${SLOTS.find(s => s.id === id)?.name ?? id}: ${String(e)}`) })
       if (failed.length) { cue('warning'); alert.warning(failed.length === 1 ? 'One sound was not cleared' : `${failed.length} sounds were not cleared`, failed.join(', ')) }
