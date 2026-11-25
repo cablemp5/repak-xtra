@@ -68,7 +68,11 @@ pub fn priority_stem(stem: &str, priority: usize, special: Option<bool>) -> Stri
     match priority {
         0 => format!("{bang}{base}"),
         n => {
-            let base = base.strip_suffix("_P").unwrap_or(base);
+            loop {
+                if let Some(b) = strip_rank_suffix(base) { base = b; continue; }
+                if let Some(b) = base.strip_suffix("_P") { base = b; continue; }
+                break;
+            }
             format!("{bang}{base}_{}_P", "9".repeat(n + crate::install_mod::install_mod_logic::BASE_MOD_NINES - 1))
         }
     }
@@ -219,6 +223,7 @@ mod tests {
         assert_eq!(priority_stem("Skin_9999999_P_9999999_P", 0, None), "Skin", "stacked suffixes all come off");
         assert_eq!(rank(&priority_stem("Skin_9999999_P_9999999_P", 0, None)), (false, 0));
         assert_eq!(priority_stem("Skin_9999999_P_9999999_P", 2, None), "Skin_99999999_P");
+        assert_eq!(priority_stem("Skin_9999999_P_P", 1, None), "Skin_9999999_P", "trailing _P over a rank suffix does not stack another suffix");
         assert_eq!(priority_stem("Skin_1234_P", 2, None), "Skin_1234_99999999_P", "digits that are not nines stay in the name");
     }
 

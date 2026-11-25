@@ -50,6 +50,9 @@ pub struct InstallableMod {
     /// Windows does. The install from the Library sets it; updating a mod replaces on purpose and does not
     #[serde(default)]
     pub keep_both: bool,
+    /// repakxtra: keep mod_name as-is instead of running install_name (used by update_mod to preserve old priority/Special/Unranked)
+    #[serde(default)]
+    pub keep_exact_name: bool,
     /// repakxtra: the path that was dropped (an archive or folder for a mod unpacked from it), which the install card's
     /// row carries: a single-pak archive's row is named after the archive, the mod after its pak
     #[serde(skip)]
@@ -83,6 +86,7 @@ impl Default for InstallableMod {
             obfuscate: false,
             hybrid: false,
             keep_both: false,
+            keep_exact_name: false,
         }
     }
 }

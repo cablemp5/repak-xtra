@@ -6,7 +6,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { motion } from 'framer-motion'
 import { invoke } from '@tauri-apps/api/core'
 import { Check, ChevronRight, LoaderCircle } from 'lucide-react'
-import { PriorityControl, outranks, rankKey } from './PriorityControl'
+import { PriorityControl, isSpecial, outranks, rankKey } from './PriorityControl'
 import Switch from '../components/ui/Switch'
 import { resolveHeroImage, useHeroImages } from '../utils/heroImages'
 import { nameKey } from './loadoutStore'
@@ -37,11 +37,14 @@ const sameMod = (p: string) => nameKey(p).replace(/^!/, '').toLowerCase()
 /** The same mod in its folder: two folders can each hold a "Skin", and those are two mods. */
 const sameModIn = (p: string) => `${p.replace(/[\\/][^\\/]*$/, '').toLowerCase()}|${sameMod(p)}`
 
-/** A group is resolved once no two of its mods that are still on share a priority: one left on, or each at its own.
- *  Special (!) and the number count together, so a ! mod and an unranked one are not tied. */
+/** A group is resolved once at most one mod is left on, or every enabled mod has a known distinct order (same Special
+ *  state, all numbered, distinct numbers). Toggling ! on one of two tied mods makes their order unknown, not resolved. */
 export const resolved = (g: ConflictGroup, find: (path: string) => Mod | undefined) => {
   const on = g.mods.map(find).filter((m): m is Mod => Boolean(m && m.enabled !== false))
-  return new Set(on.map(rankKey)).size === on.length
+  if (on.length <= 1) return true
+  const sp = isSpecial(on[0].path)
+  return on.every(m => isSpecial(m.path) === sp && (m.priority ?? 0) > 0)
+    && new Set(on.map(m => m.priority)).size === on.length
 }
 
 /** The groups to show after a check: the ones shown before keep their place (the fresh copy when the check still has
@@ -177,12 +180,20 @@ function Group({ g, heroes, find, done, hidden, onSetPriority, onToggleMod, onKe
           const on = mod?.enabled !== false
           const name = nameKey(now)
           const othersOn = g.mods.map(find).filter((m): m is Mod => Boolean(m && m !== mod && m.enabled !== false))
+          const hiddenA = hidden ? find(g.mods[0]) : undefined
+          const hiddenB = hidden ? find(g.mods[1]) : undefined
+          const stillHidden = Boolean(hidden && !done && hiddenA && hiddenB && outranks(hiddenB, hiddenA))
+          const tiedNow = Boolean(hidden && !done && hiddenA && hiddenB && rankKey(hiddenA) === rankKey(hiddenB))
+          const orderUnknown = Boolean(hidden && !done && hiddenA && hiddenB && !stillHidden && !tiedNow)
+          const canLoadOnTop = stillHidden || (tiedNow && (hiddenB?.priority ?? 0) > 0)
           return (
             <li key={stemOf(path)} className={`cf-mod${on ? '' : ' is-off'}`}>
               <span className="cf-mod-name" title={now}><ModName name={name} /></span>
-              {hidden && !done && <span className={`cf-role ${i === 0 ? 'is-hidden' : 'is-wins'}`}>{i === 0 ? 'Hidden' : 'Wins'}</span>}
+              {stillHidden && <span className={`cf-role ${i === 0 ? 'is-hidden' : 'is-wins'}`}>{i === 0 ? 'Hidden' : 'Wins'}</span>}
+              {tiedNow && i === 0 && <span className="cf-role">Tied</span>}
+              {orderUnknown && i === 0 && <span className="cf-role">Order unknown</span>}
               <LoadoutTag path={now} onOpen={onClose} />
-              {hidden && i === 0 && mod && on && !done && onSetPriority && renamable(now) && (
+              {hidden && i === 0 && mod && on && canLoadOnTop && onSetPriority && renamable(now) && (
                 <button type="button" className="lo-text-btn cf-keep" onClick={() => onSetPriority(now, hidden.top)}
                   title={`Give it priority ${hidden.top}, one above every mod that hides it`}>
                   Load on top
@@ -345,8 +356,9 @@ if (import.meta.env.DEV) {
   console.assert(!unhidden({ hidden: 'm/A_99999999_P.pak', winner: 'm/!B_9999999_P.pak', files: [] }, bang), 'a ! winner is never outranked by number')
   console.assert(unhidden({ hidden: 'm/!A_99999999_P.pak', winner: 'm/!B_9999999_P.pak', files: [] }, live([{ path: 'm/!A_99999999_P.pak', priority: 2 }, { path: 'm/!B_9999999_P.pak', priority: 1 }])), 'two ! mods order by number')
   console.assert(unhidden(pairs[0], live([{ path: 'm/A_9999999_P.pak', priority: 3 }, { path: 'm/B_99999999_P.pak', priority: 2 }])), 'outranking its winner fixes the pair')
-  console.assert(resolved({ mods: ['!A.pak', 'B.pak'], files: [] }, live([{ path: '!A.pak', priority: 0 }, { path: 'B.pak', priority: 0 }])), 'a ! mod and an unranked one are not tied')
-  console.assert(resolved({ mods: ['!A.pak', 'A.pak'], files: [] }, live([{ path: '!A.pak', priority: 0 }, { path: 'A.pak', priority: 0 }])), '!Skin and Skin are not tied')
+  console.assert(!resolved({ mods: ['!A_9999999_P.pak', 'B_9999999_P.pak'], files: [] }, live([{ path: '!A_9999999_P.pak', priority: 1 }, { path: 'B_9999999_P.pak', priority: 1 }])), 'toggling ! on one of two tied mods makes order unknown, not resolved')
+  console.assert(!resolved({ mods: ['!A.pak', 'B.pak'], files: [] }, live([{ path: '!A.pak', priority: 0 }, { path: 'B.pak', priority: 0 }])), 'unranked and ! have unknown order, not resolved')
+  console.assert(resolved({ mods: ['!A_P.pak', '!B_P.pak'], files: [] }, live([{ path: '!A_P.pak', priority: 2 }, { path: '!B_P.pak', priority: 1 }])), 'two ! mods at distinct numbers are resolved')
   console.assert(!resolved({ mods: ['!A_P.pak', '!B_P.pak'], files: [] }, live([{ path: '!A_P.pak', priority: 1 }, { path: '!B_P.pak', priority: 1 }])), 'two ! mods at one number are tied')
   console.assert(renamable('m/Plain.pak') && !renamable('m/.repakxtra-builtin/X.pak'), 'an Unranked mod can Load on top, a built-in cannot')
   console.assert(after.length === 3 && after[0] === ab && after[1].files[0] === 'x' && after[2].mods[0] === 'm/E.pak', 'a fixed group stays, a still open one is refreshed, a new one goes last', after)

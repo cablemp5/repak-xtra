@@ -3570,17 +3570,12 @@ async fn update_mod(
         old_custom_name, old_custom_tags, old_folder_id
     );
 
-    // Get the old mod's base name (for naming the new mod if preserve_name is true)
-    let old_mod_name = actual_old_path
-        .file_stem()
-        .and_then(|s| s.to_str())
-        .map(|s| {
-            // Strip .bak_repak or _disabled suffix if present
-            s.trim_end_matches(".bak_repak")
-                .trim_end_matches("_disabled")
-                .to_string()
-        })
-        .unwrap_or_else(|| "Unknown".to_string());
+    // Get the old mod's full stem (handles .pak.bak_repak as well as .pak)
+    let old_mod_name = crate::xtra_bundle::stem(
+        actual_old_path.file_name().and_then(|s| s.to_str()).unwrap_or("Unknown"),
+    )
+    .to_string();
+    let (old_special, old_priority) = crate::xtra_conflicts::rank_of(&actual_old_path);
 
     // ========================================================================
     // Step 2 (repakxtra): nothing is deleted up front. The install below builds the new version in a private folder
@@ -3597,15 +3592,18 @@ async fn update_mod(
 
     info!("Installing new mod from: {:?}", new_source);
 
-    // Determine the mod name to use
+    // Determine the mod name to use, preserving the replaced mod's exact priority and Special (!) state
     let mod_name = if preserve_name {
         old_custom_name.clone().unwrap_or(old_mod_name.clone())
     } else {
-        new_source
-            .file_stem()
-            .and_then(|s| s.to_str())
-            .map(|s| s.to_string())
-            .unwrap_or_else(|| "NewMod".to_string())
+        let raw_name = new_source.file_name().and_then(|s| s.to_str()).unwrap_or("NewMod");
+        let stripped = crate::xtra_bundle::stem(raw_name);
+        let new_stem = if stripped == raw_name {
+            new_source.file_stem().and_then(|s| s.to_str()).unwrap_or("NewMod")
+        } else {
+            stripped
+        };
+        crate::xtra_conflicts::priority_stem(new_stem, old_priority, Some(old_special))
     };
 
     // Use the existing install_mods logic
@@ -3631,6 +3629,7 @@ async fn update_mod(
     // Apply settings to the installable mod
     if let Some(installable) = installable_mods.get_mut(0) {
         installable.mod_name = mod_name.clone();
+        installable.keep_exact_name = true;
         installable.install_subfolder = install_subfolder.clone();
         installable.obfuscate = obfuscate;
     }

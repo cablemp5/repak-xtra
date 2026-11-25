@@ -410,7 +410,9 @@ pub fn install_mods_in_viewport(
         // A fresh install gets the baseline priority (a longer 9-suffix only when the incoming name carries it). A
         // reinstall keeps the installed copy's exact priority and Special (!), Unranked too, so it overwrites that file
         // instead of landing beside it as a second entry (install_name). Every flow below uses this name as it is.
-        installable_mod.mod_name = install_name(&output_directory, &installable_mod.mod_name);
+        if !installable_mod.keep_exact_name {
+            installable_mod.mod_name = install_name(&output_directory, &installable_mod.mod_name);
+        }
         // repakxtra: never over a mod already installed under this name (the install from the Library)
         if installable_mod.keep_both {
             installable_mod.mod_name = free_name(&output_directory, &installable_mod.mod_name);

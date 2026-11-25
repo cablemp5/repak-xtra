@@ -102,6 +102,7 @@ import { installedReleaseNotes } from './custom/releaseNotes'
 import { APP_NAME } from './custom/edition'
 import FirstRun from './custom/FirstRun' // repakxtra: first-launch setup
 import { installDroppedKit } from './custom/previewKit'
+import { refreshPreviewsAfterRename } from './custom/previews' // repakxtra: reload preview cache after a Special (!) rename
 import { useGlobalTooltips } from './hooks/useGlobalTooltips'
 import { useAprilFools } from './hooks/useAprilFools'
 import Switch from './components/ui/Switch'
@@ -1043,7 +1044,11 @@ function App() {
     try {
       const changed = await runOp('change its priority', () => invoke<string>('set_mod_priority', { modPath, priority, special }), { modes: false }) // repakxtra: game open or file in use asks
       if (!changed) return
-      if (changed.value && changed.value !== modPath) renameSource(nameKey(modPath), nameKey(changed.value)) // repakxtra: its Nexus source follows a ! change
+      if (changed.value && changed.value !== modPath) {
+        const oldKey = nameKey(modPath), newKey = nameKey(changed.value)
+        renameSource(oldKey, newKey) // repakxtra: its Nexus source follows a ! change
+        if (oldKey !== newKey) refreshPreviewsAfterRename(oldKey, newKey) // repakxtra: preview images follow on disk, refresh cache
+      }
       setStatus(special !== undefined ? `Special (!) turned ${special ? 'on' : 'off'}` : priority ? `Priority set to ${priority}` : 'Priority set to Unranked')
 
       // If the modified mod is currently selected, clear selection to force refresh of details

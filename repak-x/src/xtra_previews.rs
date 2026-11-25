@@ -131,8 +131,16 @@ pub fn rename_key(old: &str, new: &str) {
 }
 
 /// Its pictures, other forms (<key>@2), record, 3D export, and sounds, and its index.json entry. Only these exact
-/// names: "Skin.v2.png" is another mod's preview, not one of "Skin".
+/// names: "Skin.v2.png" is another mod's preview, not one of "Skin". Never touches the shared index.json catalog, and
+/// checks whether `new` already has an entry in index.json before moving any asset files.
 fn rename_key_in(dir: &Path, old: &str, new: &str) {
+    let index = dir.join("index.json");
+    let mut index_val = std::fs::read(&index)
+        .ok()
+        .and_then(|b| serde_json::from_slice::<serde_json::Value>(&b).ok());
+    if index_val.as_ref().and_then(|v| v.as_object()).is_some_and(|m| m.contains_key(new)) {
+        return;
+    }
     const ENDS: [&str; 7] = [".png", ".webp", ".webm", ".json", ".3d", ".3d-none.json", ".audio"];
     let ours = |rest: &str| {
         let rest = rest.strip_prefix('@').map_or(Some(rest), |r| r.find('.').filter(|&i| i > 0 && r[..i].bytes().all(|c| c.is_ascii_digit())).map(|i| &r[i..]));
@@ -140,18 +148,15 @@ fn rename_key_in(dir: &Path, old: &str, new: &str) {
     };
     for e in std::fs::read_dir(dir).into_iter().flatten().flatten() {
         let Some(name) = e.file_name().to_str().map(str::to_string) else { continue };
+        if name.eq_ignore_ascii_case("index.json") { continue }
         let Some(rest) = name.strip_prefix(old).filter(|r| ours(r)) else { continue };
         let to = dir.join(format!("{new}{rest}"));
         if !to.exists() {
             let _ = std::fs::rename(e.path(), to);
         }
     }
-    let index = dir.join("index.json");
-    let Some(mut v) = std::fs::read(&index).ok().and_then(|b| serde_json::from_slice::<serde_json::Value>(&b).ok()) else { return };
+    let Some(v) = index_val.as_mut() else { return };
     let Some(map) = v.as_object_mut() else { return };
-    if map.contains_key(new) {
-        return;
-    }
     let Some(mut entry) = map.remove(old) else { return };
     if let Some(forms) = entry.get_mut("form_emotes").and_then(|f| f.as_object_mut()) {
         let moved: Vec<String> = forms.keys().filter(|k| k.strip_prefix(old).is_some_and(|r| r.starts_with('@'))).cloned().collect();
@@ -161,7 +166,7 @@ fn rename_key_in(dir: &Path, old: &str, new: &str) {
         }
     }
     map.insert(new.to_string(), entry);
-    if let Ok(text) = serde_json::to_vec_pretty(&v) {
+    if let Ok(text) = serde_json::to_vec_pretty(v) {
         let _ = std::fs::write(&index, text);
     }
 }
@@ -752,6 +757,25 @@ mod tests {
         let index: serde_json::Value = serde_json::from_slice(&std::fs::read(d.path().join("index.json")).unwrap()).unwrap();
         assert_eq!(index["!Skin"]["form_emotes"]["!Skin@2"][0], "1026-205");
         assert!(index.get("Skin").is_none() && index.get("Other").is_some());
+    }
+
+    #[test]
+    fn index_mod_never_renames_shared_catalog_and_dest_index_blocks_moves() {
+        let d = tempfile::tempdir().unwrap();
+        std::fs::write(d.path().join("index.png"), "x").unwrap();
+        std::fs::write(d.path().join("index.json"), r#"{"index":{"kind":"skin"},"Other":{}}"#).unwrap();
+        rename_key_in(d.path(), "index", "!index");
+        assert!(d.path().join("index.json").exists(), "shared index.json must stay in place");
+        assert!(!d.path().join("!index.json").exists(), "index.pak must never rename index.json");
+        assert!(d.path().join("!index.png").exists(), "the mod's own preview still moves");
+        let cat: serde_json::Value = serde_json::from_slice(&std::fs::read(d.path().join("index.json")).unwrap()).unwrap();
+        assert!(cat.get("!index").is_some() && cat.get("index").is_none() && cat.get("Other").is_some());
+
+        let d2 = tempfile::tempdir().unwrap();
+        std::fs::write(d2.path().join("Skin.png"), "x").unwrap();
+        std::fs::write(d2.path().join("index.json"), r#"{"Skin":{},"!Skin":{}}"#).unwrap();
+        rename_key_in(d2.path(), "Skin", "!Skin");
+        assert!(d2.path().join("Skin.png").exists() && !d2.path().join("!Skin.png").exists(), "existing dest index entry prevents moving asset files");
     }
 
     #[test]
