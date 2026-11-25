@@ -88,7 +88,7 @@ if (import.meta.env.DEV && !('__TAURI_INTERNALS__' in window)) {
   mockIPC((cmd, args: any) => {
     mock.__calls[cmd] = (mock.__calls[cmd] ?? 0) + 1
     switch (cmd) {
-      case 'get_pak_files': return data.mods.map((m: any) => ({ ...m, priority: /_(9+)_P\.[^.\/]+$/.exec(m.path)?.[1].length ?? 0 })) // fresh objects, like the real backend (priority: the nines, as mod_priority reads them)
+      case 'get_pak_files': return data.mods.map((m: any) => ({ ...m })) // fresh objects, like the real backend
       case 'get_folders': return data.folders
       case 'get_app_settings':
         return localStorage.getItem('mock.bypass') === 'false' ? { ...data.settings, bypassGameRunningLock: false } : data.settings

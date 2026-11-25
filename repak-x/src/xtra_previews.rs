@@ -103,6 +103,69 @@ pub(crate) fn valid_key(key: &str) -> bool {
     !key.is_empty() && !key.contains(['/', '\\', ':']) && !key.contains("..")
 }
 
+/// A mod file's preview key, as the frontend's nameKey and the kit's mod_key make it: the name without its on or off
+/// extension, a `_disabled`, and its `_<digits>_P` priority suffixes. A leading ! stays.
+pub(crate) fn mod_key(path: &Path) -> String {
+    let mut s = crate::xtra_bundle::stem(path.file_name().and_then(|n| n.to_str()).unwrap_or_default());
+    if let Some(i) = s.len().checked_sub(9).filter(|&i| s.get(i..).is_some_and(|t| t.eq_ignore_ascii_case("_disabled"))) {
+        s = &s[..i];
+    }
+    while let Some((base, n)) = s.strip_suffix("_P").or_else(|| s.strip_suffix("_p")).and_then(|b| b.rsplit_once('_')) {
+        if n.is_empty() || !n.bytes().all(|c| c.is_ascii_digit()) {
+            break;
+        }
+        s = base;
+    }
+    s.to_string()
+}
+
+/// repakxtra: a mod's previews follow it to a new key (a Special (!) change renames the mod, and the key keeps the !).
+/// Skipped while the kit runs. Never over previews the new key already has.
+pub fn rename_key(old: &str, new: &str) {
+    if old == new || !valid_key(old) || !valid_key(new) {
+        return;
+    }
+    if let Ok(_hold) = reserve("rename") {
+        rename_key_in(&previews_dir(), old, new);
+    }
+}
+
+/// Its pictures, other forms (<key>@2), record, 3D export, and sounds, and its index.json entry. Only these exact
+/// names: "Skin.v2.png" is another mod's preview, not one of "Skin".
+fn rename_key_in(dir: &Path, old: &str, new: &str) {
+    const ENDS: [&str; 7] = [".png", ".webp", ".webm", ".json", ".3d", ".3d-none.json", ".audio"];
+    let ours = |rest: &str| {
+        let rest = rest.strip_prefix('@').map_or(Some(rest), |r| r.find('.').filter(|&i| i > 0 && r[..i].bytes().all(|c| c.is_ascii_digit())).map(|i| &r[i..]));
+        rest.is_some_and(|r| ENDS.contains(&r))
+    };
+    for e in std::fs::read_dir(dir).into_iter().flatten().flatten() {
+        let Some(name) = e.file_name().to_str().map(str::to_string) else { continue };
+        let Some(rest) = name.strip_prefix(old).filter(|r| ours(r)) else { continue };
+        let to = dir.join(format!("{new}{rest}"));
+        if !to.exists() {
+            let _ = std::fs::rename(e.path(), to);
+        }
+    }
+    let index = dir.join("index.json");
+    let Some(mut v) = std::fs::read(&index).ok().and_then(|b| serde_json::from_slice::<serde_json::Value>(&b).ok()) else { return };
+    let Some(map) = v.as_object_mut() else { return };
+    if map.contains_key(new) {
+        return;
+    }
+    let Some(mut entry) = map.remove(old) else { return };
+    if let Some(forms) = entry.get_mut("form_emotes").and_then(|f| f.as_object_mut()) {
+        let moved: Vec<String> = forms.keys().filter(|k| k.strip_prefix(old).is_some_and(|r| r.starts_with('@'))).cloned().collect();
+        for k in moved {
+            let val = forms.remove(&k).unwrap_or_default();
+            forms.insert(format!("{new}{}", &k[old.len()..]), val);
+        }
+    }
+    map.insert(new.to_string(), entry);
+    if let Ok(text) = serde_json::to_vec_pretty(&v) {
+        let _ = std::fs::write(&index, text);
+    }
+}
+
 /// A preview is a PNG, an animated WebP for animation mods (a clip on a gray model), or a WebM for KO prompt mods
 /// (xtra_ko.rs: the app records those, so they play on one clock).
 const PREVIEW_EXTS: [&str; 3] = [".png", ".webp", ".webm"];
@@ -668,6 +731,27 @@ mod tests {
         drop(held);
         clear_stale_work(d.path());
         assert!(!work.exists() && cache.exists(), "a stale one goes, the cache stays");
+    }
+
+    #[test]
+    fn previews_follow_a_special_rename() {
+        assert_eq!(mod_key(Path::new("m/!Skin_9999999_P.pak")), "!Skin");
+        assert_eq!(mod_key(Path::new("m/Skin.v2_99999999_P.pak.bak_repak")), "Skin.v2");
+        assert_eq!(mod_key(Path::new("m/Skin_9_P_9999999_P.bak_repak")), "Skin");
+        let d = tempfile::tempdir().unwrap();
+        for f in ["Skin.png", "Skin@2.webp", "Skin.json", "Skin.3d-none.json", "Skin.v2.png", "Skins.png", "!Skin.webm", "Skin.webm"] {
+            std::fs::write(d.path().join(f), "x").unwrap();
+        }
+        std::fs::create_dir(d.path().join("Skin.audio")).unwrap();
+        std::fs::write(d.path().join("index.json"), r#"{"Skin":{"kind":"anim","form_emotes":{"Skin@2":["1026-205"]}},"Other":{}}"#).unwrap();
+        rename_key_in(d.path(), "Skin", "!Skin");
+        let mut names: Vec<String> = std::fs::read_dir(d.path()).unwrap().map(|e| e.unwrap().file_name().to_string_lossy().into()).collect();
+        names.sort();
+        assert_eq!(names, ["!Skin.3d-none.json", "!Skin.audio", "!Skin.json", "!Skin.png", "!Skin.webm", "!Skin@2.webp", "Skin.v2.png", "Skin.webm", "Skins.png", "index.json"],
+            "its own files move, another mod's stay, and one the new key has is never overwritten");
+        let index: serde_json::Value = serde_json::from_slice(&std::fs::read(d.path().join("index.json")).unwrap()).unwrap();
+        assert_eq!(index["!Skin"]["form_emotes"]["!Skin@2"][0], "1026-205");
+        assert!(index.get("Skin").is_none() && index.get("Other").is_some());
     }
 
     #[test]

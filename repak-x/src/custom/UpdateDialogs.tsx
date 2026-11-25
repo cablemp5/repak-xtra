@@ -8,7 +8,7 @@ import { motion } from 'framer-motion'
 import { Check, Download, ExternalLink } from 'lucide-react'
 import { REPAKXTRA_VERSION } from './version'
 import { useDialogFocus } from './dialogFocus'
-import { APP_NAME } from './edition'
+import { APP_NAME, RELEASE_PREFIX } from './edition'
 import './updates.css'
 
 const openUrl = (url: string) => import('@tauri-apps/plugin-shell').then(m => m.open(url)).catch(() => window.open(url, '_blank'))
@@ -131,7 +131,7 @@ export function WhatsNewModal({ isOpen, version, changelog, onClose }: { isOpen:
         <div className="modal-header">
           <div>
             <h2>What's new</h2>
-            <p className="upd-sub">{APP_NAME} v{version.replace(/^v/, '')}</p>
+            <p className="upd-sub">{APP_NAME} {RELEASE_PREFIX}{version.replace(/^v/, '')}</p>
           </div>
           <button className="modal-close" onClick={onClose} aria-label="Close">×</button>
         </div>

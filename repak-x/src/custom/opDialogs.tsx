@@ -10,6 +10,7 @@ import { motion } from 'framer-motion'
 import { LoaderCircle, ShieldCheck, ShieldAlert } from 'lucide-react'
 import { useDialogFocus } from './dialogFocus'
 import { cue } from './sounds'
+import { APP_NAME } from './edition'
 
 export type OpKind = 'game_running' | 'locked' | 'collision'
 export type OpMode = 'replace' | 'keep_both'
@@ -141,7 +142,7 @@ function KitDialog({ a, k }: { a: Ask; k: KitInfo }) {
         tabIndex={-1} onKeyDown={onKeyDown} onClick={e => e.stopPropagation()}
         initial={{ opacity: 0, scale: 0.97 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.15 }}>
         <h2 id="op-title" className="op-title">Install this preview kit?</h2>
-        <p id="op-body" className="op-body">It installs programs that repakxtra runs on this PC to make previews. Only continue if you built this kit or got it from the repakxtra releases page.</p>
+        <p id="op-body" className="op-body">It installs programs that {APP_NAME} runs on this PC to make previews. Only continue if you built this kit or got it from the repakxtra releases page.</p>
         <div className="op-file">
           <span className="op-file-name" title={a.what}><span>{a.what}</span></span>
           <span className="op-file-size">{mb}</span>

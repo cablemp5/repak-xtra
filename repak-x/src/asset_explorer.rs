@@ -242,16 +242,15 @@ fn strip_one_priority_suffix(name: &str) -> String {
     name[..digits_start - 1].to_string()
 }
 
-/// Load priority for a mod, from its file stem: the nines of its `_9…_P`
-/// suffix (`_9_P` is 1, the install default `_9999999_P` is 7), 0 when it has
-/// none (unranked). A leading `!` (Special) is read apart, by
-/// `xtra_conflicts::rank`, so this is the number every window shows.
+/// Load priority for a mod, from its file stem: a `_999…_P` suffix of seven or
+/// more nines maps to a 1-based priority (the install default `_9999999_P` is
+/// 1, eight nines is 2), 0 when it has none (unranked). A leading `!` (Special)
+/// is read apart, by `xtra_conflicts::rank`, so this is the number every window
+/// shows.
 pub fn mod_priority(file_stem: &str) -> usize {
-    let Some(base) = file_stem.strip_suffix("_P") else {
-        return 0;
-    };
-    match base.rsplit_once('_') {
-        Some((_, n)) if !n.is_empty() && n.bytes().all(|c| c == b'9') => n.len(),
+    let base = crate::install_mod::install_mod_logic::BASE_MOD_NINES;
+    match file_stem.strip_suffix("_P").and_then(|b| b.rsplit_once('_')) {
+        Some((_, n)) if n.len() >= base && n.bytes().all(|c| c == b'9') => n.len() + 1 - base,
         _ => 0,
     }
 }
@@ -354,12 +353,13 @@ mod tests {
     #[test]
     fn priority_matches_the_mods_list_rule() {
         assert_eq!(mod_priority("!Cool_Mod"), 0);
-        assert_eq!(mod_priority("Cool_Mod_9_P"), 1);
-        assert_eq!(mod_priority("Cool_Mod_999_P"), 3);
-        assert_eq!(mod_priority("Cool_Mod_9999999_P"), 7);
-        assert_eq!(mod_priority("!Cool_Mod_9999999_P"), 7, "! is read apart");
-        assert_eq!(mod_priority("Cool_Mod_99999999_P"), 8, "an older Load on top keeps its number");
-        // Digits that are not all nines are not a priority suffix.
+        assert_eq!(mod_priority("Cool_Mod_9999999_P"), 1);
+        assert_eq!(mod_priority("Cool_Mod_99999999_P"), 2);
+        assert_eq!(mod_priority("!Cool_Mod_9999999_P"), 1, "! is read apart");
+        assert_eq!(mod_priority("Cool_Mod_9999999_P_9999999_P"), 1);
+        // Fewer than seven nines, or digits that are not all nines, is not a
+        // priority suffix.
+        assert_eq!(mod_priority("Cool_Mod_999_P"), 0);
         assert_eq!(mod_priority("Cool_Mod_1234567_P"), 0);
         assert_eq!(mod_priority("PlainMod"), 0);
     }

@@ -68,17 +68,17 @@ fn installed_stem(file_name: &str) -> Option<String> {
     }
 }
 
-/// Highest 9-suffix an already-installed copy of this mod uses in `dir`.
+/// The `!` and 9-suffix an already-installed copy of this mod uses in `dir` (its highest one when there are several), or
+/// None when it is not installed there. An Unranked copy (`Foo.pak`, no suffix) counts too, as `(bang, None)`.
 ///
-/// A reinstall reuses it so a priority the user set through `set_mod_priority`
-/// survives instead of quietly dropping back to the baseline — which would also
-/// strand the old file as a second entry in the mods list.
-fn existing_install_nines(dir: &Path, clean_base: &str) -> Option<usize> {
+/// A reinstall reuses it so the priority and Special (!) the user set through `set_mod_priority` survive instead of
+/// quietly dropping back to the baseline, which would also strand the old file as a second entry in the mods list.
+fn existing_install(dir: &Path, clean_base: &str) -> Option<(bool, Option<usize>)> {
     if clean_base.is_empty() {
         return None;
     }
     let entries = fs::read_dir(dir).ok()?;
-    let mut best: Option<usize> = None;
+    let mut best: Option<(bool, Option<usize>)> = None;
 
     for entry in entries.flatten() {
         if !entry.file_type().map(|t| t.is_file()).unwrap_or(false) {
@@ -88,15 +88,26 @@ fn existing_install_nines(dir: &Path, clean_base: &str) -> Option<usize> {
         let Some(stem) = file_name.to_str().and_then(installed_stem) else {
             continue;
         };
-        let (_, base, nines) = split_mod_name(&stem);
-        if base.eq_ignore_ascii_case(clean_base) {
-            if let Some(n) = nines {
-                best = Some(best.map_or(n, |b: usize| b.max(n)));
-            }
+        let (bang, base, nines) = split_mod_name(&stem);
+        // an Unranked copy is exactly the name: "Foo_P" or "Foo_v2" is another file
+        let unranked = nines.is_none() && stem.strip_prefix('!').unwrap_or(&stem).eq_ignore_ascii_case(clean_base);
+        if base.eq_ignore_ascii_case(clean_base) && (nines.is_some() || unranked) && best.map_or(true, |(_, n)| nines > n) {
+            best = Some((bang, nines));
         }
     }
 
     best
+}
+
+/// repakxtra: the name a (re)install writes. A mod already installed in `dir` keeps its exact priority and Special (!),
+/// Unranked included. Only a fresh install gets the incoming name at the baseline (normalize_mod_base_name).
+fn install_name(dir: &Path, incoming: &str) -> String {
+    let (_, clean_base, _) = split_mod_name(incoming);
+    match existing_install(dir, &clean_base) {
+        Some((bang, Some(n))) => format!("{}{clean_base}_{}_P", if bang { "!" } else { "" }, "9".repeat(n)),
+        Some((bang, None)) => format!("{}{clean_base}", if bang { "!" } else { "" }),
+        None => normalize_mod_base_name(incoming, BASE_MOD_NINES),
+    }
 }
 
 /// Fail early, before anything is deleted, when an installed copy of this mod is
@@ -396,18 +407,10 @@ pub fn install_mods_in_viewport(
 
         // Ensure naming suffix consistency up-front for all flows.
         //
-        // Every mod installs at the baseline priority. A longer 9-suffix is only
-        // kept when it is a priority the user actually chose — either carried in
-        // the incoming name, or already on disk from a previous `set_mod_priority`
-        // (reusing it also means the reinstall overwrites that file instead of
-        // landing beside it as a second entry).
-        let min_nines = {
-            let (_, clean_base, _) = split_mod_name(&installable_mod.mod_name);
-            existing_install_nines(&output_directory, &clean_base)
-                .unwrap_or(BASE_MOD_NINES)
-                .max(BASE_MOD_NINES)
-        };
-        installable_mod.mod_name = normalize_mod_base_name(&installable_mod.mod_name, min_nines);
+        // A fresh install gets the baseline priority (a longer 9-suffix only when the incoming name carries it). A
+        // reinstall keeps the installed copy's exact priority and Special (!), Unranked too, so it overwrites that file
+        // instead of landing beside it as a second entry (install_name). Every flow below uses this name as it is.
+        installable_mod.mod_name = install_name(&output_directory, &installable_mod.mod_name);
         // repakxtra: never over a mod already installed under this name (the install from the Library)
         if installable_mod.keep_both {
             installable_mod.mod_name = free_name(&output_directory, &installable_mod.mod_name);
@@ -428,7 +431,7 @@ pub fn install_mods_in_viewport(
             let ucas_path = installable_mod.mod_path.with_extension("ucas");
 
             // Ensure output names follow suffix rule
-            let base = normalize_mod_base_name(&installable_mod.mod_name, BASE_MOD_NINES);
+            let base = installable_mod.mod_name.clone(); // repakxtra: already its install name (install_name)
 
             // Clean up any existing variants before installing
             if let Err(msg) = ensure_mod_not_locked(&output_directory, &base) {
@@ -513,7 +516,7 @@ pub fn install_mods_in_viewport(
                 "  -> Taking REPAK path (direct PAK -> IoStore)",
             );
             // Clean up any existing variants before installing
-            let base = normalize_mod_base_name(&installable_mod.mod_name, BASE_MOD_NINES);
+            let base = installable_mod.mod_name.clone(); // repakxtra: already its install name (install_name)
             if let Err(msg) = ensure_mod_not_locked(&output_directory, &base) {
                 error!("Install aborted: {}", msg);
                 results.push(ModInstallResult {
@@ -542,7 +545,7 @@ pub fn install_mods_in_viewport(
                     });
                 }
                 Ok(_) => {
-                    let base = normalize_mod_base_name(&installable_mod.mod_name, BASE_MOD_NINES);
+                    let base = installable_mod.mod_name.clone();
                     record_installed_tags(&base, &installable_mod.custom_tags);
                     results.push(ModInstallResult {
                         mod_name: installable_mod.mod_name.clone(),
@@ -563,7 +566,7 @@ pub fn install_mods_in_viewport(
                 "Copying mod instead of repacking: {}",
                 installable_mod.mod_name
             );
-            let base = normalize_mod_base_name(&installable_mod.mod_name, BASE_MOD_NINES);
+            let base = installable_mod.mod_name.clone(); // repakxtra: already its install name (install_name)
 
             let dest = output_directory.join(format!("{}.pak", &base));
             let src = installable_mod.mod_path.clone();
@@ -599,7 +602,7 @@ pub fn install_mods_in_viewport(
 
         if installable_mod.is_dir {
             // Clean up any existing variants before installing
-            let base = normalize_mod_base_name(&installable_mod.mod_name, BASE_MOD_NINES);
+            let base = installable_mod.mod_name.clone(); // repakxtra: already its install name (install_name)
             if let Err(msg) = ensure_mod_not_locked(&output_directory, &base) {
                 error!("Install aborted: {}", msg);
                 results.push(ModInstallResult {
@@ -757,15 +760,32 @@ mod tests {
     }
 
     #[test]
-    fn existing_nines_finds_highest_installed_priority() {
+    fn existing_install_finds_highest_installed_priority() {
         let dir = tempfile::tempdir().unwrap();
         fs::write(dir.path().join("Foo_99999999_P.pak"), b"x").unwrap();
         fs::write(dir.path().join("Foo_99999999_P.utoc"), b"x").unwrap();
         fs::write(dir.path().join("Bar_9999999_P.pak"), b"x").unwrap();
+        fs::write(dir.path().join("Qux_P.pak"), b"x").unwrap();
 
-        assert_eq!(existing_install_nines(dir.path(), "Foo"), Some(8));
-        assert_eq!(existing_install_nines(dir.path(), "Bar"), Some(7));
-        assert_eq!(existing_install_nines(dir.path(), "Baz"), None);
+        assert_eq!(existing_install(dir.path(), "Foo"), Some((false, Some(8))));
+        assert_eq!(existing_install(dir.path(), "Bar"), Some((false, Some(7))));
+        assert_eq!(existing_install(dir.path(), "Baz"), None);
+        assert_eq!(existing_install(dir.path(), "Qux"), None, "Qux_P is not an Unranked Qux");
+    }
+
+    #[test]
+    fn a_reinstall_keeps_priority_and_special_and_a_fresh_one_gets_the_baseline() {
+        let dir = tempfile::tempdir().unwrap();
+        for f in ["Plain.pak", "Plain.utoc", "Two_99999999_P.bak_repak", "!Bang_999999999_P.pak", "!Off.pak.bak_repak"] {
+            fs::write(dir.path().join(f), b"x").unwrap();
+        }
+        assert_eq!(install_name(dir.path(), "Plain"), "Plain", "an Unranked mod stays Unranked");
+        assert_eq!(install_name(dir.path(), "Two_P"), "Two_99999999_P", "priority 2 stays 2, off or on");
+        assert_eq!(install_name(dir.path(), "Bang"), "!Bang_999999999_P", "Special (!) and priority 3 stay");
+        assert_eq!(install_name(dir.path(), "Off_9999999_P"), "!Off", "an Unranked ! mod keeps both");
+        assert_eq!(install_name(dir.path(), "New"), "New_9999999_P", "a fresh install is priority 1, no !");
+        assert_eq!(install_name(dir.path(), "New_99999999_P"), "New_99999999_P", "a fresh install keeps the priority its name carries");
+        assert!(existing_mod_variants(dir.path(), "Plain").contains(&dir.path().join("Plain.pak")), "the Unranked copy is the one replaced");
     }
 
     #[test]

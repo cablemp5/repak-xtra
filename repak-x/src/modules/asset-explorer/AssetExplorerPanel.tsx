@@ -33,6 +33,7 @@ import {
 import { useAssetIndex } from './useAssetIndex'
 import { ASSET_KINDS, KIND_LABELS, type AssetKindId, type ViewMode } from './types'
 import { APP_NAME } from '../../custom/edition' // repakxtra
+import { isSpecial } from '../../custom/PriorityControl' // repakxtra
 import './AssetExplorer.css'
 
 /** Below this many filtered rows a search opens every folder holding a hit. */
@@ -846,7 +847,7 @@ function AssetDetail({ node, index, conflicting, onClose, onRevealMod }: AssetDe
                         >
                             <span className={`ae-mod-dot ${mod.enabled ? 'is-on' : 'is-off'}`} />
                             <span className="ae-owner-name">{mod.display_name}</span>
-                            <span className="ae-owner-meta">P{mod.priority}</span>
+                            <span className="ae-owner-meta">{isSpecial(mod.path) ? `!${mod.priority || ''}` : mod.priority ? `P${mod.priority}` : 'Unranked'}</span>{/* repakxtra: Special (!) and Unranked */}
                         </button>
                     ))}
                 </div>
@@ -864,7 +865,7 @@ function AssetDetail({ node, index, conflicting, onClose, onRevealMod }: AssetDe
                             )}
                             <div><span>Format</span><span>{mod.is_iostore ? 'IoStore' : 'Legacy PAK'}</span></div>
                             <div><span>Size</span><span>{formatFileSize(mod.total_size)}</span></div>
-                            <div><span>Priority</span><span>{mod.priority}</span></div>
+                            <div><span>Priority</span><span>{mod.priority || 'Unranked'}{isSpecial(mod.path) ? ', Special (!)' : ''}</span></div>{/* repakxtra */}
                         </div>
                     )
                 })()}

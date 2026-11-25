@@ -1,13 +1,18 @@
-// repakxtra: a mod's load priority, one control in the Library, Conflicts, and the old clash list. The stepper is the
-// nines of _9…_P (1 to 7, an install is 7), below 1 is Unranked, and Special (!) is its own switch above every number.
+// repakxtra: a mod's load priority, one control in the Library, Conflicts, and the old clash list. The stepper is 1 to 7
+// (1 is _9999999_P, an install, each step one more nine), below 1 is Unranked (no suffix), and Special (!) is its own
+// switch: it adds or removes only the ! before the name.
 import NumberInput from '../components/ui/NumberInput'
 
-/** A leading ! in the file name: Special, above every number. */
+type Ranked = { path: string; priority?: number }
+/** A leading ! in the file name: Special. */
 export const isSpecial = (path: string) => (path.split(/[\\/]/).pop() ?? '').startsWith('!')
-/** One number to compare load order by: Special first, then the nines (0 is unranked). The nines never reach 1000. */
-export const rankOf = (m: { path: string; priority?: number }) => (isSpecial(m.path) ? 1000 : 0) + (m.priority ?? 0)
+/** Two mods tie only when both match: a ! mod and an unranked one, or !Skin and Skin, are never tied (xtra_conflicts.rs rank). */
+export const rankKey = (m: Ranked) => `${isSpecial(m.path) ? '!' : ''}${m.priority ?? 0}`
+/** `a` loads above `b` in an order the app sets: the same ! state, both numbered, more nines (xtra_conflicts.rs ordered). */
+export const outranks = (a: Ranked, b: Ranked) =>
+  isSpecial(a.path) === isSpecial(b.path) && (b.priority ?? 0) > 0 && (a.priority ?? 0) > (b.priority ?? 0)
 
-const TIP = 'Priority 1 to 7: a higher number wins. Below 1 is Unranked, under every number. Special (!) is above them all.'
+const TIP = 'Higher numbers load on top. Special (!) adds a ! prefix for mods that need it.'
 
 /** `onChange(priority, special)`: special is undefined when only the number changes (set_mod_priority keeps the !). */
 export function PriorityControl({ path, priority = 0, disabled, onChange }: {
@@ -15,10 +20,10 @@ export function PriorityControl({ path, priority = 0, disabled, onChange }: {
 }) {
   const special = isSpecial(path)
   return (
-    <span className="prio" role="group" aria-label={priority ? `Priority ${priority}` : 'Unranked'} title={TIP}>
+    <span className="prio" role="group" aria-label={`${special ? 'Special (!), ' : ''}${priority ? `priority ${priority}` : 'Unranked'}`} title={TIP}>
       <NumberInput value={priority} min={0} max={Math.max(7, priority)} placeholder="–" disabled={disabled} onChange={v => onChange(v)} />
       <button type="button" className={`prio-special${special ? ' is-on' : ''}`} aria-pressed={special} aria-label="Special (!)" disabled={disabled}
-        title={special ? 'Special (!) is on: it loads above every number. Click to turn it off' : 'Special (!): load above every number'}
+        title={special ? 'Special (!) is on: the name starts with a !. Click to take it off' : 'Special (!): add a ! before the name, for mods that need it'}
         onClick={e => { e.stopPropagation(); onChange(priority, !special) }}>!</button>
     </span>
   )

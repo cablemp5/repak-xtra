@@ -548,7 +548,7 @@ pub async fn xtra_galacta_make(window: tauri::Window, path: String, name: String
     let original = PathBuf::from(&path);
     let utoc = crate::xtra_bundle::companion(&original, "utoc");
     if !utoc.is_file() {
-        return Err("Only IoStore mods (.utoc and .ucas) can be made Galacta compatible. Install it through repakxtra first.".into());
+        return Err(format!("Only IoStore mods (.utoc and .ucas) can be made Galacta compatible. Install it through {} first.", crate::xtra_edition::APP_NAME));
     }
     let paks = crate::xtra_ko::paks(&state)?;
     let token = uuid::Uuid::new_v4().to_string();

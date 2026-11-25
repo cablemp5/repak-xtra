@@ -1037,11 +1037,13 @@ function App() {
     }
   }
 
-  // repakxtra: priority is the nines (0 Unranked), special sets or clears the leading ! (undefined keeps it)
+  // repakxtra: priority 1 is _9999999_P (0 Unranked), special sets or clears only the leading ! (undefined keeps it)
   const handleSetPriority = async (modPath: string, priority: number, special?: boolean) => {
     if (gameRunning && !bypassGameRunningLock && !(await gameClosed('change its priority'))) return // repakxtra: waits for the game to close, then goes on (custom/opDialogs.tsx)
     try {
-      if (!(await runOp('change its priority', () => invoke('set_mod_priority', { modPath, priority, special }), { modes: false }))) return // repakxtra: game open or file in use asks
+      const changed = await runOp('change its priority', () => invoke<string>('set_mod_priority', { modPath, priority, special }), { modes: false }) // repakxtra: game open or file in use asks
+      if (!changed) return
+      if (changed.value && changed.value !== modPath) renameSource(nameKey(modPath), nameKey(changed.value)) // repakxtra: its Nexus source follows a ! change
       setStatus(special !== undefined ? `Special (!) turned ${special ? 'on' : 'off'}` : priority ? `Priority set to ${priority}` : 'Priority set to Unranked')
 
       // If the modified mod is currently selected, clear selection to force refresh of details

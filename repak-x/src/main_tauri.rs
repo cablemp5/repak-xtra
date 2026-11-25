@@ -765,8 +765,9 @@ async fn get_pak_files(state: State<'_, Arc<Mutex<AppState>>>) -> Result<Vec<Mod
                 .map(|d| d.as_secs())
                 .unwrap_or(0);
 
-            // repakxtra: the nines of _9…_P (1 to 7, 0 unranked). The UI reads a leading ! (Special) from the path.
-            let priority = crate::asset_explorer::mod_priority(path.file_stem().and_then(|s| s.to_str()).unwrap_or(""));
+            // repakxtra: 7 nines is 1, 8 is 2, none is 0 (unranked), on or off (.pak.bak_repak too). The UI reads a leading !
+            // (Special) from the path.
+            let priority = crate::xtra_conflicts::rank_of(path).1;
 
             let key = get_mod_key(&path);
             let custom_tags = mod_tags.get(&key).cloned().unwrap_or_default();
@@ -877,7 +878,7 @@ async fn get_pak_files_in_folder(
                 .map(|d| d.as_secs())
                 .unwrap_or(0);
 
-            let priority = crate::asset_explorer::mod_priority(path.file_stem().and_then(|s| s.to_str()).unwrap_or("")); // repakxtra
+            let priority = crate::xtra_conflicts::rank_of(path).1; // repakxtra
 
             let key = get_mod_key(&path);
             let custom_tags = state.mod_tags.get(&key).cloned().unwrap_or_default();
@@ -903,52 +904,66 @@ async fn get_pak_files_in_folder(
 }
 
 #[tauri::command]
-/// repakxtra: `priority` is the nines of _9…_P (1 to 7, more after an older Load on top), 0 is Unranked (strips ! and
-/// the nines). `special` sets or clears the leading ! (Special), None keeps it (xtra_conflicts::priority_stem).
+/// repakxtra: `priority` 1 is _9999999_P (7 nines), each step one more nine, 0 is Unranked (no suffix). `special` sets
+/// or clears only the leading ! (Special), None keeps it (xtra_conflicts::priority_stem). Returns the mod's path after.
 async fn set_mod_priority(
     mod_path: String,
     priority: usize,
     special: Option<bool>,
     state: State<'_, Arc<Mutex<AppState>>>,
-) -> Result<(), String> {
+) -> Result<String, String> {
     crate::xtra_builtins::fixed_place(Path::new(&mod_path))?; // repakxtra
     let _mutation = crate::xtra_mutation::edit()?;
     crate::xtra_identity::upstream_guard()?; // repakxtra: not while Repak X is open (both change the same files)
     let path = PathBuf::from(&mod_path);
-    if !rename_priority(&path, priority, special)? {
-        return Ok(()); // No change
-    }
+    let Some(new_path) = rename_priority(&path, priority, special)? else {
+        return Ok(mod_path); // No change
+    };
 
-    // Invalidate cache for old path
+    // Invalidate cache for old path. Its tags and previews follow a ! change (their keys keep the !).
     {
         let mut state_guard = state.lock().unwrap();
         state_guard.mod_details_cache.remove(&path);
         xtra_details_cache::mark_dirty(); // repakxtra: the saved copy follows
+        if move_tags(&mut state_guard.mod_tags, &path, &new_path) {
+            let _ = save_state(&state_guard);
+        }
     }
+    crate::xtra_previews::rename_key(&crate::xtra_previews::mod_key(&path), &crate::xtra_previews::mod_key(&new_path));
 
-    Ok(())
+    Ok(new_path.to_string_lossy().into_owned())
 }
 
-/// repakxtra: renames the mod and its .utoc/.ucas to the new priority, keeping its extension (.pak or .bak_repak).
-/// false when the name already is that priority.
-fn rename_priority(path: &Path, priority: usize, special: Option<bool>) -> Result<bool, String> {
+/// repakxtra: moves a mod's saved tags from its old name's key to the new one's (a ! change gives it a new key). true
+/// when something moved. A key that already has tags keeps them.
+fn move_tags(tags: &mut std::collections::HashMap<String, Vec<String>>, old: &Path, new: &Path) -> bool {
+    let (from, to) = (get_mod_key(old), get_mod_key(new));
+    if from == to || tags.contains_key(&to) {
+        return false;
+    }
+    match tags.remove(&from) {
+        Some(t) => tags.insert(to, t).is_none(),
+        None => false,
+    }
+}
+
+/// repakxtra: renames the mod and its .utoc/.ucas to the new priority, keeping its whole extension (.pak, .bak_repak,
+/// .pak.bak_repak or .pak_disabled). The new path, or None when the name already is that priority.
+fn rename_priority(path: &Path, priority: usize, special: Option<bool>) -> Result<Option<PathBuf>, String> {
     if !path.exists() {
         return Err("Mod file does not exist".to_string());
     }
 
-    let extension = path.extension().and_then(|s| s.to_str()).unwrap_or("");
-    let stem = path
-        .file_stem()
-        .and_then(|s| s.to_str())
-        .ok_or("Invalid filename")?;
+    let file_name = path.file_name().and_then(|s| s.to_str()).ok_or("Invalid filename")?;
+    let stem = crate::xtra_bundle::stem(file_name);
+    let extension = &file_name[stem.len()..];
 
     let new_stem = crate::xtra_conflicts::priority_stem(stem, priority, special);
-    let new_filename = format!("{}.{}", new_stem, extension);
-    let new_path = path.with_file_name(&new_filename);
+    let new_path = path.with_file_name(format!("{new_stem}{extension}"));
     let path = path.to_path_buf();
 
     if new_path == path {
-        return Ok(false);
+        return Ok(None);
     }
 
     if new_path.exists() {
@@ -970,7 +985,7 @@ fn rename_priority(path: &Path, priority: usize, special: Option<bool>) -> Resul
         true => xtra_ops::io(&std::io::Error::from_raw_os_error(32)).unwrap_or(e),
         false => format!("Failed to rename mod: {}", e),
     })?;
-    Ok(true)
+    Ok(Some(new_path))
 }
 
 #[derive(Clone, serde::Serialize, serde::Deserialize)]
@@ -3665,7 +3680,7 @@ async fn update_mod(
 
     // Determine the new mod's path
     // repakxtra: the name install_mods gave it (mod_name may already end in _9999999_P: it came from the old file)
-    let new_mod_filename = format!("{}.pak", crate::install_mod::install_mod_logic::normalize_mod_base_name(&mod_name, crate::install_mod::install_mod_logic::BASE_MOD_NINES));
+    let new_mod_filename = format!("{}.pak", installable_mods.first().map_or_else(|| crate::install_mod::install_mod_logic::normalize_mod_base_name(&mod_name, crate::install_mod::install_mod_logic::BASE_MOD_NINES), |m| m.mod_name.clone()));
     let new_mod_path = if install_subfolder.is_empty() {
         mod_directory.join(&new_mod_filename)
     } else {
@@ -4111,19 +4126,42 @@ mod toggle_and_delete_tests {
     }
 
     #[test]
-    fn a_priority_change_moves_the_set_and_unranked_never_adds_a_bang() {
-        let dir = folder(&["My Skin_9999999_P.pak", "My Skin_9999999_P.utoc", "My Skin_9999999_P.ucas", "Off_99_P.bak_repak"]);
+    fn a_priority_change_moves_the_set_and_special_is_only_the_bang() {
+        let dir = folder(&["My Skin_9999999_P.pak", "My Skin_9999999_P.utoc", "My Skin_9999999_P.ucas", "Off_9999999_P.bak_repak"]);
         let p = |n: &str| dir.path().join(n);
         let names = || { let mut v: Vec<String> = std::fs::read_dir(dir.path()).unwrap().map(|e| e.unwrap().file_name().to_string_lossy().into()).collect(); v.sort(); v };
-        assert_eq!(super::rename_priority(&p("My Skin_9999999_P.pak"), 3, None), Ok(true));
-        assert_eq!(names(), ["My Skin_999_P.pak", "My Skin_999_P.ucas", "My Skin_999_P.utoc", "Off_99_P.bak_repak"], "the .utoc and .ucas follow");
-        assert_eq!(super::rename_priority(&p("My Skin_999_P.pak"), 3, Some(true)), Ok(true));
-        assert!(p("!My Skin_999_P.ucas").exists(), "Special adds ! to the whole set");
-        assert_eq!(super::rename_priority(&p("!My Skin_999_P.pak"), 3, Some(true)), Ok(false), "no change");
-        assert_eq!(super::rename_priority(&p("!My Skin_999_P.pak"), 0, None), Ok(true));
-        assert_eq!(names(), ["My Skin.pak", "My Skin.ucas", "My Skin.utoc", "Off_99_P.bak_repak"], "Unranked strips ! and the nines");
-        assert_eq!(super::rename_priority(&p("Off_99_P.bak_repak"), 1, None), Ok(true));
-        assert!(p("Off_9_P.bak_repak").exists(), "an off mod stays off");
+        let some = |n: &str| Ok(Some(p(n)));
+        assert_eq!(super::rename_priority(&p("My Skin_9999999_P.pak"), 3, None), some("My Skin_999999999_P.pak"));
+        assert_eq!(names(), ["My Skin_999999999_P.pak", "My Skin_999999999_P.ucas", "My Skin_999999999_P.utoc", "Off_9999999_P.bak_repak"], "the .utoc and .ucas follow");
+        assert_eq!(super::rename_priority(&p("My Skin_999999999_P.pak"), 3, Some(true)), some("!My Skin_999999999_P.pak"));
+        assert!(p("!My Skin_999999999_P.ucas").exists(), "Special adds ! to the whole set");
+        assert_eq!(super::rename_priority(&p("!My Skin_999999999_P.pak"), 3, Some(true)), Ok(None), "no change");
+        assert_eq!(super::rename_priority(&p("!My Skin_999999999_P.pak"), 0, None), some("!My Skin.pak"), "Unranked keeps the !");
+        assert_eq!(super::rename_priority(&p("!My Skin.pak"), 0, Some(false)), some("My Skin.pak"));
+        assert_eq!(names(), ["My Skin.pak", "My Skin.ucas", "My Skin.utoc", "Off_9999999_P.bak_repak"], "Special off takes only the !");
+        assert_eq!(super::rename_priority(&p("Off_9999999_P.bak_repak"), 2, None), some("Off_99999999_P.bak_repak"), "an off mod stays off");
+    }
+
+    #[test]
+    fn an_off_pak_bak_repak_keeps_its_whole_extension() {
+        let dir = folder(&["Skin_9999999_P.pak.bak_repak", "Skin_9999999_P.utoc", "Skin_9999999_P.ucas"]);
+        let p = |n: &str| dir.path().join(n);
+        assert_eq!(crate::xtra_conflicts::rank_of(&p("Skin_9999999_P.pak.bak_repak")), (false, 1));
+        assert_eq!(super::rename_priority(&p("Skin_9999999_P.pak.bak_repak"), 2, None), Ok(Some(p("Skin_99999999_P.pak.bak_repak"))));
+        assert!(p("Skin_99999999_P.utoc").exists() && p("Skin_99999999_P.ucas").exists(), "its .utoc and .ucas follow");
+        assert_eq!(super::rename_priority(&p("Skin_99999999_P.pak.bak_repak"), 2, Some(true)), Ok(Some(p("!Skin_99999999_P.pak.bak_repak"))));
+    }
+
+    #[test]
+    fn tags_follow_a_special_change() {
+        let mut tags = std::collections::HashMap::from([("Skin".to_string(), vec!["red".to_string()]), ("!Kept".to_string(), vec!["a".to_string()]), ("Kept".to_string(), vec!["b".to_string()])]);
+        let p = std::path::Path::new;
+        assert!(super::move_tags(&mut tags, p("m/Skin_9999999_P.pak"), p("m/!Skin_9999999_P.pak")));
+        assert_eq!(tags.get("!Skin"), Some(&vec!["red".to_string()]));
+        assert!(!tags.contains_key("Skin"));
+        assert!(!super::move_tags(&mut tags, p("m/!Skin_9999999_P.pak"), p("m/!Skin_99999999_P.pak")), "a number change keeps the key");
+        assert!(!super::move_tags(&mut tags, p("m/Kept.pak"), p("m/!Kept.pak")), "tags the new key has stay");
+        assert_eq!(tags.get("Kept"), Some(&vec!["b".to_string()]));
     }
 }
 
@@ -7851,7 +7889,7 @@ async fn get_asset_explorer_index(
     state: State<'_, Arc<Mutex<AppState>>>,
 ) -> Result<asset_explorer::AssetExplorerIndex, String> {
     use asset_explorer::{
-        classify_asset, clean_mod_display_name, is_metadata_path, mod_priority,
+        classify_asset, clean_mod_display_name, is_metadata_path,
         normalize_asset_path, AssetExplorerFailure, AssetExplorerMod,
     };
 
@@ -7961,7 +7999,7 @@ async fn get_asset_explorer_index(
             path: path.to_string_lossy().to_string(),
             display_name,
             enabled: ext == Some("pak"),
-            priority: mod_priority(path.file_stem().and_then(|s| s.to_str()).unwrap_or("")),
+            priority: crate::xtra_conflicts::rank_of(path).1, // repakxtra: an off mod too
             folder_id,
             category: details.category,
             character_name: details.character_name,
@@ -8078,7 +8116,7 @@ fn scan_mod_clashes(quiet: bool, game_path: &Path, state: &Arc<Mutex<AppState>>)
         }
 
         // repakxtra: ! and the nines, so a ! mod and an unranked one never count as tied
-        let priority = crate::xtra_conflicts::rank(path.file_stem().and_then(|s| s.to_str()).unwrap_or(""));
+        let priority = crate::xtra_conflicts::rank_of(path);
 
         // Check if it's IoStore
         let mut utoc_path = path.to_path_buf();
@@ -8236,9 +8274,9 @@ fn single_mod_conflicts(target_path: PathBuf, game_path: PathBuf) -> Result<Vec<
     use std::collections::{HashMap, HashSet};
     info!("Checking conflicts for mod: {}", target_path.display());
 
-    // repakxtra: ! first, then the nines (xtra_conflicts::rank)
+    // repakxtra: ! and the number apart (xtra_conflicts::rank)
     fn calculate_priority(path: &Path) -> crate::xtra_conflicts::Rank {
-        crate::xtra_conflicts::rank(path.file_stem().and_then(|s| s.to_str()).unwrap_or(""))
+        crate::xtra_conflicts::rank_of(path)
     }
 
     // Helper to get files from a PAK or IoStore
@@ -8323,12 +8361,12 @@ fn single_mod_conflicts(target_path: PathBuf, game_path: PathBuf) -> Result<Vec<
 
         // Calculate priority comparison
         let other_priority = calculate_priority(path);
-        let priority_comparison = if target_priority == other_priority {
-            "Same priority (conflict!)".to_string()
-        } else {
-            // repakxtra: the higher rank wins (the old check had it backwards for the nines)
-            let (a, b) = (crate::xtra_conflicts::rank_label(target_priority), crate::xtra_conflicts::rank_label(other_priority));
-            format!("Target has {} priority ({a} vs {b})", if target_priority > other_priority { "higher" } else { "lower" })
+        // repakxtra: more nines win (the old check had it backwards), and a ! or unranked mod has no order the app sets
+        let (a, b) = (crate::xtra_conflicts::rank_label(target_priority), crate::xtra_conflicts::rank_label(other_priority));
+        let priority_comparison = match crate::xtra_conflicts::ordered(target_priority, other_priority) {
+            _ if target_priority == other_priority => "Same priority (conflict!)".to_string(),
+            Some(o) => format!("Target has {} priority ({a} vs {b})", if o.is_gt() { "higher" } else { "lower" }),
+            None => format!("Load order not set by priority ({a} vs {b})"),
         };
 
         // Extract affected characters from overlapping files
