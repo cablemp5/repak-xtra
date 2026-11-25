@@ -1888,7 +1888,10 @@ html[data-motion="off"] .lo-skel, html[data-motion="off"] .lo-media.is-running .
 .su-card a:hover { text-decoration: underline; }
 .su-chip { flex: none; padding: 4px 12px; border-radius: 999px; font-size: 12px; font-weight: 600; background: var(--bg-lighter); color: var(--text-secondary); }
 .su-chip.is-installed { color: var(--text-primary); }
-.su-chip.is-update, .su-chip.is-missing, .su-chip.is-partial, .su-chip.is-other { color: #fff; background: color-mix(in srgb, var(--accent-primary), transparent 25%); }
+/* quiet tints: the card's one blue button is the call to act, its chip only names the state */
+.su-chip.is-update, .su-chip.is-missing, .su-chip.is-other { color: color-mix(in srgb, var(--accent-primary), white 30%); background: color-mix(in srgb, var(--accent-primary), transparent 85%); }
+.su-chip.is-current { color: #3ecf6e; }
+[data-theme="light"] .su-chip.is-current { color: #1f8a46; }
 .su-note, .su-meta { font-size: 13px; color: var(--text-secondary); }
 .su-meta code { font: 12px var(--font-mono); color: var(--text-primary); }
 .su-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
@@ -2160,6 +2163,9 @@ html[data-motion="off"] .lo-row .fp-lead.is-busy .lo-on-dot { animation: none; }
   background: none !important; font: inherit !important; }
 .su-link:hover:not(:disabled), .su-trust a:hover { text-decoration: underline; }
 .su-link:disabled { opacity: 0.45; cursor: default; }
+/* Remove: the link's blue at rest, the muted red only under the pointer (it asks first with a ConfirmRow) */
+.su-link.is-remove:hover:not(:disabled), .su-link.is-remove:focus-visible { color: #ff8a8e !important; }
+[data-theme="light"] .su-link.is-remove:hover:not(:disabled), [data-theme="light"] .su-link.is-remove:focus-visible { color: #c8333a !important; }
 /* The Blender note (SetupPanel BlenderTrust): one quiet "Is Blender safe? ›" line, the note opening under it */
 .su-trust { margin: 0; font-size: 12px; line-height: 1.5; color: var(--text-secondary); }
 .su-trust-btn { display: inline-flex; align-items: center; gap: 8px; height: auto !important; min-height: 0 !important; padding: 2px 0 !important;
@@ -2593,6 +2599,11 @@ button.btn-icon, .view-switcher .btn-icon-small, .copy-paths-btn.icon-only { wid
 
 /* ---------- Crash suspects (custom/CrashSuspects.tsx): the crash toast's two buttons, and the suspects list ---------- */
 .cs-toast-actions { display: inline-flex; gap: 8px; }
+/* Details: quiet beside the light See suspects, one primary per toast. An inset ring, so both stay the same size */
+.toast-action-btn.is-quiet, :root:not([data-theme="light"]) .toast-action-btn.is-quiet { background: transparent; color: inherit; font-weight: 500; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.18); }
+.toast-action-btn.is-quiet:hover, :root:not([data-theme="light"]) .toast-action-btn.is-quiet:hover { background: rgba(255, 255, 255, 0.08); }
+[data-theme="light"] .toast-action-btn.is-quiet { box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.18); }
+[data-theme="light"] .toast-action-btn.is-quiet:hover { background: rgba(0, 0, 0, 0.06); }
 /* The two buttons sit on the right of the text (cable 2026-11-04). The toast gets wider for them, and a long asset path
    breaks anywhere and stops at three lines instead of squeezing into a narrow column */
 .toast-container:has(.cs-toast-actions) { width: 560px; max-width: calc(100vw - 32px); }
@@ -3335,12 +3346,9 @@ body:has(:is(.modal-overlay, .install-mod-overlay, .input-prompt-overlay, .quick
    Page side-by-side for each step, Texts reveal for lists, Number pop-in for the test number and done checks) */
 .bs-roles { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .bs-role { padding: 12px 14px; border: 1px solid var(--panel-border); border-radius: 10px; }
-.bs-role.is-app { background: color-mix(in srgb, var(--accent-primary), transparent 93%); border-color: color-mix(in srgb, var(--accent-primary), transparent 70%); }
 .bs-role h3 { margin: 0 0 6px; font-size: 12px; font-weight: 600; color: var(--text-secondary); }
-.bs-role.is-app h3 { color: var(--accent-primary); }
 .bs-role :is(ol, ul) { display: flex; flex-direction: column; gap: 4px; margin: 0; padding: 0; list-style: none; }
 .bs-role li > svg { flex: none; color: var(--text-secondary); }
-.bs-role.is-app li > svg { color: var(--accent-primary); }
 .bs-role li { display: flex; align-items: center; gap: 8px; font-size: 13px; line-height: 1.5; color: var(--text-primary); }
 .bs-modal .cs-footer > .bs-stop { margin-left: auto; }
 .bs-stop { display: inline-flex; align-items: center; gap: 6px; }

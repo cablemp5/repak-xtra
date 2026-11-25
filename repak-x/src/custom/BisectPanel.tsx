@@ -91,6 +91,8 @@ export default function BisectPanel({ deps, mods }: { deps: KeepDeps; mods: Mod[
             <h2 id="bs-title">{title}</h2>
             {view.step === 'test' && <Progress run={view.run} />}
           </div>
+          {/* only where Esc closes it too: mid-test, Stop and restore mods is the way out, so no mod is left off */}
+          {view.step !== 'test' && <button className="modal-close" onClick={close} disabled={busy} aria-label="Close" title="Close">×</button>}
         </div>
         {note && <div className="bs-alert" role="alert"><TriangleAlert size={16} aria-hidden="true" /><p><strong>{note.title}</strong> {note.text}</p></div>}
 

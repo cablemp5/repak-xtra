@@ -111,6 +111,9 @@ export function DoctorProblems({ d }: { d: Doctor | null }) {
   return <ul className="su-problems">{d.problems.map(x => <li key={x}>{x}</li>)}</ul>
 }
 
+/** A card's main button: solid blue only for Setup's one next step, quiet otherwise. */
+const mainBtn = (primary: boolean) => (primary ? 'btn-primary su-main' : 'lo-text-btn su-main')
+
 /** A part's state beside its name: a green check when it is there, an empty ring when not. */
 const PartMark = ({ ok }: { ok: boolean }) => (
   <span className={`su-part-mark${ok ? ' is-ok' : ''}`} role="img" aria-label={ok ? 'Installed' : 'Not installed'}>{ok && <Check size={14} strokeWidth={2.5} />}</span>
@@ -119,7 +122,7 @@ const PartMark = ({ ok }: { ok: boolean }) => (
 
 /** The preview kit: what this PC needs to render mod previews (xtra_kit.rs, shared logic in previewKit.tsx). Its two
  *  parts, the kit and Blender, are one row each with their state and links; one main button sets up what is missing. */
-function PreviewKitCard({ alert }: { alert: Alert }) {
+function PreviewKitCard({ alert, primary }: { alert: Alert; primary: boolean }) {
   const k = usePreviewKit(alert)
   const { kit, latest, busy, update } = k
   const [notes, setNotes] = useState<string | null>(null)
@@ -150,7 +153,7 @@ function PreviewKitCard({ alert }: { alert: Alert }) {
           <h3>Mod previews</h3>
           <p>Renders of each mod and loadout, made on this PC. Needs two free parts: the preview kit and Blender.</p>
         </div>
-        <span className={`su-chip ${update ? 'is-update' : ready ? 'is-installed' : 'is-missing'}`}>{chip}</span>
+        <span className={`su-chip ${update ? 'is-update' : ready ? (latest ? 'is-current' : 'is-installed') : 'is-missing'}`}>{chip}</span>
       </div>
       <ul className="su-parts">
         <li className="su-part">
@@ -169,7 +172,7 @@ function PreviewKitCard({ alert }: { alert: Alert }) {
               {busy === 'check' ? 'Checking…' : 'Check for updates'}
             </button>
             <button type="button" className="su-link" disabled={Boolean(busy)} onClick={fromFile} title="Install a preview kit zip (or drop one on the window)">Install from file…</button>
-            {kit?.version && <button type="button" className="su-link" disabled={Boolean(busy)} onClick={() => setAsking(true)}
+            {kit?.version && <button type="button" className="su-link is-remove" disabled={Boolean(busy)} onClick={() => setAsking(true)}
               title="Deletes the kit. It downloads again from here.">Remove</button>}
           </span>
         </li>
@@ -193,7 +196,7 @@ function PreviewKitCard({ alert }: { alert: Alert }) {
       <DoctorProblems d={k.doctor} />
       {(missing || update || (k.doctor?.ok && !busy && !k.finished)) && <div className="su-actions">
         {(missing || update) && (
-          <button type="button" className="btn-primary su-main" disabled={Boolean(busy) || (!kit?.version && latest === null)} onClick={() => k.setUp()}
+          <button type="button" className={mainBtn(primary)} disabled={Boolean(busy) || (!kit?.version && latest === null)} onClick={() => k.setUp()}
             title={update ? 'Downloads the newest kit from GitHub' : 'Installs what is missing: the kit (from GitHub) and Blender (with winget), then checks this PC'}>
             {busy === 'setup' ? (k.beside ? 'Installing kit and Blender…' : installingBlender ? 'Installing Blender…' : k.progress ? 'Installing kit…' : 'Setting up…') : busy === 'blender' ? 'Installing Blender…' : update ? `Update to v${latest!.version}` : 'Set up previews'}
           </button>
@@ -300,6 +303,9 @@ export function SetupPanel({ alert, onClose, focus }: { alert: Alert; onClose: (
   }[b.state]
   const galactaState = !g?.installed ? 'Not installed' : g.up_to_date === false ? 'Update available' : g.up_to_date ? 'Up to date' : g.disabled ? 'Installed, off' : 'Installed'
   const where = g?.installed?.replace(/^.*[\\/]~mods/i, '~mods') ?? ''
+  // one blue button in Setup: the first card that needs something, top down (mods load only with the bypass)
+  const bypassNext = !bypassOn || b?.state === 'disabled' || b?.state === 'outdated'
+  const galactaNext = !bypassNext && Boolean(g) && (!g!.installed || g!.disabled || g!.up_to_date === false)
 
   return (
     <div className="modal-overlay" onClick={onClose}>
@@ -322,7 +328,7 @@ export function SetupPanel({ alert, onClose, focus }: { alert: Alert; onClose: (
                 <h3>Signature bypass</h3>
                 <p>Lets the game load mods that replace its files. Every mod needs it. Comes with {APP_NAME}.</p>
               </div>
-              <span className={`su-chip is-${b?.state === 'outdated' ? 'update' : b?.state ?? 'missing'}`}>{b ? BYPASS_LABEL[b.state] : bypassError ? 'Not read' : 'Checking…'}</span>
+              <span className={`su-chip is-${b?.state === 'outdated' ? 'update' : b?.state === 'partial' ? 'warn' : b?.state ?? 'missing'}`}>{b ? BYPASS_LABEL[b.state] : bypassError ? 'Not read' : 'Checking…'}</span>
             </div>
             {b?.state === 'partial' && <p className="su-note">Repair puts it back. If it goes missing again, an antivirus removed it. Allow it in Windows Security &gt; Virus &amp; threat protection &gt; Protection history, then press Repair.</p>}
             {b?.state === 'other' && <p className="su-note">A different loader or bypass is installed. Installing keeps it next to the new one as a .repakxtra-backup file.</p>}
@@ -337,7 +343,7 @@ export function SetupPanel({ alert, onClose, focus }: { alert: Alert; onClose: (
                 {bypassOn && <span className="su-part-links">
                   {(b.state === 'installed' || (b.state === 'outdated' && b.files[0]?.found !== 'missing')) && <button type="button" className="su-link" disabled={Boolean(busy)}
                     onClick={() => act('disable')}>Turn off</button>}
-                  <button type="button" className="su-link" disabled={Boolean(busy)} onClick={() => setConfirmOff('remove')}>Remove</button>
+                  <button type="button" className="su-link is-remove" disabled={Boolean(busy)} onClick={() => setConfirmOff('remove')}>Remove</button>
                 </span>}
               </li>
             </ul>
@@ -366,7 +372,7 @@ export function SetupPanel({ alert, onClose, focus }: { alert: Alert; onClose: (
                 <h3>{LOADER_NAME}</h3>
                 <p>{<>Loads more types of mods and lets you toggle mods in game. By <a onClick={() => open(GALACTA)}>0xSaturno</a>.</>}</p>
               </div>
-              <span className={`su-chip ${g?.up_to_date === false ? 'is-update' : g?.installed ? 'is-installed' : 'is-missing'}`}>{g ? galactaState : galactaError ? 'Not read' : 'Checking…'}</span>
+              <span className={`su-chip ${g?.up_to_date === false ? 'is-update' : g?.up_to_date && !g.disabled ? 'is-current' : g?.installed ? 'is-installed' : 'is-missing'}`}>{g ? galactaState : galactaError ? 'Not read' : 'Checking…'}</span>
             </div>
             {/* One part row, the same as the preview kit's: state, where it is and the newest release, links on the right */}
             <ul className="su-parts">
@@ -386,7 +392,7 @@ export function SetupPanel({ alert, onClose, focus }: { alert: Alert; onClose: (
                   </button>
                   {g?.installed && !g.disabled && <button type="button" className="su-link" disabled={Boolean(busy)} onClick={() => toggleGalacta(false)}
                     title="Mods that need it stop loading. Turn it on again here">Turn off</button>}
-                  {g?.installed && <button type="button" className="su-link" disabled={Boolean(busy)} onClick={() => setAskGalacta(true)}
+                  {g?.installed && <button type="button" className="su-link is-remove" disabled={Boolean(busy)} onClick={() => setAskGalacta(true)}
                     title="Moves it to Recently deleted for 7 days">Remove</button>}
                 </span>
               </li>
@@ -399,14 +405,14 @@ export function SetupPanel({ alert, onClose, focus }: { alert: Alert; onClose: (
             {/* switched off: Turn on is the card's main button, like the bypass card's */}
             {g?.installed && g.disabled && (
               <div className="su-actions">
-                <button type="button" className="btn-primary su-main" disabled={Boolean(busy)} onClick={() => toggleGalacta(true)}>
+                <button type="button" className={mainBtn(galactaNext)} disabled={Boolean(busy)} onClick={() => toggleGalacta(true)}>
                   {busy === 'galacta-on' ? 'Turning on…' : 'Turn on'}
                 </button>
               </div>
             )}
             {(!g?.installed || g.up_to_date === false) && (
               <div className="su-actions">
-                <button type="button" className="btn-primary su-main" disabled={Boolean(busy)} onClick={install}>
+                <button type="button" className={mainBtn(galactaNext && !g?.disabled)} disabled={Boolean(busy)} onClick={install}>
                   {busy === 'install-galacta' ? 'Installing…' : g?.installed ? `Update${g.latest ? ` to ${g.latest}` : ''}` : 'Install'}
                 </button>
                 <span className="su-option">
@@ -418,7 +424,7 @@ export function SetupPanel({ alert, onClose, focus }: { alert: Alert; onClose: (
             )}
           </section>
 
-          <PreviewKitCard alert={alert} />
+          <PreviewKitCard alert={alert} primary={!bypassNext && !galactaNext} />
 
           {/* repakxtra: optional tools under what every player needs, folded away (Progressive Disclosure) */}
           <button type="button" className="su-group" aria-expanded={advanced} onClick={() => setAdvanced(v => !v)}>

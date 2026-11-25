@@ -1622,7 +1622,7 @@ function App() {
             uiLog.error('Crash', `Mesh crash: ${payload.is_mesh_crash ? 'yes' : 'no'}`)
             uiLog.debug('Crash', `Full payload: ${JSON.stringify(payload)}`)
             setIsLogDrawerOpen(true)
-            alert.info('Crash Details', 'Report opened in Log Drawer.')
+            alert.info('Crash details', 'Report opened in Log Drawer.')
           }
         }, payload, () => alert.dismissAlert(crashId)) // repakxtra: See suspects closes this toast as its dialog opens
       })

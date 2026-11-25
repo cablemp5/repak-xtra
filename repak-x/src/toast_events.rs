@@ -274,7 +274,7 @@ pub fn emit_crash_detected(
     let payload = CrashToastPayload {
         base: ToastPayload {
             toast_type: ToastType::Danger,
-            title: "Game Crashed".to_string(),
+            title: "Game crashed".to_string(),
             description,
             duration: Some(0), // Persistent - user must dismiss
         },

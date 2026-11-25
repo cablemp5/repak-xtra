@@ -386,7 +386,7 @@ if (import.meta.env.DEV && !('__TAURI_INTERNALS__' in window)) {
       case 'check_for_previous_crash': {
         if (localStorage.getItem('mock.prevCrash') !== '1') return null
         const crash_folder = 'C:/Users/you/AppData/Local/Marvel/Saved/Crashes/UECC-Windows-MOCK_0000'
-        setTimeout(() => emit('game_crash_detected', { title: 'Game Crashed', description: 'Error: Access Violation', type: 'danger', crash_folder,
+        setTimeout(() => emit('game_crash_detected', { title: 'Game crashed', description: 'Error: Access Violation', type: 'danger', crash_folder,
           crash_type: 'Access Violation', asset_path: '/Game/Marvel/Characters/1026/1026001/Meshes/SK_1026_1026001', character_id: '1026', is_mesh_crash: true }), 500)
         return { crash_folder }
       }

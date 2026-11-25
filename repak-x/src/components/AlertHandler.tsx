@@ -234,7 +234,7 @@ export function AlertProvider({ children, placement = DEFAULT_CONFIG.placement }
         return showAlert({
             color: 'danger',
             icon: Icons.crash,
-            title: title || 'Game Crashed',
+            title: title || 'Game crashed',
             description,
             duration: 0, // Persistent by default
             ...options
