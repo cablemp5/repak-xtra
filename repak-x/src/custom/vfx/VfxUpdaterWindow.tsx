@@ -593,6 +593,8 @@ export function VfxUpdaterPanel() {
       const key = norm(utocOf(r.placed?.fixed ?? r.mod))
       setRuns(rs => ({ ...rs, [key]: { status: r.status, report: r } }))
       setOpen(o => new Set(o).add(key))
+      setQ('')
+      setHero('') // clear active search or hero filters so the reported mod is always visible
       const reportGroup = r.status === 'fixed' ? 'updated' : r.status === 'failed' ? 'failed' : r.status === 'mappings' ? 'waiting' : 'needs'
       setFoldedIds(f => f.filter(x => x !== reportGroup)) // reveal only this report's group, keeping other manual folds
       setFilterClosed(f => f.filter(x => x !== reportGroup))
@@ -670,10 +672,11 @@ export function VfxUpdaterPanel() {
     const token = newRunToken()
     if (!(await claimRun(token, byKey.get(todo[0])?.name))) { addLog('Another update is running. Try again when it is done.', 'warning'); return }
     myToken.current = token
-    // the run in view: a search that hides a mod clears, and Updating, where its mods move, unfolds
-    if (todo.some(k => !groupOf.current.has(k))) setQ('')
+    // the run in view: a filter that hides a mod clears, and Updating, where its mods move, unfolds
+    if (todo.some(k => !groupOf.current.has(k))) { setQ(''); setHero('') }
     const unfold = new Set(['updating'])
     setFoldedIds(f => (f.some(id => unfold.has(id)) ? f.filter(id => !unfold.has(id)) : f))
+    setFilterClosed(f => (f.some(id => unfold.has(id)) ? f.filter(id => !unfold.has(id)) : f))
     setBusy(true); setBatch(todo); setLastTook(null); setEnded(null); cancel.current = false
     const startedAt = performance.now()
     todo.forEach(k => patch(k, { status: 'waiting', step: undefined, sub: undefined, report: undefined }))
@@ -970,7 +973,7 @@ export function VfxUpdaterPanel() {
         {behind && !usmapMissing && (
           <p className="vf-warn" role="note">
             <AlertTriangle size={14} aria-hidden="true" />
-            <span title={`Mappings for build ${cl}, the game is on build ${build!.cl}`}>{usmapInfo?.upToDate || usmapInfo?.updated
+            <span title={`Mappings for build ${cl}, the game is on build ${build!.cl}`}>{Boolean(usmapInfo && !usmapInfo.skipped && (usmapInfo.upToDate || usmapInfo.updated) && usmap && usmapInfo.localPath && norm(usmap) === norm(usmapInfo.localPath))
               ? 'The game updated and its new mappings are not out yet.'
               : 'The selected game mappings are older than the game.'} {waits.size
               ? `${plural(waits.size, 'mod')} ${waits.size === 1 ? 'uses' : 'use'} files this update changed and ${waits.size === 1 ? 'waits' : 'wait'} for them. Every other mod updates now`
