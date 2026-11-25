@@ -264,10 +264,8 @@ export default function SoundsScreen({ alert, blocked, onInstall }: SoundsProps)
     stop()
     setClearing(true)
     try {
-      const latest = await invoke<State>('sounds_state').catch(() => null)
-      const ids = latest ? [...new Set([...Object.keys(st.names), ...Object.keys(latest.names)])] : SLOTS.map(s => s.id)
       const failed: string[] = []
-      for (const id of ids) await invoke('sounds_clear', { slot: id }).catch(e => { failed.push(`${SLOTS.find(s => s.id === id)?.name ?? id}: ${String(e)}`) })
+      for (const s of SLOTS) await invoke('sounds_clear', { slot: s.id }).catch(e => { failed.push(`${s.name}: ${String(e)}`) })
       if (failed.length) { cue('warning'); alert.warning(failed.length === 1 ? 'One sound was not cleared' : `${failed.length} sounds were not cleared`, failed.join(', ')) }
       await refresh()
     } finally {

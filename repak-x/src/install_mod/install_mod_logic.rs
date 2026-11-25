@@ -166,6 +166,7 @@ fn existing_mod_variants(output_dir: &Path, base_name: &str) -> Vec<PathBuf> {
     let variants = [
         format!("{}.pak", base_name),
         format!("{}.bak_repak", base_name),
+        format!("{}.pak.bak_repak", base_name),
         format!("{}.pak_disabled", base_name),
     ];
 
@@ -788,6 +789,18 @@ mod tests {
         assert_eq!(install_name(dir.path(), "New"), "New_9999999_P", "a fresh install is priority 1, no !");
         assert_eq!(install_name(dir.path(), "New_99999999_P"), "New_99999999_P", "a fresh install keeps the priority its name carries");
         assert!(existing_mod_variants(dir.path(), "Plain").contains(&dir.path().join("Plain.pak")), "the Unranked copy is the one replaced");
+
+        let d2 = tempfile::tempdir().unwrap();
+        let off = d2.path().join("Foo.pak.bak_repak");
+        fs::write(&off, b"old").unwrap();
+        assert_eq!(install_name(d2.path(), "Foo"), "Foo", "off .pak.bak_repak Unranked copy keeps its name");
+        assert!(existing_mod_variants(d2.path(), "Foo").contains(&off), "exact-name discovery includes .pak.bak_repak");
+        let r = install_staged(d2.path(), "Foo", d2.path(), |staging| {
+            fs::write(staging.join("Foo.pak"), b"new").unwrap();
+            Ok(())
+        });
+        assert!(r.is_ok());
+        assert!(d2.path().join("Foo.pak").exists() && !off.exists(), "reinstalling replaces the disabled .pak.bak_repak copy");
     }
 
     #[test]

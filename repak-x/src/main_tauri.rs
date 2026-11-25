@@ -518,6 +518,9 @@ async fn set_game_path(
     watcher_state: State<'_, WatcherState>,
 ) -> Result<String, String> {
     let input = PathBuf::from(&path);
+    if !input.is_absolute() {
+        return Err("Enter a full folder path, such as C:\\Games\\MarvelRivals.".to_string());
+    }
     if !input.is_dir() {
         return Err(format!("Folder does not exist: {path}"));
     }
@@ -920,55 +923,117 @@ async fn set_mod_priority(
     let _mutation = crate::xtra_mutation::edit()?;
     crate::xtra_identity::upstream_guard()?; // repakxtra: not while Repak X is open (both change the same files)
     let path = PathBuf::from(&mod_path);
+    let Some(planned_path) = priority_target_path(&path, priority, special)? else {
+        return Ok(mod_path); // No change
+    };
+    let old_preview_key = crate::xtra_previews::mod_key(&path);
+    let new_preview_key = crate::xtra_previews::mod_key(&planned_path);
+    // Reserve previews before renaming the pak so an active preview job fails cleanly without splitting state
+    let preview_hold = if old_preview_key != new_preview_key {
+        Some(crate::xtra_previews::reserve_rename()?)
+    } else {
+        None
+    };
+
     let Some(new_path) = rename_priority(&path, priority, special)? else {
         return Ok(mod_path); // No change
     };
 
-    // Invalidate cache for old path. Its tags and previews follow a ! change (their keys keep the !).
+    // Invalidate cache for old path. Tags and previews follow a ! change, retaining the old key if another installed mod still uses it.
+    let game_path = {
+        let state_guard = state.lock().unwrap();
+        state_guard.game_path.clone()
+    };
+    let old_tag_key = get_mod_key(&path);
+    let tag_key_shared = old_tag_key != get_mod_key(&new_path)
+        && another_mod_uses_key(&game_path, &new_path, &old_tag_key, get_mod_key);
+    let preview_key_shared = preview_hold.is_some()
+        && another_mod_uses_key(&game_path, &new_path, &old_preview_key, crate::xtra_previews::mod_key);
     {
         let mut state_guard = state.lock().unwrap();
         state_guard.mod_details_cache.remove(&path);
         xtra_details_cache::mark_dirty(); // repakxtra: the saved copy follows
-        if move_tags(&mut state_guard.mod_tags, &path, &new_path) {
+        if migrate_tags(&mut state_guard.mod_tags, &path, &new_path, tag_key_shared) {
             let _ = save_state(&state_guard);
         }
     }
-    crate::xtra_previews::rename_key(&crate::xtra_previews::mod_key(&path), &crate::xtra_previews::mod_key(&new_path));
+    if let Some(hold) = preview_hold {
+        crate::xtra_previews::migrate_key_with_hold(&hold, &old_preview_key, &new_preview_key, preview_key_shared)?;
+    }
 
     Ok(new_path.to_string_lossy().into_owned())
 }
 
-/// repakxtra: moves a mod's saved tags from its old name's key to the new one's (a ! change gives it a new key). true
-/// when something moved. A key that already has tags keeps them.
-fn move_tags(tags: &mut std::collections::HashMap<String, Vec<String>>, old: &Path, new: &Path) -> bool {
+/// repakxtra: true when another installed mod under `mods_dir` (other than `exclude`) shares `key`.
+fn another_mod_uses_key(mods_dir: &Path, exclude: &Path, key: &str, key_fn: fn(&Path) -> String) -> bool {
+    if !mods_dir.is_dir() {
+        return false;
+    }
+    let excl = std::fs::canonicalize(exclude).ok();
+    for entry in WalkDir::new(mods_dir).into_iter().filter_entry(|e| {
+        !e.file_type().is_dir() || !e.file_name().to_str().is_some_and(|n| n.starts_with(".repakxtra-"))
+    }).flatten() {
+        if !entry.file_type().is_file() { continue }
+        let p = entry.path();
+        let name = p.file_name().and_then(|n| n.to_str()).unwrap_or("");
+        let lower = name.to_ascii_lowercase();
+        if !(lower.ends_with(".pak") || lower.ends_with(".bak_repak") || lower.ends_with(".pak_disabled")) {
+            continue;
+        }
+        if p == exclude || excl.as_ref().is_some_and(|c| std::fs::canonicalize(p).ok().as_ref() == Some(c)) {
+            continue;
+        }
+        if key_fn(p) == key {
+            return true;
+        }
+    }
+    false
+}
+
+/// repakxtra: migrates a mod's saved tags from its old name's key to the new one's (a ! change gives it a new key).
+/// When `keep_old` is true (another installed mod still uses `old`), tags are copied instead of moved.
+fn migrate_tags(tags: &mut std::collections::HashMap<String, Vec<String>>, old: &Path, new: &Path, keep_old: bool) -> bool {
     let (from, to) = (get_mod_key(old), get_mod_key(new));
     if from == to || tags.contains_key(&to) {
         return false;
     }
-    match tags.remove(&from) {
-        Some(t) => tags.insert(to, t).is_none(),
-        None => false,
+    if keep_old {
+        match tags.get(&from).cloned() {
+            Some(t) => tags.insert(to, t).is_none(),
+            None => false,
+        }
+    } else {
+        match tags.remove(&from) {
+            Some(t) => tags.insert(to, t).is_none(),
+            None => false,
+        }
+    }
+}
+
+/// repakxtra: computes the target path for a priority/Special change without mutating disk, or None when unchanged.
+fn priority_target_path(path: &Path, priority: usize, special: Option<bool>) -> Result<Option<PathBuf>, String> {
+    if !path.exists() {
+        return Err("Mod file does not exist".to_string());
+    }
+    let file_name = path.file_name().and_then(|s| s.to_str()).ok_or("Invalid filename")?;
+    let stem = crate::xtra_bundle::stem(file_name);
+    let extension = &file_name[stem.len()..];
+    let new_stem = crate::xtra_conflicts::priority_stem(stem, priority, special);
+    let new_path = path.with_file_name(format!("{new_stem}{extension}"));
+    if new_path == path {
+        Ok(None)
+    } else {
+        Ok(Some(new_path))
     }
 }
 
 /// repakxtra: renames the mod and its .utoc/.ucas to the new priority, keeping its whole extension (.pak, .bak_repak,
 /// .pak.bak_repak or .pak_disabled). The new path, or None when the name already is that priority.
 fn rename_priority(path: &Path, priority: usize, special: Option<bool>) -> Result<Option<PathBuf>, String> {
-    if !path.exists() {
-        return Err("Mod file does not exist".to_string());
-    }
-
-    let file_name = path.file_name().and_then(|s| s.to_str()).ok_or("Invalid filename")?;
-    let stem = crate::xtra_bundle::stem(file_name);
-    let extension = &file_name[stem.len()..];
-
-    let new_stem = crate::xtra_conflicts::priority_stem(stem, priority, special);
-    let new_path = path.with_file_name(format!("{new_stem}{extension}"));
-    let path = path.to_path_buf();
-
-    if new_path == path {
+    let Some(new_path) = priority_target_path(path, priority, special)? else {
         return Ok(None);
-    }
+    };
+    let path = path.to_path_buf();
 
     if new_path.exists() {
         return Err("A mod with this priority already exists".to_string());
@@ -4159,12 +4224,28 @@ mod toggle_and_delete_tests {
     fn tags_follow_a_special_change() {
         let mut tags = std::collections::HashMap::from([("Skin".to_string(), vec!["red".to_string()]), ("!Kept".to_string(), vec!["a".to_string()]), ("Kept".to_string(), vec!["b".to_string()])]);
         let p = std::path::Path::new;
-        assert!(super::move_tags(&mut tags, p("m/Skin_9999999_P.pak"), p("m/!Skin_9999999_P.pak")));
+        assert!(super::migrate_tags(&mut tags, p("m/Skin_9999999_P.pak"), p("m/!Skin_9999999_P.pak"), false));
         assert_eq!(tags.get("!Skin"), Some(&vec!["red".to_string()]));
         assert!(!tags.contains_key("Skin"));
-        assert!(!super::move_tags(&mut tags, p("m/!Skin_9999999_P.pak"), p("m/!Skin_99999999_P.pak")), "a number change keeps the key");
-        assert!(!super::move_tags(&mut tags, p("m/Kept.pak"), p("m/!Kept.pak")), "tags the new key has stay");
+        assert!(!super::migrate_tags(&mut tags, p("m/!Skin_9999999_P.pak"), p("m/!Skin_99999999_P.pak"), false), "a number change keeps the key");
+        assert!(!super::migrate_tags(&mut tags, p("m/Kept.pak"), p("m/!Kept.pak"), false), "tags the new key has stay");
         assert_eq!(tags.get("Kept"), Some(&vec!["b".to_string()]));
+
+        let mut shared = std::collections::HashMap::from([("Skin".to_string(), vec!["fav".to_string()])]);
+        assert!(super::migrate_tags(&mut shared, p("A/Skin.pak"), p("A/!Skin.pak"), true));
+        assert_eq!(shared.get("Skin"), Some(&vec!["fav".to_string()]), "shared old key is retained");
+        assert_eq!(shared.get("!Skin"), Some(&vec!["fav".to_string()]), "new key gets a copy");
+
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(dir.path().join("A")).unwrap();
+        std::fs::create_dir_all(dir.path().join("B")).unwrap();
+        let a_new = dir.path().join("A").join("!Skin.pak");
+        let b_copy = dir.path().join("B").join("Skin.pak");
+        std::fs::write(&a_new, "x").unwrap();
+        std::fs::write(&b_copy, "x").unwrap();
+        assert!(super::another_mod_uses_key(dir.path(), &a_new, "Skin", super::get_mod_key));
+        std::fs::remove_file(&b_copy).unwrap();
+        assert!(!super::another_mod_uses_key(dir.path(), &a_new, "Skin", super::get_mod_key));
     }
 }
 

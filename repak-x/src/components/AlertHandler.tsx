@@ -145,9 +145,11 @@ export function AlertProvider({ children, placement = DEFAULT_CONFIG.placement }
     // Add a new toast
     const showAlert = useCallback((alertConfig: AlertOptions) => {
         if (quietToast(alertConfig)) return -1; // repakxtra: Minimal toasts skips everyday confirmations
-        // repakxtra: the same problem again while its toast is up (a retry loop, two listeners) is one notice
+        // repakxtra: the same problem again in the same stack while its toast is up is one notice (never deduplicate a dialog error against one hidden behind it)
+        const owner = topModal();
         const same = toastsNow.current.find(t => (t.color === 'danger' || t.color === 'warning') && t.color === alertConfig.color
-            && t.title === alertConfig.title && (t.fullText ?? t.description) === alertConfig.description && !t.isLoading);
+            && t.title === alertConfig.title && (t.fullText ?? t.description) === alertConfig.description && !t.isLoading
+            && (t.ownerModal ?? null) === (owner ?? null));
         if (same) return same.id;
         const id = Date.now() + Math.random();
         const toast: Toast = {
@@ -160,7 +162,7 @@ export function AlertProvider({ children, placement = DEFAULT_CONFIG.placement }
                 ? alertConfig.duration
                 : DEFAULT_CONFIG.defaultDuration,
             createdAt: Date.now(),
-            ownerModal: topModal() // repakxtra: layered above its owning dialog only (older background toasts stay behind)
+            ownerModal: owner // repakxtra: layered above its owning dialog only (older background toasts stay behind)
         };
 
         clocksRef.current.set(id, { elapsed: 0, since: null }); // repakxtra
@@ -198,8 +200,9 @@ export function AlertProvider({ children, placement = DEFAULT_CONFIG.placement }
         // repakxtra: a loading toast that ends as the same problem another toast already shows goes away (an install's
         // failure toast from the backend and the install's own result)
         const end = was && { ...was, ...updates };
+        const owner = was?.ownerModal ?? null;
         if (end && updates.color && (end.color === 'danger' || end.color === 'warning') && toastsNow.current.some(t => t.id !== id && t.color === end.color
-            && t.title === end.title && (t.fullText ?? t.description) === end.description)) {
+            && t.title === end.title && (t.fullText ?? t.description) === end.description && (t.ownerModal ?? null) === owner)) {
             clocksRef.current.delete(id);
             toastsNow.current = toastsNow.current.filter(toast => toast.id !== id);
             setToasts(prev => prev.filter(toast => toast.id !== id)); return;
