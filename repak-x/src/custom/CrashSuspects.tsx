@@ -14,6 +14,7 @@ import { ModName, plural } from './modName'
 import { type Tier, type Tiered, grouped, ordered, prechecked, reasonFor } from './crashTiers'
 import BisectPanel from './BisectPanel'
 import { OPEN_BISECT } from './crashBisect'
+import { APP_NAME } from './edition'
 
 type Mod = { path: string; enabled?: boolean }
 type Details = { character_id?: string | null; character_name?: string | null; files?: string[] }
@@ -146,11 +147,11 @@ export default function CrashSuspects({ deps, mods, details, heroes }: {
           <button className="modal-close" onClick={close} aria-label="Close">×</button>
         </div>
         <div className="modal-body cs-body">
-          {crash.previous && <p className="cs-note">This crash happened before repakxtra started, and its report does not say which mods were on. These are the mods that are on now.</p>}
+          {crash.previous && <p className="cs-note">This crash happened before {APP_NAME} started, and its report does not say which mods were on. These are the mods that are on now.</p>}
           {suspects === null
             ? <p className="cs-empty">Looking through the mods that are on…</p>
             : suspects.length === 0
-              ? <p className="cs-empty">{failed ? 'The mods could not be checked just now. Open this again, or find the mod by testing the game.' : 'repakxtra can still find it by testing: it switches groups of mods off while you launch the game, and puts them all back at the end.'}</p>
+              ? <p className="cs-empty">{failed ? 'The mods could not be checked just now. Open this again, or find the mod by testing the game.' : `${APP_NAME} can still find it by testing: it switches groups of mods off while you launch the game, and puts them all back at the end.`}</p>
               // one group per match strength, closest first: a heading instead of the same reason on every row (common
               // region, chunking), and a word when only hero matches came up (they are the weakest)
               : <>

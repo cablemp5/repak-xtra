@@ -26,10 +26,13 @@ pub struct Finding {
     /// load_on_top: the priority that puts it above every mod that wins over it or ties with it
     #[serde(skip_serializing_if = "Option::is_none")]
     priority: Option<usize>,
+    /// load_on_top: true when a Special (!) mod wins, so the fix needs Special too
+    #[serde(skip_serializing_if = "Option::is_none")]
+    special: Option<bool>,
 }
 
 fn f(level: &'static str, title: impl Into<String>, detail: impl Into<String>) -> Finding {
-    Finding { level, title: title.into(), detail: detail.into(), action: None, priority: None }
+    Finding { level, title: title.into(), detail: detail.into(), action: None, priority: None, special: None }
 }
 
 impl Finding {
@@ -39,11 +42,9 @@ impl Finding {
     }
 }
 
-/// Load order rank: the nines run (more nines load later and win). None for a "!" name or one without a nines run (the
-/// Library's priority 0 for both), whose order against the others the app does not know.
-fn rank(path: &Path) -> Option<usize> {
-    let stem = path.file_stem()?.to_string_lossy().to_string();
-    (!stem.starts_with('!')).then(|| crate::asset_explorer::mod_priority(&stem)).filter(|r| *r > 0)
+/// Load order rank: a leading ! (Special) first, then the nines run (more nines load later and win), unranked last.
+fn rank(path: &Path) -> crate::xtra_conflicts::Rank {
+    crate::xtra_conflicts::rank(&path.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default())
 }
 
 fn name(path: &Path) -> String {
@@ -73,11 +74,11 @@ fn own_checks(path: &Path, mods_dir: &Path) -> Vec<Finding> {
     out
 }
 
-/// Enabled mods that replace files this one has, at a higher priority (they win) or one the app cannot order ("!").
-/// `others`: (path, file keys) of every other enabled mod. Each problem carries Load on top: one priority above the
-/// highest mod that wins or ties, so one click fixes them all.
+/// Enabled mods that replace files this one has at a higher or the same priority. `others`: (path, file keys) of every
+/// other enabled mod. Each problem carries Load on top: one priority above the highest mod that wins or ties (Special
+/// too when that one is Special), so one click fixes them all.
 fn overrides(path: &Path, mine: &HashSet<String>, others: &[(PathBuf, HashSet<String>)]) -> Vec<Finding> {
-    let my_rank = rank(path);
+    let a = rank(path);
     let mut out = Vec::new();
     let mut top = None;
     for (other, keys) in others {
@@ -86,25 +87,24 @@ fn overrides(path: &Path, mine: &HashSet<String>, others: &[(PathBuf, HashSet<St
             continue;
         }
         let what = format!("{shared} of its {} files", mine.len());
-        if let (Some(a), Some(b)) = (my_rank, rank(other)) {
-            if b >= a {
-                top = top.max(Some(b));
-            }
+        let b = rank(other);
+        if b >= a {
+            top = top.max(Some(b));
         }
-        match (my_rank, rank(other)) {
-            (Some(a), Some(b)) if b > a => out.push(f("problem", format!("{} wins over it", name(other)),
-                format!("{} replaces {what} at a higher priority ({b} against {a}), so the game shows that mod's versions. Turn one off or give this one a higher priority.", name(other)))),
-            (Some(a), Some(b)) if a == b => out.push(f("problem", format!("It clashes with {}", name(other)),
-                format!("Both replace {what} at the same priority, so only one of them shows. Turn one off or give the one you want a higher priority."))),
-            (Some(_), Some(_)) => {} // this one wins
-            _ => out.push(f("info", format!("It shares files with {}", name(other)),
-                format!("Both replace {what}. A name starting with ! loads in its own order, so the one you want may lose. Give it a higher priority to be sure."))),
+        let (la, lb) = (crate::xtra_conflicts::rank_label(a), crate::xtra_conflicts::rank_label(b));
+        if b > a {
+            out.push(f("problem", format!("{} wins over it", name(other)),
+                format!("{} replaces {what} at a higher priority ({lb} against {la}), so the game shows that mod's versions. Turn one off or give this one a higher priority.", name(other))));
+        } else if a == b {
+            out.push(f("problem", format!("It clashes with {}", name(other)),
+                format!("Both replace {what} at the same priority, so only one of them shows. Turn one off or give the one you want a higher priority.")));
         }
     }
-    if let Some(top) = top {
+    if let Some((special, nines)) = top {
         for x in out.iter_mut().filter(|x| x.level == "problem") {
             x.action = Some("load_on_top");
-            x.priority = Some(top + 1);
+            x.priority = Some(nines + 1);
+            x.special = special.then_some(true);
         }
     }
     out
@@ -118,16 +118,14 @@ pub struct Hidden {
     files: Vec<String>,
 }
 
-/// Every pair where an enabled mod replaces files of another at a higher priority, so the lower one is hidden there.
-/// Mods whose order the app cannot know ("!") are left out, as in `overrides`.
+/// Every pair where an enabled mod replaces files of another at a higher priority (a Special (!) one above every
+/// number), so the lower one is hidden there.
 fn hidden_pairs(mods: &[(PathBuf, Arc<Vec<String>>)]) -> Vec<Hidden> {
     let ranks: Vec<_> = mods.iter().map(|(p, _)| rank(p)).collect();
     let mut owners: HashMap<String, Vec<usize>> = HashMap::new();
     for (i, (_, files)) in mods.iter().enumerate() {
-        if ranks[i].is_some() {
-            for k in keys(files) {
-                owners.entry(k).or_default().push(i);
-            }
+        for k in keys(files) {
+            owners.entry(k).or_default().push(i);
         }
     }
     let mut pairs: BTreeMap<(usize, usize), HashSet<&str>> = BTreeMap::new(); // (hidden, winner) -> shared keys
@@ -228,7 +226,7 @@ pub async fn xtra_why_overrides(mod_path: String, state: State<'_, Arc<Mutex<cra
         // a built-in keeps its name, and set_mod_priority only rewrites a name ending in exactly _P (another would get a
         // second suffix), so neither gets Load on top
         if crate::xtra_builtins::in_folder(&path) || !path.file_stem().is_some_and(|s| s.to_string_lossy().ends_with("_P")) {
-            out.iter_mut().for_each(|x| { x.action = None; x.priority = None });
+            out.iter_mut().for_each(|x| { x.action = None; x.priority = None; x.special = None });
         }
         out
     }).await.map_err(|e| e.to_string())
@@ -277,13 +275,13 @@ mod tests {
             (PathBuf::from("Apart_99999999_P.pak"), set(&["z"])),
             (PathBuf::from("!Bang_P.pak"), set(&["a"])),
         ];
-        let got: Vec<_> = overrides(Path::new("Me_9999999_P.pak"), &mine, &others).into_iter().map(|x| (x.level, x.title, x.priority)).collect();
+        let got: Vec<_> = overrides(Path::new("Me_9999999_P.pak"), &mine, &others[..4]).into_iter().map(|x| (x.level, x.title, x.priority, x.special)).collect();
         assert_eq!(got, [
-            ("problem", "High_99999999_P wins over it".to_string(), Some(3)),
-            ("info", "It shares files with Low_P".to_string(), None),
-            ("problem", "It clashes with Same_9999999_P".to_string(), Some(3)),
-            ("info", "It shares files with !Bang_P".to_string(), None),
-        ], "Load on top goes one above the highest mod that wins");
+            ("problem", "High_99999999_P wins over it".to_string(), Some(9), None),
+            ("problem", "It clashes with Same_9999999_P".to_string(), Some(9), None),
+        ], "Load on top goes one above the highest mod that wins, an unranked one loses");
+        let got: Vec<_> = overrides(Path::new("Me_9999999_P.pak"), &mine, &others).into_iter().map(|x| (x.title, x.priority, x.special)).collect();
+        assert_eq!(got.last(), Some(&("!Bang_P wins over it".to_string(), Some(1), Some(true))), "a ! winner needs Special to beat");
     }
 
     #[test]
@@ -293,10 +291,12 @@ mod tests {
             m("Addon_9999999_P.pak", &["/Game/Marvel/Characters/1026/MI_A.uasset", "/Game/Marvel/Characters/1026/MI_B.uasset"]),
             m("Base_999999999_P.pak", &["Marvel/Content/Marvel/Characters/1026/MI_A.uasset"]),
             m("Peer_9999999_P.pak", &["/Game/Marvel/Characters/1026/MI_B.uasset"]),
-            m("!Bang_P.pak", &["/Game/Marvel/Characters/1026/MI_A.uasset"]),
         ];
         let got = hidden_pairs(&mods);
         assert_eq!(got, [Hidden { hidden: "Addon_9999999_P.pak".into(), winner: "Base_999999999_P.pak".into(), files: vec!["/Game/Marvel/Characters/1026/MI_A.uasset".into()] }],
-            "a higher priority hides, the same priority is a conflict, a ! mod is left out");
+            "a higher priority hides, the same priority is a conflict");
+        let bang = m("!Bang_P.pak", &["/Game/Marvel/Characters/1026/MI_A.uasset"]);
+        let winners: Vec<_> = hidden_pairs(&[mods[0].clone(), mods[1].clone(), bang]).into_iter().map(|h| (h.hidden, h.winner)).collect();
+        assert!(winners.contains(&("Base_999999999_P.pak".into(), "!Bang_P.pak".into())), "a ! mod is above every number: {winners:?}");
     }
 }

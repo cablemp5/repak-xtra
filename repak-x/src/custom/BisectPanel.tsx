@@ -13,6 +13,7 @@ import { isModLoader, nameKey } from './loadoutStore'
 import { recentCrashes } from './setupReport'
 import { ModName, plural } from './modName'
 import { cue } from './sounds'
+import { APP_NAME } from './edition'
 
 type Mod = { path: string; enabled?: boolean }
 type End = Exclude<Outcome, { kind: 'run' }>
@@ -98,7 +99,7 @@ export default function BisectPanel({ deps, mods }: { deps: KeepDeps; mods: Mod[
 
         {view.step === 'intro' && <>
           <div className="modal-body cs-body bs-body">
-            <p className="bs-lead">repakxtra turns half of your mods off and you play. If the game still crashes, the crashing mod is in the half left on. If not, it is in the other half. Each launch halves the mods left, until one remains.</p>
+            <p className="bs-lead">{APP_NAME} turns half of your mods off and you play. If the game still crashes, the crashing mod is in the half left on. If not, it is in the other half. Each launch halves the mods left, until one remains.</p>
             {/* who does what, side by side: the player's part is three small things (Tesler: the app takes the rest) */}
             <div className="bs-roles">
               <section className="bs-role" aria-label="What you do">
@@ -106,8 +107,8 @@ export default function BisectPanel({ deps, mods }: { deps: KeepDeps; mods: Mod[
                 <ol>{([[Gamepad2, 'Launch the game from here'], [Repeat, 'Do what made it crash'], [CircleHelp, 'Say if it crashed']] as const).map(([Icon, t]) =>
                   <li key={t}><Icon size={15} aria-hidden="true" />{t}</li>)}</ol>
               </section>
-              <section className="bs-role is-app" aria-label="What repakxtra does">
-                <h3>repakxtra</h3>
+              <section className="bs-role is-app" aria-label={`What ${APP_NAME} does`}>
+                <h3>{APP_NAME}</h3>
                 <ul>{([[ArrowLeftRight, 'Turns half of your mods off for each launch'], [ListChecks, 'Keeps track of every answer'], [ArchiveRestore, 'Names the mod and puts yours back']] as const).map(([Icon, t]) =>
                   <li key={t}><Icon size={15} aria-hidden="true" />{t}</li>)}</ul>
               </section>
@@ -247,10 +248,10 @@ function Test({ run, resumed, busy, deps, loader, answer, undo, stop }: {
   }
   const offNow = testOff(run)
   const found = run.found ?? []
-  const what = run.phase === 'baseline' ? `repakxtra turned off all ${plural(offNow.length, 'mod')} you had on, to check a mod is the cause.${loader ? ' The mod loader stays on.' : ''}`
-    : run.phase === 'reproduce' ? `Last check: repakxtra turned every mod back on${found.length ? ' except the ones found so far' : ''}. Your other mods played fine without this one, so if the game crashes now, it is the cause.`
-    : run.phase === 'confirm' ? (found.length ? 'Last check: repakxtra turned every mod back on except this one and the ones found so far.' : 'Last check: repakxtra turned every mod back on except this one.')
-    : `repakxtra turned ${run.start.length - offNow.length} of your mods on and ${offNow.length} off for this test. ${plural(run.candidates.length, 'suspect')} left.`
+  const what = run.phase === 'baseline' ? `${APP_NAME} turned off all ${plural(offNow.length, 'mod')} you had on, to check a mod is the cause.${loader ? ' The mod loader stays on.' : ''}`
+    : run.phase === 'reproduce' ? `Last check: ${APP_NAME} turned every mod back on${found.length ? ' except the ones found so far' : ''}. Your other mods played fine without this one, so if the game crashes now, it is the cause.`
+    : run.phase === 'confirm' ? (found.length ? `Last check: ${APP_NAME} turned every mod back on except this one and the ones found so far.` : `Last check: ${APP_NAME} turned every mod back on except this one.`)
+    : `${APP_NAME} turned ${run.start.length - offNow.length} of your mods on and ${offNow.length} off for this test. ${plural(run.candidates.length, 'suspect')} left.`
   const live = running || starting
   const state = busy ? 'Switching mods…' : !ready ? 'Checking your mods…' : running ? 'Game running' : starting ? 'Starting the game…' : played ? 'Game closed' : null
   const waiting = busy || live || !played || !ready
@@ -259,7 +260,7 @@ function Test({ run, resumed, busy, deps, loader, answer, undo, stop }: {
       <p className="bs-lead">{resumed && !played && !launched && <span className="bs-resumed">Resuming your saved test. </span>}{what}</p>
       {(run.phase === 'confirm' || run.phase === 'reproduce') && <div className="bs-mod"><span className="cs-name"><ModName name={nameKey(run.candidates[0])} /></span></div>}
       {found.length > 0 && (
-        <p className="bs-found">{found.length === 1 ? <span><ModName name={nameKey(found[0])} /></span> : <span>{plural(found.length, 'mod')}</span>} {found.length === 1 ? 'crashes' : 'crash'} the game, but something else does too. {found.length === 1 ? 'It stays' : 'They stay'} off while repakxtra finds the rest.</p>
+        <p className="bs-found">{found.length === 1 ? <span><ModName name={nameKey(found[0])} /></span> : <span>{plural(found.length, 'mod')}</span>} {found.length === 1 ? 'crashes' : 'crash'} the game, but something else does too. {found.length === 1 ? 'It stays' : 'They stay'} off while {APP_NAME} finds the rest.</p>
       )}
       <ol className="fr-steps bs-steps" data-test={run.tests}>
         <Step n={1} done={running || played} title="Launch the game" action={
@@ -280,9 +281,9 @@ function Test({ run, resumed, busy, deps, loader, answer, undo, stop }: {
           {!running && played && report !== null && <p role="status">{report ? 'The game wrote a crash report as it closed.' : 'No crash report from this launch so far.'}</p>}
         </Step>
       </ol>
-      {launched && !played && !running && <button type="button" className="bs-link" onClick={() => { setStarting(false); setPlayed(true) }}>The game closed before repakxtra saw it running</button>}
+      {launched && !played && !running && <button type="button" className="bs-link" onClick={() => { setStarting(false); setPlayed(true) }}>The game closed before {APP_NAME} saw it running</button>}
       {stuck && <button type="button" className="bs-link" onClick={() => { setStuck(false); setResumeTry(n => n + 1) }}>Check again</button>}
-      {resumed && ready && !fixed && !launched && !played && !running && <button type="button" className="bs-link" onClick={() => setPlayed(true)}>I already played this test before repakxtra closed</button>}
+      {resumed && ready && !fixed && !launched && !played && !running && <button type="button" className="bs-link" onClick={() => setPlayed(true)}>I already played this test before {APP_NAME} closed</button>}
       {run.phase !== 'confirm' && run.phase !== 'reproduce' && (
         <details className="bs-off">
           <summary>Which mods are off</summary>

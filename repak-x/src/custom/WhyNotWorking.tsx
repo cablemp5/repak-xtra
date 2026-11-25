@@ -15,7 +15,7 @@ import { useDialogFocus } from './dialogFocus'
 import { useShownBusy } from './shownBusy'
 
 type Action = 'turn_on' | 'turn_off' | 'setup' | 'load_on_top'
-type Finding = { level: 'problem' | 'info'; title: string; detail: string; action?: Action; priority?: number }
+type Finding = { level: 'problem' | 'info'; title: string; detail: string; action?: Action; priority?: number; special?: boolean }
 type Target = { path: string; name?: string }
 const EVENT = 'repakxtra-why'
 const ACTION_LABEL: Record<Action, string> = { turn_on: 'Turn on', turn_off: 'Turn off', setup: 'Open Setup', load_on_top: 'Load on top' }
@@ -36,7 +36,7 @@ const isOff = (path: string) => /\.bak_repak$/i.test(path)
 /** Mounted once in App: listens for openWhy. */
 /** `onSetPriority`: the Library's priority change (App.handleSetPriority), which guards a running game, reloads the list,
  *  refreshes the selection a rename left stale, and says when it fails. */
-export function WhyNotWorking({ alert, onSetPriority }: { alert: ReturnType<typeof useAlert>; onSetPriority: (modPath: string, priority: number) => Promise<void> }) {
+export function WhyNotWorking({ alert, onSetPriority }: { alert: ReturnType<typeof useAlert>; onSetPriority: (modPath: string, priority: number, special?: boolean) => Promise<void> }) {
   const [target, setTarget] = useState<Target | null>(null)
   const [found, setFound] = useState<Finding[] | null>(null)
   const [others, setOthers] = useState<Finding[] | null>(null) // the second pass
@@ -74,10 +74,10 @@ export function WhyNotWorking({ alert, onSetPriority }: { alert: ReturnType<type
   }, [target]) // each opening checks again, the same mod too
   if (!target || !path) return null
   const name = target.name || fileName(path)
-  const act = async ({ action, priority }: Finding) => {
+  const act = async ({ action, priority, special }: Finding) => {
     if (action === 'setup') { close(); window.dispatchEvent(new Event('repakxtra-open-setup')); return }
     if (modsBlocked()) { alert.warning(...GAME_RUNNING); return } // the Library's own guard: toggle_mod does not check
-    if (action === 'load_on_top') { close(); await onSetPriority(path, priority!); return } // its row shows the new number
+    if (action === 'load_on_top') { close(); await onSetPriority(path, priority!, special); return } // its row shows the new number
     setBusy(true)
     try {
       await invoke('toggle_mod', { modPath: path }) // the Library's own switch: the list updates from the folder watcher

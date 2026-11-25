@@ -765,33 +765,8 @@ async fn get_pak_files(state: State<'_, Arc<Mutex<AppState>>>) -> Result<Vec<Mod
                 .map(|d| d.as_secs())
                 .unwrap_or(0);
 
-            // Calculate priority
-            // Priority 0 = "!" prefix (highest priority)
-            // Priority 1-N = 7-N+6 nines displayed as 1-based (7 nines → Priority 1, 8 nines → Priority 2, etc.)
-            let mut priority = 0;
-            let file_stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or("");
-
-            // Check for "!" prefix (highest priority)
-            if file_stem.starts_with("!") {
-                priority = 0; // Highest priority
-            } else if file_stem.ends_with("_P") {
-                let base_no_p = file_stem.strip_suffix("_P").unwrap();
-                // Check for _999... suffix
-                static RE_NUMS: std::sync::OnceLock<Regex> = std::sync::OnceLock::new(); // repakxtra: compiled once
-                let re_nums = RE_NUMS.get_or_init(|| Regex::new(r"_(\d+)$").unwrap());
-                if let Some(caps) = re_nums.captures(base_no_p) {
-                    let nums = &caps[1];
-                    // Verify they are all 9s
-                    if nums.chars().all(|c| c == '9') {
-                        let actual_nines = nums.len();
-                        // Convert actual nines count to UI priority (1-based)
-                        // 7 nines → Priority 1, 8 nines → Priority 2, etc.
-                        if actual_nines >= 7 {
-                            priority = actual_nines - 6;
-                        }
-                    }
-                }
-            }
+            // repakxtra: the nines of _9…_P (1 to 7, 0 unranked). The UI reads a leading ! (Special) from the path.
+            let priority = crate::asset_explorer::mod_priority(path.file_stem().and_then(|s| s.to_str()).unwrap_or(""));
 
             let key = get_mod_key(&path);
             let custom_tags = mod_tags.get(&key).cloned().unwrap_or_default();
@@ -902,25 +877,7 @@ async fn get_pak_files_in_folder(
                 .map(|d| d.as_secs())
                 .unwrap_or(0);
 
-            // Calculate priority
-            let mut priority = 0;
-            let file_stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or("");
-
-            if file_stem.starts_with("!") {
-                priority = 0;
-            } else if file_stem.ends_with("_P") {
-                let base_no_p = file_stem.strip_suffix("_P").unwrap();
-                let re_nums = Regex::new(r"_(\d+)$").unwrap();
-                if let Some(caps) = re_nums.captures(base_no_p) {
-                    let nums = &caps[1];
-                    if nums.chars().all(|c| c == '9') {
-                        let actual_nines = nums.len();
-                        if actual_nines >= 7 {
-                            priority = actual_nines - 6;
-                        }
-                    }
-                }
-            }
+            let priority = crate::asset_explorer::mod_priority(path.file_stem().and_then(|s| s.to_str()).unwrap_or("")); // repakxtra
 
             let key = get_mod_key(&path);
             let custom_tags = state.mod_tags.get(&key).cloned().unwrap_or_default();
@@ -946,15 +903,35 @@ async fn get_pak_files_in_folder(
 }
 
 #[tauri::command]
+/// repakxtra: `priority` is the nines of _9…_P (1 to 7, more after an older Load on top), 0 is Unranked (strips ! and
+/// the nines). `special` sets or clears the leading ! (Special), None keeps it (xtra_conflicts::priority_stem).
 async fn set_mod_priority(
     mod_path: String,
     priority: usize,
+    special: Option<bool>,
     state: State<'_, Arc<Mutex<AppState>>>,
 ) -> Result<(), String> {
     crate::xtra_builtins::fixed_place(Path::new(&mod_path))?; // repakxtra
     let _mutation = crate::xtra_mutation::edit()?;
     crate::xtra_identity::upstream_guard()?; // repakxtra: not while Repak X is open (both change the same files)
     let path = PathBuf::from(&mod_path);
+    if !rename_priority(&path, priority, special)? {
+        return Ok(()); // No change
+    }
+
+    // Invalidate cache for old path
+    {
+        let mut state_guard = state.lock().unwrap();
+        state_guard.mod_details_cache.remove(&path);
+        xtra_details_cache::mark_dirty(); // repakxtra: the saved copy follows
+    }
+
+    Ok(())
+}
+
+/// repakxtra: renames the mod and its .utoc/.ucas to the new priority, keeping its extension (.pak or .bak_repak).
+/// false when the name already is that priority.
+fn rename_priority(path: &Path, priority: usize, special: Option<bool>) -> Result<bool, String> {
     if !path.exists() {
         return Err("Mod file does not exist".to_string());
     }
@@ -965,50 +942,13 @@ async fn set_mod_priority(
         .and_then(|s| s.to_str())
         .ok_or("Invalid filename")?;
 
-    // Strip leading "!" if present (highest priority marker)
-    let stem_no_exclaim = stem.strip_prefix("!").unwrap_or(stem);
-
-    // 1. Strip _P if present
-    let base_no_p = if stem_no_exclaim.ends_with("_P") {
-        stem_no_exclaim.strip_suffix("_P").unwrap()
-    } else {
-        stem_no_exclaim
-    };
-
-    // 2. Strip _999... if present
-    let re = Regex::new(r"^(.*)_(\d+)$").unwrap();
-    let clean_base = if let Some(caps) = re.captures(base_no_p) {
-        let prefix = &caps[1];
-        let numbers = &caps[2];
-        if numbers.chars().all(|c| c == '9') {
-            prefix.to_string()
-        } else {
-            base_no_p.to_string()
-        }
-    } else {
-        base_no_p.to_string()
-    };
-
-    // 3. Construct new name with new priority
-    // Priority 0 = "!" prefix (highest priority) with minimum 7 nines
-    // Priority 1-N = 7-N+6 nines (1→7 nines, 2→8 nines, etc.)
-    let new_stem = if priority == 0 {
-        // Highest priority: use "!" prefix with minimum 7 nines
-        let min_nines = "9".repeat(7);
-        format!("!{}_{}_P", clean_base, min_nines)
-    } else {
-        // Convert UI priority (1-based) to actual nines count (7-based)
-        // Remove "!" prefix if present (since priority > 0)
-        let actual_nines = priority + 6; // Priority 1 → 7 nines, Priority 2 → 8 nines, etc.
-        let new_nines = "9".repeat(actual_nines);
-        format!("{}_{}_P", clean_base, new_nines)
-    };
-
+    let new_stem = crate::xtra_conflicts::priority_stem(stem, priority, special);
     let new_filename = format!("{}.{}", new_stem, extension);
     let new_path = path.with_file_name(&new_filename);
+    let path = path.to_path_buf();
 
     if new_path == path {
-        return Ok(()); // No change
+        return Ok(false);
     }
 
     if new_path.exists() {
@@ -1030,15 +970,7 @@ async fn set_mod_priority(
         true => xtra_ops::io(&std::io::Error::from_raw_os_error(32)).unwrap_or(e),
         false => format!("Failed to rename mod: {}", e),
     })?;
-
-    // Invalidate cache for old path
-    {
-        let mut state_guard = state.lock().unwrap();
-        state_guard.mod_details_cache.remove(&path);
-        xtra_details_cache::mark_dirty(); // repakxtra: the saved copy follows
-    }
-
-    Ok(())
+    Ok(true)
 }
 
 #[derive(Clone, serde::Serialize, serde::Deserialize)]
@@ -4176,6 +4108,22 @@ mod toggle_and_delete_tests {
         let q = |n: &str| both.path().join(n);
         assert_eq!(delete_set(q("M_P.pak").to_str().unwrap()).1, vec![q("M_P.pak")]);
         assert_eq!(delete_set(q("M_P.bak_repak").to_str().unwrap()).1, vec![q("M_P.bak_repak")]);
+    }
+
+    #[test]
+    fn a_priority_change_moves_the_set_and_unranked_never_adds_a_bang() {
+        let dir = folder(&["My Skin_9999999_P.pak", "My Skin_9999999_P.utoc", "My Skin_9999999_P.ucas", "Off_99_P.bak_repak"]);
+        let p = |n: &str| dir.path().join(n);
+        let names = || { let mut v: Vec<String> = std::fs::read_dir(dir.path()).unwrap().map(|e| e.unwrap().file_name().to_string_lossy().into()).collect(); v.sort(); v };
+        assert_eq!(super::rename_priority(&p("My Skin_9999999_P.pak"), 3, None), Ok(true));
+        assert_eq!(names(), ["My Skin_999_P.pak", "My Skin_999_P.ucas", "My Skin_999_P.utoc", "Off_99_P.bak_repak"], "the .utoc and .ucas follow");
+        assert_eq!(super::rename_priority(&p("My Skin_999_P.pak"), 3, Some(true)), Ok(true));
+        assert!(p("!My Skin_999_P.ucas").exists(), "Special adds ! to the whole set");
+        assert_eq!(super::rename_priority(&p("!My Skin_999_P.pak"), 3, Some(true)), Ok(false), "no change");
+        assert_eq!(super::rename_priority(&p("!My Skin_999_P.pak"), 0, None), Ok(true));
+        assert_eq!(names(), ["My Skin.pak", "My Skin.ucas", "My Skin.utoc", "Off_99_P.bak_repak"], "Unranked strips ! and the nines");
+        assert_eq!(super::rename_priority(&p("Off_99_P.bak_repak"), 1, None), Ok(true));
+        assert!(p("Off_9_P.bak_repak").exists(), "an off mod stays off");
     }
 }
 
@@ -8129,27 +8077,8 @@ fn scan_mod_clashes(quiet: bool, game_path: &Path, state: &Arc<Mutex<AppState>>)
             continue;
         }
 
-        // Calculate priority (same as get_pak_files)
-        let mut priority = 0;
-        let file_stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or("");
-
-        // Check for "!" prefix (highest priority)
-        if file_stem.starts_with("!") {
-            priority = 0; // Highest priority
-        } else if file_stem.ends_with("_P") {
-            let base_no_p = file_stem.strip_suffix("_P").unwrap();
-            let re_nums = Regex::new(r"_(\d+)$").unwrap();
-            if let Some(caps) = re_nums.captures(base_no_p) {
-                let nums = &caps[1];
-                if nums.chars().all(|c| c == '9') {
-                    let actual_nines = nums.len();
-                    // Convert actual nines count to UI priority (1-based)
-                    if actual_nines >= 7 {
-                        priority = actual_nines - 6;
-                    }
-                }
-            }
-        }
+        // repakxtra: ! and the nines, so a ! mod and an unranked one never count as tied
+        let priority = crate::xtra_conflicts::rank(path.file_stem().and_then(|s| s.to_str()).unwrap_or(""));
 
         // Check if it's IoStore
         let mut utoc_path = path.to_path_buf();
@@ -8201,7 +8130,7 @@ fn scan_mod_clashes(quiet: bool, game_path: &Path, state: &Arc<Mutex<AppState>>)
 
     for (i, j, overlapping_files) in crate::xtra_conflicts::find(&mods_info) {
         let (mod1, mod2) = (&mods_info[i], &mods_info[j]);
-        let priority = mod1.priority;
+        let priority = crate::xtra_conflicts::rank_label(mod1.priority); // repakxtra
         {
             {
                 {
@@ -8307,27 +8236,9 @@ fn single_mod_conflicts(target_path: PathBuf, game_path: PathBuf) -> Result<Vec<
     use std::collections::{HashMap, HashSet};
     info!("Checking conflicts for mod: {}", target_path.display());
 
-    // Helper to calculate priority from filename
-    fn calculate_priority(path: &Path) -> usize {
-        let mut priority = 0;
-        let file_stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or("");
-
-        if file_stem.starts_with("!") {
-            priority = 0;
-        } else if file_stem.ends_with("_P") {
-            let base_no_p = file_stem.strip_suffix("_P").unwrap();
-            let re_nums = Regex::new(r"_(\d+)$").unwrap();
-            if let Some(caps) = re_nums.captures(base_no_p) {
-                let nums = &caps[1];
-                if nums.chars().all(|c| c == '9') {
-                    let actual_nines = nums.len();
-                    if actual_nines >= 7 {
-                        priority = actual_nines - 6;
-                    }
-                }
-            }
-        }
-        priority
+    // repakxtra: ! first, then the nines (xtra_conflicts::rank)
+    fn calculate_priority(path: &Path) -> crate::xtra_conflicts::Rank {
+        crate::xtra_conflicts::rank(path.file_stem().and_then(|s| s.to_str()).unwrap_or(""))
     }
 
     // Helper to get files from a PAK or IoStore
@@ -8363,7 +8274,7 @@ fn single_mod_conflicts(target_path: PathBuf, game_path: PathBuf) -> Result<Vec<
     info!(
         "Target mod has {} files at priority {}",
         target_files.len(),
-        target_priority
+        crate::xtra_conflicts::rank_label(target_priority)
     );
 
     let mut conflicts: Vec<SingleModConflict> = Vec::new();
@@ -8414,16 +8325,10 @@ fn single_mod_conflicts(target_path: PathBuf, game_path: PathBuf) -> Result<Vec<
         let other_priority = calculate_priority(path);
         let priority_comparison = if target_priority == other_priority {
             "Same priority (conflict!)".to_string()
-        } else if target_priority < other_priority {
-            format!(
-                "Target has higher priority ({} vs {})",
-                target_priority, other_priority
-            )
         } else {
-            format!(
-                "Target has lower priority ({} vs {})",
-                target_priority, other_priority
-            )
+            // repakxtra: the higher rank wins (the old check had it backwards for the nines)
+            let (a, b) = (crate::xtra_conflicts::rank_label(target_priority), crate::xtra_conflicts::rank_label(other_priority));
+            format!("Target has {} priority ({a} vs {b})", if target_priority > other_priority { "higher" } else { "lower" })
         };
 
         // Extract affected characters from overlapping files

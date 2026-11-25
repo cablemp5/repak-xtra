@@ -11,8 +11,42 @@ use std::time::SystemTime;
 
 pub struct Container {
     pub path: PathBuf,
-    pub priority: usize,
+    pub priority: Rank,
     pub files: Arc<Vec<String>>,
+}
+
+/// A mod's load order, read from its file stem: a leading ! (Special, above every number), then the nines of its
+/// `_9…_P` suffix (0 is unranked). Tuples compare in that order, so the higher one wins.
+pub type Rank = (bool, usize);
+
+pub fn rank(stem: &str) -> Rank {
+    (stem.starts_with('!'), crate::asset_explorer::mod_priority(stem))
+}
+
+/// A rank in words for logs and the Why dialog: "!7", "7", or "unranked".
+pub fn rank_label((special, nines): Rank) -> String {
+    match (special, nines) {
+        (false, 0) => "unranked".into(),
+        (true, 0) => "!".into(),
+        (s, n) => format!("{}{n}", if s { "!" } else { "" }),
+    }
+}
+
+/// The stem set_mod_priority renames a mod to. `nines` 0 is the Unranked arm: no ! and no `_9…_P`, so stepping below 1
+/// never turns a mod into Special. `special` None keeps the current !, and Special on an unranked mod takes the install
+/// default of 7 nines. One priority suffix comes off, so the rest of the name stays as it was.
+pub fn priority_stem(stem: &str, nines: usize, special: Option<bool>) -> String {
+    let bare = stem.strip_prefix('!').unwrap_or(stem);
+    let bare = bare.strip_suffix("_P").unwrap_or(bare);
+    let base = match bare.rsplit_once('_') {
+        Some((b, n)) if !n.is_empty() && n.bytes().all(|c| c == b'9') => b,
+        _ => bare,
+    };
+    match (nines, special) {
+        (0, Some(true)) => format!("!{base}_{}_P", "9".repeat(crate::install_mod::install_mod_logic::BASE_MOD_NINES)),
+        (0, _) => base.to_string(), // Unranked
+        (n, s) => format!("{}{base}_{}_P", if s.unwrap_or(stem.starts_with('!')) { "!" } else { "" }, "9".repeat(n)),
+    }
 }
 
 /// The comparison key for an asset path from either reader.
@@ -27,7 +61,7 @@ fn is_metadata(path: &str) -> bool {
 /// Every pair of containers at the same priority that share an asset, as (first index, second index, shared files in
 /// the first container's spelling), in the same order the old pairwise loop produced (by first, then second index).
 pub fn find(mods: &[Container]) -> Vec<(usize, usize, Vec<String>)> {
-    let mut by_priority: BTreeMap<usize, Vec<usize>> = BTreeMap::new();
+    let mut by_priority: BTreeMap<Rank, Vec<usize>> = BTreeMap::new();
     for (i, m) in mods.iter().enumerate() {
         by_priority.entry(m.priority).or_default().push(i);
     }
@@ -104,7 +138,45 @@ mod tests {
     use super::*;
 
     fn c(name: &str, priority: usize, files: &[&str]) -> Container {
-        Container { path: PathBuf::from(name), priority, files: Arc::new(files.iter().map(|s| s.to_string()).collect()) }
+        Container { path: PathBuf::from(name), priority: (false, priority), files: Arc::new(files.iter().map(|s| s.to_string()).collect()) }
+    }
+
+    #[test]
+    fn ranks_order_special_then_nines_then_unranked() {
+        assert_eq!(rank("Skin_9999999_P"), (false, 7));
+        assert_eq!(rank("Skin_9_P"), (false, 1));
+        assert_eq!(rank("!Skin_9999999_P"), (true, 7));
+        assert_eq!(rank("Skin"), (false, 0), "unranked");
+        assert_eq!(rank("Skin_1234567_P"), (false, 0), "digits that are not all nines are no rank");
+        assert!(rank("!Skin") > rank("Skin_9999999_P") && rank("Skin_9_P") > rank("Skin"), "! beats every number, 1 beats unranked");
+        assert_ne!(rank("!Skin_9999999_P"), rank("Skin"), "! and unranked never tie");
+        assert_eq!([rank_label((false, 0)), rank_label((false, 3)), rank_label((true, 7))], ["unranked", "3", "!7"]);
+    }
+
+    #[test]
+    fn priority_stem_steps_unranked_to_seven_and_back() {
+        let mut stem = "My.Skin v2".to_string();
+        for n in 1..=7 {
+            stem = priority_stem(&stem, n, None);
+            assert_eq!(stem, format!("My.Skin v2_{}_P", "9".repeat(n)));
+            assert_eq!(rank(&stem), (false, n));
+        }
+        for n in (0..7).rev() {
+            stem = priority_stem(&stem, n, None);
+        }
+        assert_eq!(stem, "My.Skin v2", "stepping below 1 is unranked, never !");
+    }
+
+    #[test]
+    fn special_toggles_without_touching_the_number() {
+        assert_eq!(priority_stem("Skin_999_P", 3, Some(true)), "!Skin_999_P");
+        assert_eq!(priority_stem("!Skin_999_P", 3, Some(false)), "Skin_999_P");
+        assert_eq!(priority_stem("!Skin_999_P", 5, None), "!Skin_99999_P", "a number change keeps !");
+        assert_eq!(priority_stem("Skin", 0, Some(true)), "!Skin_9999999_P", "Special on an unranked mod takes 7");
+        assert_eq!(priority_stem("!Skin_9999999_P", 0, None), "Skin", "Unranked strips ! and the nines");
+        assert_eq!(priority_stem("!Skin_9999999_P", 0, Some(false)), "Skin");
+        assert_eq!(priority_stem("Skin_1234_P", 2, None), "Skin_1234_99_P", "digits that are not a rank stay in the name");
+        assert_eq!(priority_stem("Skin_9999999_P_9999999_P", 1, None), "Skin_9999999_P_9_P", "one suffix comes off, as before");
     }
 
     #[test]
@@ -156,7 +228,7 @@ mod tests {
             .map(|i| {
                 let mut files: Vec<String> = (0..60).map(|f| format!("/Game/Mods/M{i}/F{f}.uasset")).collect();
                 files.push(format!("Marvel/Content/Shared/T{}.uasset", i / 25));
-                Container { path: PathBuf::from(format!("M{i}.pak")), priority: 1, files: Arc::new(files) }
+                Container { path: PathBuf::from(format!("M{i}.pak")), priority: (false, 7), files: Arc::new(files) }
             })
             .collect()
     }

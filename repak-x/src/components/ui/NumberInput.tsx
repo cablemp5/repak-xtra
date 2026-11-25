@@ -8,9 +8,11 @@ type NumberInputProps = {
   onChange?: (value: number) => void
   className?: string
   disabled?: boolean
+  /** repakxtra: shown in place of 0 (the priority stepper's Unranked) */
+  placeholder?: string
 }
 
-const NumberInput = ({ value, min = 0, max = 999, onChange, className, disabled }: NumberInputProps) => {
+const NumberInput = ({ value, min = 0, max = 999, onChange, className, disabled, placeholder }: NumberInputProps) => {
   const [localValue, setLocalValue] = useState<number | ''>(value)
   const [isOnCooldown, setIsOnCooldown] = useState(false)
   const inputRef = useRef<HTMLInputElement | null>(null)
@@ -118,7 +120,8 @@ const NumberInput = ({ value, min = 0, max = 999, onChange, className, disabled 
         ref={inputRef}
         type="number"
         className="number-display"
-        value={localValue}
+        value={placeholder && localValue === 0 ? '' : localValue}
+        placeholder={placeholder}
         onChange={handleChange}
         onBlur={handleBlur}
         onKeyDown={handleKeyDown}

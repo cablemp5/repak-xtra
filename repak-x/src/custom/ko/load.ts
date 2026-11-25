@@ -5,6 +5,7 @@ import { listen } from '@tauri-apps/api/event'
 import { type Material, readMaterial, readWidget } from './model'
 import { type Images, type Scene, KO_FONT, makeScene } from './render'
 import { readAsset } from './export'
+import { APP_NAME } from '../edition'
 
 export type Hero = { id: string; name: string; widget: string }
 export type Loaded = { hero: Hero; scene: Scene; widgetJson: string }
@@ -14,7 +15,7 @@ export async function usmapPath(): Promise<string> {
   if (s.usmapPath && await invoke<boolean>('vfx_usmap_exists', { path: s.usmapPath })) return s.usmapPath
   const r = await invoke<{ localPath?: string | null }>('vfx_check_usmap_update', { force: false }).catch(() => ({ localPath: null }))
   if (r.localPath) return r.localPath
-  throw new Error('No USMAP yet. Connect to the internet once so repakxtra can fetch it, then try again.')
+  throw new Error(`No USMAP yet. Connect to the internet once so ${APP_NAME} can fetch it, then try again.`)
 }
 
 const cache = new Map<string, Promise<Loaded>>() // heroes opened this session, by hero and USMAP, shared while they load

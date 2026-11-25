@@ -638,7 +638,7 @@ function App() {
 
       const explorerWindow = new WebviewWindow('asset-explorer', {
         url: '/asset-explorer',
-        title: 'repakxtra - Asset Explorer',
+        title: `${APP_NAME} - Asset Explorer`,
         width: 1320,
         height: 820,
         minWidth: 900,
@@ -1037,11 +1037,12 @@ function App() {
     }
   }
 
-  const handleSetPriority = async (modPath: string, priority: number) => {
+  // repakxtra: priority is the nines (0 Unranked), special sets or clears the leading ! (undefined keeps it)
+  const handleSetPriority = async (modPath: string, priority: number, special?: boolean) => {
     if (gameRunning && !bypassGameRunningLock && !(await gameClosed('change its priority'))) return // repakxtra: waits for the game to close, then goes on (custom/opDialogs.tsx)
     try {
-      if (!(await runOp('change its priority', () => invoke('set_mod_priority', { modPath, priority }), { modes: false }))) return // repakxtra: game open or file in use asks
-      setStatus(`Priority set to ${priority}`)
+      if (!(await runOp('change its priority', () => invoke('set_mod_priority', { modPath, priority, special }), { modes: false }))) return // repakxtra: game open or file in use asks
+      setStatus(special !== undefined ? `Special (!) turned ${special ? 'on' : 'off'}` : priority ? `Priority set to ${priority}` : 'Priority set to Unranked')
 
       // If the modified mod is currently selected, clear selection to force refresh of details
       // This ensures the details panel updates with the new filename (since priority changes filename)

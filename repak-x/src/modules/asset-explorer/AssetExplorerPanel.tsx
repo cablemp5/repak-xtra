@@ -32,6 +32,7 @@ import {
 } from './assetIndex'
 import { useAssetIndex } from './useAssetIndex'
 import { ASSET_KINDS, KIND_LABELS, type AssetKindId, type ViewMode } from './types'
+import { APP_NAME } from '../../custom/edition' // repakxtra
 import './AssetExplorer.css'
 
 /** Below this many filtered rows a search opens every folder holding a hit. */
@@ -834,7 +835,7 @@ function AssetDetail({ node, index, conflicting, onClose, onRevealMod }: AssetDe
                 <h4>
                     Shipped by {owners.length} mod{owners.length === 1 ? '' : 's'}
                 </h4>
-                <p className="ae-detail-hint">Double-click a mod to select it in repakxtra.</p>
+                <p className="ae-detail-hint">Double-click a mod to select it in {APP_NAME}.</p>
                 <div className="ae-owner-list">
                     {owners.map(mod => (
                         <button

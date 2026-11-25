@@ -11,6 +11,7 @@ import { openWhy } from './WhyNotWorking'
 import { modsBlocked, turnOffWithUndo } from './keepOne'
 import { nameKey } from './loadoutIdentity'
 import { useUiPref } from './uiPrefs'
+import { APP_NAME } from './edition'
 
 type Alert = ReturnType<typeof useAlert>
 export type Risk = { path: string; short: string; reason: string }
@@ -86,7 +87,7 @@ export function checkBannedPlugins(alert: Alert, openSetup: () => void) {
 
 const KIND: Record<'banned' | 'unknown', string> = {
   banned: 'Named in the notice as an anti-cheat trigger. Remove it',
-  unknown: 'Not from repakxtra. It loads code into the game, so keep it only if you trust it',
+  unknown: `Not from ${APP_NAME}. It loads code into the game, so keep it only if you trust it`,
 }
 const where = (p: Plugin) => p.place ? `Win64\\${p.place}` : 'Win64'
 

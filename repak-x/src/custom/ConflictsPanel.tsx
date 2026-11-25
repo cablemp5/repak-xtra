@@ -6,7 +6,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { motion } from 'framer-motion'
 import { invoke } from '@tauri-apps/api/core'
 import { Check, ChevronRight, LoaderCircle } from 'lucide-react'
-import NumberInput from '../components/ui/NumberInput'
+import { PriorityControl, isSpecial, rankOf } from './PriorityControl'
 import Switch from '../components/ui/Switch'
 import { resolveHeroImage, useHeroImages } from '../utils/heroImages'
 import { nameKey } from './loadoutStore'
@@ -37,10 +37,11 @@ const sameMod = (p: string) => nameKey(p).replace(/^!/, '').toLowerCase()
 /** The same mod in its folder: two folders can each hold a "Skin", and those are two mods. */
 const sameModIn = (p: string) => `${p.replace(/[\\/][^\\/]*$/, '').toLowerCase()}|${sameMod(p)}`
 
-/** A group is resolved once no two of its mods that are still on share a priority: one left on, or each at its own. */
+/** A group is resolved once no two of its mods that are still on share a priority: one left on, or each at its own.
+ *  Special (!) and the number count together, so a ! mod and an unranked one are not tied. */
 export const resolved = (g: ConflictGroup, find: (path: string) => Mod | undefined) => {
   const on = g.mods.map(find).filter((m): m is Mod => Boolean(m && m.enabled !== false))
-  return new Set(on.map(m => m.priority ?? 0)).size === on.length
+  return new Set(on.map(rankOf)).size === on.length
 }
 
 /** The groups to show after a check: the ones shown before keep their place (the fresh copy when the check still has
@@ -53,17 +54,21 @@ export function keepSeen(before: ConflictGroup[], now: ConflictGroup[]) {
   return [...before.map(g => fresh.get(id(g)) ?? g), ...now.filter(g => !old.has(id(g)))]
 }
 
-/** A hidden pair is fixed once the hidden mod outranks its winner, or either one is off. A ! name loads in an order
- *  the app does not know (xtra_why.rs rank), so it never counts as fixed by priority. */
+/** A hidden pair is fixed once the hidden mod outranks its winner (Special (!) above every number, as xtra_why.rs
+ *  rank), or either one is off. */
 export const unhidden = (h: Hidden, find: (path: string) => Mod | undefined) => {
   const a = find(h.hidden), b = find(h.winner)
   if (!a || !b || a.enabled === false || b.enabled === false) return true
-  return !fileOf(a.path).startsWith('!') && !fileOf(b.path).startsWith('!') && (a.priority ?? 0) > (b.priority ?? 0)
+  return rankOf(a) > rankOf(b)
 }
 
-/** Load on top: one above every mod that hides it, so a single click fixes all its pairs. */
-export const topFor = (path: string, hidden: Hidden[], find: (path: string) => Mod | undefined) =>
-  Math.max(0, ...hidden.filter(h => find(h.hidden) === find(path) && !unhidden(h, find)).map(h => find(h.winner)?.priority ?? 0)) + 1
+/** Load on top: one above every mod that hides it, so a single click fixes all its pairs. Special too when one of
+ *  them is Special. */
+export const topFor = (path: string, hidden: Hidden[], find: (path: string) => Mod | undefined) => {
+  const winners = hidden.filter(h => find(h.hidden) === find(path) && !unhidden(h, find)).map(h => find(h.winner)).filter((m): m is Mod => Boolean(m))
+  const top = winners.reduce<Mod | undefined>((t, m) => (!t || rankOf(m) > rankOf(t) ? m : t), undefined)
+  return { priority: (top?.priority ?? 0) + 1, special: top && isSpecial(top.path) ? true : undefined }
+}
 
 /** Mods grouped by exactly the files they share: three mods that all change the same seven materials are one group, not
  *  three pairs. A record without files (a mod's own check, where file_path is the file) counts that one file. Files are
@@ -137,8 +142,8 @@ export function describe(g: ConflictGroup, heroes: Hero[]) {
 /** `hidden`: a hidden pair's card (the hidden mod first), with Load on top in place of Keep this one. */
 function Group({ g, heroes, find, done, hidden, onSetPriority, onToggleMod, onKeep, onClose }: {
   g: ConflictGroup; heroes: Hero[]; find: (path: string) => Mod | undefined; done: boolean
-  hidden?: { top: number }
-  onSetPriority?: (path: string, priority: number) => void; onToggleMod?: (path: string) => void
+  hidden?: { top: { priority: number; special?: boolean } }
+  onSetPriority?: (path: string, priority: number, special?: boolean) => void; onToggleMod?: (path: string) => void
   onKeep?: (keep: string, others: Mod[]) => unknown; onClose: () => void
 }) {
   const [open, setOpen] = useState(false)
@@ -181,8 +186,8 @@ function Group({ g, heroes, find, done, hidden, onSetPriority, onToggleMod, onKe
               {hidden && !done && <span className={`cf-role ${i === 0 ? 'is-hidden' : 'is-wins'}`}>{i === 0 ? 'Hidden' : 'Wins'}</span>}
               <LoadoutTag path={now} onOpen={onClose} />
               {hidden && i === 0 && mod && on && !done && onSetPriority && renamable(now) && (
-                <button type="button" className="lo-text-btn cf-keep" onClick={() => onSetPriority(now, hidden.top)}
-                  title={`Give it priority ${hidden.top}, one above every mod that hides it`}>
+                <button type="button" className="lo-text-btn cf-keep" onClick={() => onSetPriority(now, hidden.top.priority, hidden.top.special)}
+                  title={`Give it priority ${hidden.top.special ? 'Special (!) ' : ''}${hidden.top.priority}, one above every mod that hides it`}>
                   Load on top
                 </button>
               )}
@@ -193,9 +198,8 @@ function Group({ g, heroes, find, done, hidden, onSetPriority, onToggleMod, onKe
                 </button>
               )}
               {mod && onSetPriority && (
-                <span className="cf-priority" role="group" aria-label={`Priority of ${name}`}
-                  title="Priority: a higher number wins; 0 (a ! before the name) is above them all">
-                  <NumberInput value={mod.priority || 0} min={0} max={(mod.priority || 0) > 7 ? (mod.priority || 0) + 1 : 7} onChange={v => onSetPriority(now, v)} />
+                <span className="cf-priority">
+                  <PriorityControl path={now} priority={mod.priority} onChange={(p, special) => onSetPriority(now, p, special)} />
                 </span>
               )}
               {mod && onToggleMod && (
@@ -213,7 +217,7 @@ function Group({ g, heroes, find, done, hidden, onSetPriority, onToggleMod, onKe
 /** `scope`: a mod's own conflict check, whose hidden section lists only that mod's pairs. */
 export default function ConflictsPanel({ clashes, mods = [], characterData = [], scope, onSetPriority, onToggleMod, onKeep, onRemoveDuplicates, onClose }: {
   clashes: Clash[]; mods?: Mod[]; characterData?: Hero[]; scope?: string | null
-  onSetPriority?: (path: string, priority: number) => void; onToggleMod?: (path: string) => void
+  onSetPriority?: (path: string, priority: number, special?: boolean) => void; onToggleMod?: (path: string) => void
   onKeep?: (keep: string, others: Mod[]) => unknown; onClose: () => void
   onRemoveDuplicates?: (paths: string[]) => Promise<unknown> // repakxtra: Duplicates' copies to Recently deleted
 }) {
@@ -339,8 +343,12 @@ if (import.meta.env.DEV) {
   console.assert(both[0] === inA && both[1] === inB, 'the same names in two folders are two groups', both)
   const pairs = [{ hidden: 'm/A_9999999_P.pak', winner: 'm/B_99999999_P.pak', files: [] }, { hidden: 'm/A_9999999_P.pak', winner: 'm/C_999999999_P.pak', files: [] }]
   const lib = live([{ path: 'm/A_9999999_P.pak', priority: 1 }, { path: 'm/B_99999999_P.pak', priority: 2 }, { path: 'm/C_999999999_P.pak', priority: 3 }])
-  console.assert(topFor('m/A_9999999_P.pak', pairs, lib) === 4 && !unhidden(pairs[0], lib), 'Load on top goes above every mod that hides it')
-  console.assert(!unhidden({ hidden: 'm/A_9999999_P.pak', winner: 'm/!B_9999999_P.pak', files: [] }, live([{ path: 'm/A_9999999_P.pak', priority: 1 }, { path: 'm/!B_9999999_P.pak', priority: 0 }])), 'a ! winner is never outranked by number')
+  console.assert(topFor('m/A_9999999_P.pak', pairs, lib).priority === 4 && !unhidden(pairs[0], lib), 'Load on top goes above every mod that hides it')
+  const bang = live([{ path: 'm/A_9999999_P.pak', priority: 7 }, { path: 'm/!B_9999999_P.pak', priority: 7 }])
+  console.assert(!unhidden({ hidden: 'm/A_9999999_P.pak', winner: 'm/!B_9999999_P.pak', files: [] }, bang), 'a ! winner is never outranked by number')
+  console.assert(topFor('m/A_9999999_P.pak', [{ hidden: 'm/A_9999999_P.pak', winner: 'm/!B_9999999_P.pak', files: [] }], bang).special === true, 'Load on top over a ! mod is Special too')
   console.assert(unhidden(pairs[0], live([{ path: 'm/A_9999999_P.pak', priority: 3 }, { path: 'm/B_99999999_P.pak', priority: 2 }])), 'outranking its winner fixes the pair')
+  console.assert(resolved({ mods: ['!A.pak', 'B.pak'], files: [] }, live([{ path: '!A.pak', priority: 0 }, { path: 'B.pak', priority: 0 }])), 'a ! mod and an unranked one are not tied')
+  console.assert(!resolved({ mods: ['!A_P.pak', '!B_P.pak'], files: [] }, live([{ path: '!A_P.pak', priority: 7 }, { path: '!B_P.pak', priority: 7 }])), 'two ! mods at one number are tied')
   console.assert(after.length === 3 && after[0] === ab && after[1].files[0] === 'x' && after[2].mods[0] === 'm/E.pak', 'a fixed group stays, a still open one is refreshed, a new one goes last', after)
 }

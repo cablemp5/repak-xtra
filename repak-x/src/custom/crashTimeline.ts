@@ -2,6 +2,7 @@
 // formatter for Settings > Crash reports' What changed? and Copy setup report. Rows say what changed, never what caused
 // the crash. A batch (a loadout switch, several mods turned on at once) is one row.
 import { invoke } from '@tauri-apps/api/core'
+import { APP_NAME } from './edition'
 
 /** n_ok, n_failed: the full counts (the names are capped), from: when a batch began */
 export type ActivityEvent = { t: number; kind: string; ok: string[]; failed: string[]; detail: string; n_ok?: number; n_failed?: number; from?: number }
@@ -36,7 +37,7 @@ function words(e: ActivityEvent): string {
     case 'update': return `${e.detail === 'partial' ? 'Partly updated' : e.detail === 'decrypted' ? 'Decrypted' : 'Updated'} ${subject(e.ok, nOk)} in the Mod Updater`
     case 'update_failed': return `Mod Updater could not update ${subject(e.failed, nFailed)}, which stayed as ${nFailed === 1 ? 'it was' : 'they were'}`
     case 'loadout': return nOk ? `Turned ${e.detail || 'a loadout'} (${count(nOk, 'mod')} switched)${failedPart}` : `Could not turn ${e.detail || 'a loadout'}${failedPart}`
-    case 'app_update': return `repakxtra updated to ${e.detail}`
+    case 'app_update': return `${APP_NAME} updated to ${e.detail}`
     case 'game_update': return `The game updated${e.detail ? ` (build ${e.detail})` : ''}`
     default: return e.kind
   }

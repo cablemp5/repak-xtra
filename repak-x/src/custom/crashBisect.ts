@@ -14,7 +14,7 @@
 import { invoke } from '@tauri-apps/api/core'
 import { type KeepDeps, flipAll, stem } from './keepOne'
 import { isModLoader, nameKey } from './loadoutStore'
-import { MOD_LOADERS } from './edition'
+import { APP_NAME, MOD_LOADERS } from './edition'
 
 type Mod = { path: string; enabled?: boolean }
 export type Phase = 'baseline' | 'halve' | 'confirm' | 'reproduce'
@@ -192,7 +192,7 @@ async function apply(d: KeepDeps, b: Bisect, off: string[], strict: boolean) {
 /** True (and said in a toast) while the game runs, or when that cannot be checked: mods never switch under it. */
 export const gameOpen = async (d: KeepDeps) => {
   let running: boolean
-  try { running = await gameRunning() } catch { d.alert.warning('Nothing changed', 'repakxtra could not check whether the game is running. Try again in a moment.'); return true }
+  try { running = await gameRunning() } catch { d.alert.warning('Nothing changed', `${APP_NAME} could not check whether the game is running. Try again in a moment.`); return true }
   if (running) d.alert.warning('Game running', 'Close the game first. Mods can only change while it is closed.')
   return running
 }

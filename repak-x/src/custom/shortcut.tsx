@@ -17,7 +17,7 @@ export function useShortcut() {
     try {
       await invoke('shortcut_create')
       setExists(true)
-      alert.success('Desktop shortcut', 'repakxtra is on your desktop.')
+      alert.success('Desktop shortcut', `${APP_NAME} is on your desktop.`)
     } catch (e) {
       alert.warning('Shortcut not made', String(e))
       invoke<{ exists: boolean }>('shortcut_status').then(s => setExists(s.exists)).catch(() => undefined)
@@ -34,7 +34,7 @@ export function ShortcutButton({ s, className = 'lo-text-btn' }: { s: ReturnType
   return s.exists
     ? <span className="shortcut-done"><Check size={14} /> On the desktop</span>
     : <button type="button" className={`${className}${s.busy ? ' is-working' : ''}`} disabled={s.exists === null || s.busy} onClick={s.create} aria-busy={s.busy}
-        title="Puts a repakxtra shortcut on your desktop (an existing one is never replaced)">
+        title={`Puts a ${APP_NAME} shortcut on your desktop (an existing one is never replaced)`}>
         {s.busy ? <span className="t-shimmer">Creating</span> : 'Create desktop shortcut'}
       </button>
 }

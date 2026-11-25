@@ -55,7 +55,7 @@ pub fn upstream_running() -> bool {
 /// Refuses a change to the mods folder while Repak X is open.
 pub fn upstream_guard() -> Result<(), String> {
     if upstream_running() {
-        return Err("Repak X is open too. Close it to change mods in repakxtra: both apps change the same files.".into());
+        return Err(format!("Repak X is open too. Close it to change mods in {}: both apps change the same files.", crate::xtra_edition::APP_NAME));
     }
     Ok(())
 }
@@ -72,7 +72,7 @@ fn ask_continue(text: &str) -> bool {
     const MB_YESNO: u32 = 0x4;
     const MB_ICONWARNING: u32 = 0x30;
     const IDYES: i32 = 6;
-    unsafe { sys::MessageBoxW(0, sys::wide(text).as_ptr(), sys::wide("repakxtra").as_ptr(), MB_YESNO | MB_ICONWARNING) == IDYES }
+    unsafe { sys::MessageBoxW(0, sys::wide(text).as_ptr(), sys::wide(crate::xtra_edition::APP_NAME).as_ptr(), MB_YESNO | MB_ICONWARNING) == IDYES }
 }
 
 /// Once, before the window opens: the old identifier's Local Storage and IndexedDB into the new profile.
@@ -93,9 +93,10 @@ pub fn carry_over_webview_storage() {
     }
     #[cfg(windows)]
     if in_use(&old) {
-        if !ask_continue("Repak X (or an older repakxtra) is open. Close it, then open repakxtra again: this first start \
+        let app = crate::xtra_edition::APP_NAME;
+        if !ask_continue(&format!("Repak X (or an older {app}) is open. Close it, then open {app} again: this first start \
                           brings your loadouts, settings and loadout pictures over from it.\n\nStart now without them? \
-                          They come over at a later start, once it is closed.") {
+                          They come over at a later start, once it is closed.")) {
             std::process::exit(0);
         }
         return; // no marker: the next start tries again
@@ -109,7 +110,7 @@ pub fn carry_over_webview_storage() {
             // No marker either: a copy that failed (a file held for a moment) is tried again at the next start
             log::warn!("repakxtra: browser storage not carried over: {e}");
             #[cfg(windows)]
-            if !ask_continue(&format!("repakxtra could not bring your loadouts and settings over from Repak X's folder:\n{e}\n\nStart now without them? It tries again at the next start.")) {
+            if !ask_continue(&format!("{} could not bring your loadouts and settings over from Repak X's folder:\n{e}\n\nStart now without them? It tries again at the next start.", crate::xtra_edition::APP_NAME)) {
                 std::process::exit(0);
             }
         }

@@ -324,7 +324,7 @@ export default function SettingsPanel({ settings, onSave, onClose, theme, setThe
                       >
                         <span>Show what you are modding on Discord</span>
                       </Checkbox>
-                      <p className="setting-subtext">Discord's Rich Presence: your profile says repakxtra is open and how many mods you manage.</p>
+                      <p className="setting-subtext">Discord's Rich Presence: your profile says {APP_NAME} is open and how many mods you manage.</p>
                     </div>
                   </div>
                 </div>
@@ -535,7 +535,7 @@ export default function SettingsPanel({ settings, onSave, onClose, theme, setThe
                   <h3 className="setting-icon-label"><LuUsers size={18} aria-hidden="true" />Community</h3>
                   <div className="setting-group">
                     <p className="setting-subtext xs-note">{/* repakxtra: one gray note like the other sections */}
-                      For help, bug reports, or ideas, join a Discord server: cable's for repakxtra, or Repak X's for the app it is built on.
+                      For help, bug reports, or ideas, join a Discord server: cable's for {APP_NAME}, or Repak X's for the app it is built on.
                     </p>
                     <RepakXDiscord />
                     <CableDiscord />{/* repakxtra: cable's server */}
@@ -568,7 +568,7 @@ function ResetInterface({ onReset }: { onReset: () => void }) {
     <div className="setting-section">
       <h3 className="setting-icon-label"><LuRotateCcw size={18} aria-hidden="true" />Reset</h3>
       <div className="setting-group">
-        <p className="setting-hint">Puts every setting on the Interface and Library pages back to how repakxtra starts. Your mods folder, launcher, loadouts, and mods stay as they are.</p>
+        <p className="setting-hint">Puts every setting on the Interface and Library pages back to how {APP_NAME} starts. Your mods folder, launcher, loadouts, and mods stay as they are.</p>
         <div style={{ display: 'flex', gap: 8 }}>
           {!sure
             ? <button type="button" className="action-btn settings-reset-btn" onClick={() => setSure(true)}><LuRotateCcw size={15} aria-hidden="true" /> Reset to defaults</button>

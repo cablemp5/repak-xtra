@@ -6,7 +6,7 @@ import { RiDeleteBin2Fill } from 'react-icons/ri'
 import { FaTag } from "react-icons/fa6"
 import Checkbox from './ui/Checkbox'
 import Switch from './ui/Switch'
-import NumberInput from './ui/NumberInput'
+import { PriorityControl } from '../custom/PriorityControl' // repakxtra
 import { toTagArray } from '../utils/tags'
 import { formatFileSize } from '../utils/format'
 import { useIsConflicting } from '../custom/conflicts' // repakxtra
@@ -31,6 +31,7 @@ import { heroLabel } from '../custom/silhouettes' // repakxtra
 import { useRowWindow } from '../custom/virtualRows' // repakxtra: long lists mount only the rows near the viewport
 import SwipeDelete from '../custom/SwipeDelete' // repakxtra: list rows swipe left to delete
 import { useListReflow } from '../custom/listReflow' // repakxtra: slide rows into place after deletion or restoration
+import { APP_NAME } from '../custom/edition' // repakxtra
 import './ModDetailsPanel.css'
 
 type CharacterDataEntry = {
@@ -69,7 +70,7 @@ type ModItemProps = {
     handleToggleModSelection: (mod: ModRecord, event: React.MouseEvent) => void
     onSelect: (mod: ModRecord) => void
     handleToggleMod: (path: string) => void
-    handleSetPriority: (path: string, priority: number) => void
+    handleSetPriority: (path: string, priority: number, special?: boolean) => void
     handleDeleteMod: (path: string, permanent?: boolean) => Promise<boolean>
     handleRemoveTag: (path: string, tag: string) => void
     hideSuffix: boolean
@@ -104,7 +105,7 @@ type ModsListProps = {
     onToggleMod: (path: string) => void
     onDeleteMod: (path: string, permanent?: boolean) => Promise<boolean>
     onRemoveTag: (path: string, tag: string) => void
-    onSetPriority: (path: string, priority: number) => void
+    onSetPriority: (path: string, priority: number, special?: boolean) => void
     onContextMenu: (e: React.MouseEvent, mod: ModRecord) => void
     hideSuffix: boolean
     showHeroIcons: boolean
@@ -511,7 +512,7 @@ const ModItem = memo(function ModItem({
                     {unreadable && <UnreadableBadge />}{/* repakxtra */}
                     {risk && <RiskBadge path={mod.path} risk={risk} name={mod.custom_name} />}
                     {builtin && (
-                        <button type="button" className="mod-type-badge builtin-badge" title="Made by repakxtra from your game files. Open it on Home to change it"
+                        <button type="button" className="mod-type-badge builtin-badge" title={`Made by ${APP_NAME} from your game files. Open it on Home to change it`}
                             onClick={(e) => { e.stopPropagation(); revealBuiltin(mod.builtin) }}>Built-in</button>
                     )}
                     <NexusTag path={mod.path} />{/* repakxtra: installed from Nexus Mods (custom/nexusSource.tsx), right of the file size */}
@@ -532,13 +533,8 @@ const ModItem = memo(function ModItem({
             <div className="mod-actions-row">
                 <span className="mod-size">{formatFileSize(mod.file_size ?? 0)}</span>
                 <div className="actions-right">
-                    {!builtin && <NumberInput
-                        value={mod.priority || 0}
-                        min={0}
-                        max={(mod.priority || 0) > 7 ? (mod.priority || 0) + 1 : 7} /* repakxtra: Load on top can go past 7, then it moves either way */
-                        onChange={(newPriority) => handleSetPriority(mod.path, newPriority)}
-                        disabled={gameRunning}
-                    />}
+                    {!builtin && <PriorityControl path={mod.path} priority={mod.priority} disabled={gameRunning}
+                        onChange={(p, special) => handleSetPriority(mod.path, p, special)} />}{/* repakxtra: 1 to 7, Unranked, and Special (!) */}
                     <div className="mod-switch-wrapper" onClick={(e) => e.stopPropagation()} >
                         <Switch title={mod.enabled ? 'Turn off' : 'Turn on'} aria-label={mod.enabled ? `Turn ${cleanName} off` : `Turn ${cleanName} on`}
                             size="sm"
