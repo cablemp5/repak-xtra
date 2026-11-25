@@ -6,7 +6,7 @@ import './ui/Alert.css';
 import { alertSound } from '../custom/sounds' // repakxtra
 import { quietToast } from '../custom/uiPrefs' // repakxtra
 import { ToastAnnouncer, clockElapsed, holdClock, survivor, type ToastClock } from '../custom/toastA11y' // repakxtra
-import { focusInto, topModal } from '../custom/dialogFocus' // repakxtra
+import { focusInto, modalOpen, topModal } from '../custom/dialogFocus' // repakxtra
 import { useToastExit } from '../custom/toastExit' // repakxtra: retain the faded frame until removal
 import { logProblem } from '../custom/toastLog' // repakxtra: problem toasts land in Logs, with Details
 
@@ -149,7 +149,8 @@ export function AlertProvider({ children, placement = DEFAULT_CONFIG.placement }
             duration: typeof alertConfig.duration === 'number'
                 ? alertConfig.duration
                 : DEFAULT_CONFIG.defaultDuration,
-            createdAt: Date.now()
+            createdAt: Date.now(),
+            overModal: modalOpen() // repakxtra: shown while a dialog is open, so it is about that dialog (theme.css .has-modal-toast)
         };
 
         toastsNow.current = [...toastsNow.current, toast]; // repakxtra: a second call in the same tick sees it
@@ -424,7 +425,7 @@ function ToastContainer({ toasts, onDismiss, onDismissAll, placement }: { toasts
 
     return (
         <div
-            className={`toast-container ${placement}`}
+            className={`toast-container ${placement}${toasts.some(t => t.overModal) ? ' has-modal-toast' : ''}`} /* repakxtra */
             onPointerMove={onPointerMove}
             onPointerLeave={() => setSpread(false)}
             onFocus={onFocus} onBlur={onBlur} // repakxtra

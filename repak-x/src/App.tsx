@@ -168,6 +168,7 @@ import { keepThisOne, setModsBlocked } from './custom/keepOne' // repakxtra: Kee
 import { NEXUS_TYPE, recordSourceAs, recordSources, renameSource, sourceOf, useNexusScan, useNexusSources } from './custom/nexusSource' // repakxtra: Nexus source
 import { stageOffFiles } from './custom/offFiles' // repakxtra: .pak.off files
 import CrashSuspects, { previousCrashes, withSuspects } from './custom/CrashSuspects' // repakxtra: crash suspects
+import { fitHeader } from './custom/fit' // repakxtra: header buttons fall back to icons when their names do not fit
 import { crashOfTest } from './custom/crashBisect' // repakxtra: a crash test shows its own crash note
 import { revealBuiltin, toggleBuiltin, useBuiltins, watchBuiltins } from './custom/BuiltinMods' // repakxtra: built-in mods
 import { isBuiltin, useBuiltinRows } from './custom/builtinRows'
@@ -1609,7 +1610,7 @@ function App() {
       if (await crashOfTest(payload.crash_folder)) return // repakxtra: Find the crashing mod asked about this crash itself
 
       // Show persistent error toast for crashes
-      alert.crash(payload.title, payload.description, {
+      const crashId: number = alert.crash(payload.title, payload.description, {
         action: withSuspects({ // repakxtra: See suspects beside Details
           label: 'Details',
           onClick: () => {
@@ -1623,7 +1624,7 @@ function App() {
             setIsLogDrawerOpen(true)
             alert.info('Crash Details', 'Report opened in Log Drawer.')
           }
-        }, payload)
+        }, payload, () => alert.dismissAlert(crashId)) // repakxtra: See suspects closes this toast as its dialog opens
       })
 
       // Log detailed crash info to console for debugging
@@ -3932,7 +3933,7 @@ function App() {
       />
 
 
-      <header className="header">
+      <header className="header" ref={fitHeader}>{/* repakxtra: fit.ts */}
         <div
           className="header-branding"
           data-tour="header-branding"

@@ -1185,7 +1185,9 @@ html:not([data-view="library"]) .container > .vfx-notice { margin: 24px 0 4px; }
 .snd { flex: 1; min-height: 0; display: grid; grid-template-columns: 250px minmax(0, 1fr); }
 @media (max-width: 1000px) { .snd { grid-template-columns: 200px minmax(0, 1fr); } }
 .snd-side { display: flex; flex-direction: column; gap: 16px; padding: 0 16px 16px 0; border-right: 1px solid var(--panel-border); min-height: 0; }
-.snd-groups { display: flex; flex-direction: column; gap: 2px; }
+.snd-groups { display: flex; flex-direction: column; gap: 2px; flex: 1; min-height: 0; overflow-y: auto;   /* scrolls on a short window, so Drop a folder stays in view */
+  scrollbar-width: thin; scrollbar-color: rgba(255, 255, 255, 0.12) transparent; }
+.snd-groups .snd-group { flex: none; }
 .snd-group { display: flex; align-items: center; justify-content: space-between; gap: 8px; height: 36px !important; min-height: 0 !important; padding: 0 8px 0 12px !important;
   border: none !important; border-radius: var(--quiet-radius) !important; background: transparent !important; color: var(--text-secondary) !important;
   font: inherit; font-size: 13px !important; font-weight: 500 !important; text-align: left; cursor: pointer; transition: background-color 150ms ease, color 150ms ease; }
@@ -1201,6 +1203,7 @@ html:not([data-view="library"]) .container > .vfx-notice { margin: 24px 0 4px; }
 .snd-folder-title { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; }
 .snd-folder-title svg { color: var(--text-secondary); }
 .snd-folder-note { font-size: 12px; line-height: 1.5; color: var(--text-secondary); }
+.snd-folder { flex: none; }
 .snd-main { display: flex; flex-direction: column; min-height: 0; min-width: 0; padding-left: 24px; }
 .snd-head { display: flex; align-items: center; gap: 16px; min-height: 32px; margin-bottom: 12px; }
 .snd-title { display: flex; align-items: baseline; gap: 10px; min-width: 0; margin: 0 auto 0 0; font-size: 14px; font-weight: 600; color: var(--text-primary); white-space: nowrap; }
@@ -1232,6 +1235,10 @@ html:not([data-view="library"]) .container > .vfx-notice { margin: 24px 0 4px; }
 .snd-play:hover:not(:disabled) { background: var(--quiet-active) !important; color: var(--text-primary) !important; }
 .snd-play:disabled { opacity: 0.45; cursor: not-allowed; }
 .snd-browse { margin-left: 4px; }
+.snd-sep { flex: none; width: 1px; height: 16px; margin: 0 4px; background: var(--panel-border); }   /* Yours, then a gap and this hairline, then the clear x */
+.snd-screen .lo-head-tools .snd-clear-all { height: 36px !important; min-height: 0 !important; }   /* the head's row height, like Make mod */
+.snd-screen .lo-head-tools .su-confirm { height: 36px; box-sizing: border-box; padding: 0 4px 0 12px; white-space: nowrap; }
+.snd-screen .lo-head-tools .su-confirm .lo-text-btn { height: 28px !important; min-height: 0 !important; }
 .snd-preset-menu { width: 320px; max-height: min(420px, 70vh); overflow-y: auto; scrollbar-width: thin; scrollbar-color: rgba(255, 255, 255, 0.12) transparent; animation: t-dropdown-open var(--dropdown-open-dur) var(--dropdown-ease) backwards; }
 .snd-preset-row { display: flex; align-items: center; gap: 2px; }
 .snd-preset-row .lo-icon { width: 28px; height: 28px !important; display: grid; place-items: center; flex: none; }
@@ -1361,10 +1368,14 @@ html:not([data-view="library"]) .container > .vfx-notice { margin: 24px 0 4px; }
 .lo-screen-head .lo-head-tools .lo-gen button, .lo-screen-head .lo-head-tools > .is-unavailable { max-width: 100%; overflow: hidden; }
 .lo-screen-head .lo-head-tools :is(.lo-gen-text, .lo-gen-label, .bulk-btn-label) { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .lo-screen-head .lo-head-tools :is(svg, .setup-chip) { flex: none; }
-@media (max-width: 1100px) { /* the one row needs about 1100px with the search at its narrowest */
+/* the one row needs about 1090px with the search at its narrowest (1140px in Geist Mono): under that, or whenever
+   custom/fit.ts finds the Loadouts row would not fit (a wider font, longer counts), the actions take their own row */
+@media (max-width: 1100px) {
   .lo-screen-head { grid-template-columns: minmax(160px, 360px) auto minmax(0, 1fr) auto; grid-template-areas: "title title title title" "search show . view" "tools tools tools tools"; }
-  .lo-screen-head .lo-head-tools { min-width: 0; } /* their own row: shorter than the buttons, Generate previews cuts its words */
+  .lo-screen-head .lo-head-tools { min-width: 0; justify-content: flex-start; } /* their own row, left-aligned under the search: shorter than the buttons, Generate previews cuts its words */
 }
+.lo-screen-head[data-compact] { grid-template-columns: minmax(160px, 360px) auto minmax(0, 1fr) auto; grid-template-areas: "title title title title" "search show . view" "tools tools tools tools"; }
+.lo-screen-head[data-compact] .lo-head-tools { min-width: 0; justify-content: flex-start; }
 .lo-search { width: 220px; padding-right: 4px; }
 .lo-search .lo-icon { width: 24px; height: 24px !important; }
 .lp-types { display: flex; flex-wrap: wrap; gap: 4px; }
@@ -2753,12 +2764,11 @@ html.is-dragging-card .lo-card:hover { border-color: var(--panel-border); }
   .lo-screen-head { flex-wrap: wrap; row-gap: 12px; }
   .lo-head-tools { flex-wrap: wrap; }
 }
-@media (max-width: 960px) {
-  /* Launch keeps its label (the one primary action), the rest become even 36px squares with the icon centered.
-     Keyed on Launch, not :first-child, since the scan status button can sit before it */
-  .header-actions-right .btn-settings:not([data-tour="launch-btn"]) { font-size: 0 !important; gap: 0 !important; width: 36px; padding: 0 !important; justify-content: center; }
-  .header-actions-right .btn-settings:not([data-tour="launch-btn"]) > svg { margin: 0 !important; }
-}
+/* custom/fit.ts sets data-compact when the labeled buttons would not fit the window (any width, scale, or font): Launch
+   keeps its label (the one primary action), the rest become even 36px squares with the icon centered. Keyed on Launch,
+   not :first-child, since the scan status button can sit before it */
+.header[data-compact] .header-actions-right .btn-settings:not([data-tour="launch-btn"]) { font-size: 0 !important; gap: 0 !important; width: 36px; padding: 0 !important; justify-content: center; }
+.header[data-compact] .header-actions-right .btn-settings:not([data-tour="launch-btn"]) > svg { margin: 0 !important; }
 /* Light theme (no Settings entry now; an older settings.json can still pick it): the same blue accent, never the
    upstream red the app sets inline */
 :root[data-theme="light"] { --accent-primary: #346bf1 !important; --accent-secondary: #346bf1 !important; }
@@ -3288,6 +3298,9 @@ html[data-motion="off"] .ct-pop, html[data-motion="off"] .ct-btn svg { animation
 .bs-alert p { margin: 0; font-size: 13px; line-height: 1.5; }
 /* toasts about other things wait behind the test dialog instead of covering its buttons; its own problems show inside */
 body:has(.bs-modal) .toast-container { z-index: 1999; }
+/* any dialog: toasts from before it opened wait behind it (kept, back in front once it closes) instead of covering its
+   footer. One shown while it is open (.has-modal-toast, AlertHandler.tsx) is about it and stays in front */
+body:has(:is(.modal-overlay, .install-mod-overlay, .input-prompt-overlay, .quick-organize-overlay, .extension-overlay)) .toast-container:not(.has-modal-toast) { z-index: 999; }
 .bs-resumed { color: var(--text-secondary); }
 /* the two answers: red for a crash and green for no crash (cable 2026-11-04), icon and a quiet tint, white words */
 .bs-ans { display: inline-flex; align-items: center; gap: 6px; }
@@ -3660,3 +3673,13 @@ html[data-motion="off"] .ms-cell.is-picked .ms-check { animation: none; }
    under one quiet line that says so */
 .lib-close-label { margin: 0; padding: 4px 4px 8px; font-size: 12px; line-height: 1.4; color: var(--text-secondary); }
 .lo-close-label { padding-inline: 0; }
+
+/* Every window over the app starts under the 32px title bar (TitleBar.tsx), so the bar still drags, minimizes, maximizes,
+   and closes the app, and a dialog centers in the room left. The tallest (90vh) fit that room with the overlay's 24px
+   padding (SettingsPanel.css) on a short or zoomed window */
+:is(.modal-overlay, .install-mod-overlay, .input-prompt-overlay, .quick-organize-overlay, .extension-overlay) { top: 32px !important; }
+/* scoped to their overlay so a stylesheet loaded later (install.css, capture.css) cannot undo it */
+:is(.modal-overlay, .install-mod-overlay) :is(.su-modal, .fr-modal, .ip-modal, .cp-modal, .install-mod-panel) { max-height: min(90vh, calc(100vh - 80px)); }
+.modal-overlay .ms-modal { max-height: min(88vh, calc(100vh - 80px)); }
+.modal-overlay .v3d-window { height: min(860px, 90vh, calc(100vh - 80px)); max-height: min(90vh, calc(100vh - 80px)); }
+.modal-overlay .settings-modal-split { height: min(85vh, calc(100vh - 80px)); }
