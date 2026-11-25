@@ -127,9 +127,38 @@ pub fn reserve_rename() -> Result<Hold, String> {
 
 /// repakxtra: a mod's previews follow it to a new key (a Special (!) change renames the mod, and the key keeps the !).
 /// When `keep_old` is true (another installed mod still uses `old`), previews are copied rather than moved.
-pub fn migrate_key_with_hold(_hold: &Hold, old: &str, new: &str, keep_old: bool) -> Result<(), String> {
+/// Returns a rollback handle so the caller can undo the preview migration if the pak rename fails.
+pub struct PreviewMigration {
+    dir: PathBuf,
+    moved: Vec<(PathBuf, PathBuf)>,
+    keep_old: bool,
+    old_index: Option<Vec<u8>>,
+}
+
+impl PreviewMigration {
+    pub fn rollback(self) {
+        for (src, dst) in self.moved.into_iter().rev() {
+            if self.keep_old {
+                if dst.is_dir() { let _ = std::fs::remove_dir_all(&dst); } else { let _ = std::fs::remove_file(&dst); }
+            } else {
+                let _ = std::fs::rename(&dst, &src);
+            }
+        }
+        if let Some(bytes) = self.old_index {
+            let index = self.dir.join("index.json");
+            let tmp = self.dir.join(format!("index.json.{}.rollback.tmp", std::process::id()));
+            if std::fs::write(&tmp, bytes).is_ok() {
+                if std::fs::rename(&tmp, &index).is_err() {
+                    let _ = std::fs::remove_file(&tmp);
+                }
+            }
+        }
+    }
+}
+
+pub fn migrate_key_with_hold(_hold: &Hold, old: &str, new: &str, keep_old: bool) -> Result<Option<PreviewMigration>, String> {
     if old == new || !valid_key(old) || !valid_key(new) {
-        return Ok(());
+        return Ok(None);
     }
     migrate_key_in(&previews_dir(), old, new, keep_old)
 }
@@ -137,33 +166,45 @@ pub fn migrate_key_with_hold(_hold: &Hold, old: &str, new: &str, keep_old: bool)
 fn copy_entry(src: &Path, dst: &Path) -> Result<(), String> {
     if src.is_dir() {
         std::fs::create_dir_all(dst).map_err(|e| format!("Could not create preview folder {}: {e}", dst.display()))?;
-        for e in std::fs::read_dir(src).map_err(|e| format!("Could not read preview folder {}: {e}", src.display()))? {
-            let e = e.map_err(|e| format!("Could not read preview entry: {e}"))?;
-            copy_entry(&e.path(), &dst.join(e.file_name()))?;
+        let copy_res = (|| -> Result<(), String> {
+            for e in std::fs::read_dir(src).map_err(|e| format!("Could not read preview folder {}: {e}", src.display()))? {
+                let e = e.map_err(|e| format!("Could not read preview entry: {e}"))?;
+                copy_entry(&e.path(), &dst.join(e.file_name()))?;
+            }
+            Ok(())
+        })();
+        if copy_res.is_err() {
+            let _ = std::fs::remove_dir_all(dst);
         }
-        Ok(())
+        copy_res
     } else {
-        std::fs::copy(src, dst).map_err(|e| format!("Could not copy preview {}: {e}", src.display()))?;
+        if let Err(e) = std::fs::copy(src, dst) {
+            let _ = std::fs::remove_file(dst);
+            return Err(format!("Could not copy preview {}: {e}", src.display()));
+        }
         Ok(())
     }
 }
 
 /// Its pictures, other forms (<key>@2), record, 3D export, and sounds, and its index.json entry. Only these exact
 /// names: "Skin.v2.png" is another mod's preview, not one of "Skin". Never touches the shared index.json catalog, checks
-/// whether `new` already has an entry in index.json before moving any asset files, and writes index.json atomically.
-fn migrate_key_in(dir: &Path, old: &str, new: &str, keep_old: bool) -> Result<(), String> {
+/// whether `new` already has an entry in index.json before moving any asset files, rolls back all asset changes on any
+/// error (including catalog write/rename), and writes index.json atomically.
+fn migrate_key_in(dir: &Path, old: &str, new: &str, keep_old: bool) -> Result<Option<PreviewMigration>, String> {
     if !dir.is_dir() {
-        return Ok(());
+        return Ok(None);
     }
     let index = dir.join("index.json");
-    let mut index_val = if index.exists() {
-        let bytes = std::fs::read(&index).map_err(|e| format!("Could not read preview catalog: {e}"))?;
-        serde_json::from_slice::<serde_json::Value>(&bytes).ok()
+    let old_index_bytes = if index.exists() {
+        Some(std::fs::read(&index).map_err(|e| format!("Could not read preview catalog: {e}"))?)
     } else {
         None
     };
+    let mut index_val = old_index_bytes
+        .as_ref()
+        .and_then(|b| serde_json::from_slice::<serde_json::Value>(b).ok());
     if index_val.as_ref().and_then(|v| v.as_object()).is_some_and(|m| m.contains_key(new)) {
-        return Ok(());
+        return Ok(None);
     }
     const ENDS: [&str; 7] = [".png", ".webp", ".webm", ".json", ".3d", ".3d-none.json", ".audio"];
     let ours = |rest: &str| {
@@ -181,43 +222,62 @@ fn migrate_key_in(dir: &Path, old: &str, new: &str, keep_old: bool) -> Result<()
             ops.push((e.path(), to));
         }
     }
-    let mut done: Vec<(&PathBuf, &PathBuf)> = Vec::new();
-    for (src, dst) in &ops {
+    let undo_files = |done: &[(PathBuf, PathBuf)]| {
+        for (s, d) in done.iter().rev() {
+            if keep_old {
+                if d.is_dir() { let _ = std::fs::remove_dir_all(d); } else { let _ = std::fs::remove_file(d); }
+            } else {
+                let _ = std::fs::rename(d, s);
+            }
+        }
+    };
+    let mut done: Vec<(PathBuf, PathBuf)> = Vec::new();
+    for (src, dst) in ops {
         let res = if keep_old {
-            copy_entry(src, dst)
+            copy_entry(&src, &dst)
         } else {
-            std::fs::rename(src, dst).map_err(|e| format!("Could not move preview {}: {e}", src.display()))
+            std::fs::rename(&src, &dst).map_err(|e| format!("Could not move preview {}: {e}", src.display()))
         };
         if let Err(err) = res {
-            for (s, d) in done.into_iter().rev() {
-                if keep_old {
-                    if d.is_dir() { let _ = std::fs::remove_dir_all(d); } else { let _ = std::fs::remove_file(d); }
-                } else {
-                    let _ = std::fs::rename(d, s);
-                }
-            }
+            undo_files(&done);
             return Err(err);
         }
         done.push((src, dst));
     }
-    let Some(v) = index_val.as_mut() else { return Ok(()) };
-    let Some(map) = v.as_object_mut() else { return Ok(()) };
-    let Some(mut entry) = (if keep_old { map.get(old).cloned() } else { map.remove(old) }) else { return Ok(()) };
-    if let Some(forms) = entry.get_mut("form_emotes").and_then(|f| f.as_object_mut()) {
-        let moved: Vec<String> = forms.keys().filter(|k| k.strip_prefix(old).is_some_and(|r| r.starts_with('@'))).cloned().collect();
-        for k in moved {
-            let val = forms.remove(&k).unwrap_or_default();
-            forms.insert(format!("{new}{}", &k[old.len()..]), val);
+    let mut wrote_index = false;
+    if let Some(map) = index_val.as_mut().and_then(|v| v.as_object_mut()) {
+        if let Some(mut entry) = if keep_old { map.get(old).cloned() } else { map.remove(old) } {
+            if let Some(forms) = entry.get_mut("form_emotes").and_then(|f| f.as_object_mut()) {
+                let moved: Vec<String> = forms.keys().filter(|k| k.strip_prefix(old).is_some_and(|r| r.starts_with('@'))).cloned().collect();
+                for k in moved {
+                    let val = forms.remove(&k).unwrap_or_default();
+                    forms.insert(format!("{new}{}", &k[old.len()..]), val);
+                }
+            }
+            map.insert(new.to_string(), entry);
+            let write_res = (|| -> Result<(), String> {
+                let text = serde_json::to_vec_pretty(index_val.as_ref().unwrap())
+                    .map_err(|e| format!("Could not encode preview catalog: {e}"))?;
+                let tmp = dir.join(format!("index.json.{}.tmp", std::process::id()));
+                std::fs::write(&tmp, text).map_err(|e| format!("Could not write temporary preview catalog: {e}"))?;
+                std::fs::rename(&tmp, &index).map_err(|e| {
+                    let _ = std::fs::remove_file(&tmp);
+                    format!("Could not update preview catalog: {e}")
+                })
+            })();
+            if let Err(err) = write_res {
+                undo_files(&done);
+                return Err(err);
+            }
+            wrote_index = true;
         }
     }
-    map.insert(new.to_string(), entry);
-    let text = serde_json::to_vec_pretty(v).map_err(|e| format!("Could not encode preview catalog: {e}"))?;
-    let tmp = dir.join(format!("index.json.{}.tmp", std::process::id()));
-    std::fs::write(&tmp, text).map_err(|e| format!("Could not write temporary preview catalog: {e}"))?;
-    std::fs::rename(&tmp, &index).map_err(|e| {
-        let _ = std::fs::remove_file(&tmp);
-        format!("Could not update preview catalog: {e}")
-    })
+    Ok(Some(PreviewMigration {
+        dir: dir.to_path_buf(),
+        moved: done,
+        keep_old,
+        old_index: if wrote_index { old_index_bytes } else { None },
+    }))
 }
 
 /// A preview is a PNG, an animated WebP for animation mods (a clip on a gray model), or a WebM for KO prompt mods
@@ -815,12 +875,17 @@ mod tests {
         std::fs::create_dir(d.path().join("Skin.audio")).unwrap();
         std::fs::write(d.path().join("Skin.audio").join("1026-205.wav"), "wav").unwrap();
         std::fs::write(d.path().join("index.json"), r#"{"Skin":{"kind":"anim","form_emotes":{"Skin@2":["1026-205"]}}}"#).unwrap();
-        migrate_key_in(d.path(), "Skin", "!Skin", true).unwrap();
+        let m = migrate_key_in(d.path(), "Skin", "!Skin", true).unwrap().unwrap();
         assert!(d.path().join("Skin.png").exists() && d.path().join("!Skin.png").exists(), "old and new preview both exist");
         assert!(d.path().join("Skin.audio").join("1026-205.wav").exists() && d.path().join("!Skin.audio").join("1026-205.wav").exists(), "audio dir copied");
         let cat: serde_json::Value = serde_json::from_slice(&std::fs::read(d.path().join("index.json")).unwrap()).unwrap();
         assert!(cat.get("Skin").is_some() && cat.get("!Skin").is_some(), "both catalog entries kept");
         assert_eq!(cat["!Skin"]["form_emotes"]["!Skin@2"][0], "1026-205");
+        m.rollback();
+        assert!(d.path().join("Skin.png").exists() && !d.path().join("!Skin.png").exists(), "rollback removes copied preview");
+        assert!(!d.path().join("!Skin.audio").exists(), "rollback removes copied audio dir");
+        let cat_after: serde_json::Value = serde_json::from_slice(&std::fs::read(d.path().join("index.json")).unwrap()).unwrap();
+        assert!(cat_after.get("Skin").is_some() && cat_after.get("!Skin").is_none(), "rollback restores catalog");
     }
 
     #[test]

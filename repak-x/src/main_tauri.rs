@@ -926,29 +926,45 @@ async fn set_mod_priority(
     let Some(planned_path) = priority_target_path(&path, priority, special)? else {
         return Ok(mod_path); // No change
     };
+    if planned_path.exists() {
+        return Err("A mod with this priority already exists".to_string());
+    }
+    let game_path = {
+        let state_guard = state.lock().unwrap();
+        state_guard.game_path.clone()
+    };
     let old_preview_key = crate::xtra_previews::mod_key(&path);
     let new_preview_key = crate::xtra_previews::mod_key(&planned_path);
-    // Reserve previews before renaming the pak so an active preview job fails cleanly without splitting state
+    // Reserve and migrate previews BEFORE renaming the pak; roll back preview migration if pak rename fails
     let preview_hold = if old_preview_key != new_preview_key {
         Some(crate::xtra_previews::reserve_rename()?)
     } else {
         None
     };
-
-    let Some(new_path) = rename_priority(&path, priority, special)? else {
-        return Ok(mod_path); // No change
+    let preview_key_shared = preview_hold.is_some()
+        && another_mod_uses_key(&game_path, &path, &old_preview_key, crate::xtra_previews::mod_key);
+    let preview_migration = if let Some(ref hold) = preview_hold {
+        crate::xtra_previews::migrate_key_with_hold(hold, &old_preview_key, &new_preview_key, preview_key_shared)?
+    } else {
+        None
     };
 
-    // Invalidate cache for old path. Tags and previews follow a ! change, retaining the old key if another installed mod still uses it.
-    let game_path = {
-        let state_guard = state.lock().unwrap();
-        state_guard.game_path.clone()
+    let new_path = match rename_priority(&path, priority, special) {
+        Ok(Some(p)) => p,
+        Ok(None) => {
+            if let Some(m) = preview_migration { m.rollback(); }
+            return Ok(mod_path);
+        }
+        Err(e) => {
+            if let Some(m) = preview_migration { m.rollback(); }
+            return Err(e);
+        }
     };
+
+    // Invalidate cache for old path. Tags follow a ! change, retaining the old key if another installed mod still uses it.
     let old_tag_key = get_mod_key(&path);
     let tag_key_shared = old_tag_key != get_mod_key(&new_path)
         && another_mod_uses_key(&game_path, &new_path, &old_tag_key, get_mod_key);
-    let preview_key_shared = preview_hold.is_some()
-        && another_mod_uses_key(&game_path, &new_path, &old_preview_key, crate::xtra_previews::mod_key);
     {
         let mut state_guard = state.lock().unwrap();
         state_guard.mod_details_cache.remove(&path);
@@ -956,9 +972,6 @@ async fn set_mod_priority(
         if migrate_tags(&mut state_guard.mod_tags, &path, &new_path, tag_key_shared) {
             let _ = save_state(&state_guard);
         }
-    }
-    if let Some(hold) = preview_hold {
-        crate::xtra_previews::migrate_key_with_hold(&hold, &old_preview_key, &new_preview_key, preview_key_shared)?;
     }
 
     Ok(new_path.to_string_lossy().into_owned())
