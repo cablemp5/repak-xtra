@@ -20,7 +20,7 @@ export function updateText(updated: number, flagged: number, waiting = 0): strin
   const day = new Date(updated * 1000).toLocaleDateString(undefined, { month: 'long', day: 'numeric' })
   // the count, short: what each one needs is in the Problems view the action opens
   const who = flagged === 0 ? 'No mod needs' : `${plural(flagged, 'mod')} ${flagged === 1 ? 'needs' : 'need'}`
-  const wait = waiting ? ` ${plural(waiting, 'mod')} ${waiting === 1 ? 'waits' : 'wait'} for the game's new USMAP before ${waiting === 1 ? 'it' : 'they'} can be updated.` : ''
+  const wait = waiting ? ` ${plural(waiting, 'mod')} ${waiting === 1 ? 'waits' : 'wait'} for the new game mappings before ${waiting === 1 ? 'it' : 'they'} can be updated.` : ''
   return `${who} attention after the ${day} update.${wait}`
 }
 
@@ -110,7 +110,7 @@ if (import.meta.env.DEV) {
   console.assert(/^3 mods need attention after the .+ update\.$/.test(updateText(noon, 3)), 'flagged count', updateText(noon, 3))
   console.assert(updateText(noon, 1).startsWith('1 mod needs attention after the '), 'one mod', updateText(noon, 1))
   console.assert(appUpdateText(2) === 'This version checked every mod again. 2 mods need attention.', 'app update text', appUpdateText(2))
-  console.assert(updateText(noon, 3, 1).endsWith(" update. 1 mod waits for the game's new USMAP before it can be updated."), 'waiting mods', updateText(noon, 3, 1))
+  console.assert(updateText(noon, 3, 1).endsWith(" update. 1 mod waits for the new game mappings before it can be updated."), 'waiting mods', updateText(noon, 3, 1))
   console.assert(updateText(noon, 0).startsWith('No mod needs attention after the '), 'none flagged', updateText(noon, 0))
   console.assert(!/[;\u2014]/.test(updateText(noon, 2)), 'no semicolons or em dashes')
 }

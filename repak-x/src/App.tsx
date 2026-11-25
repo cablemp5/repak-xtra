@@ -7,30 +7,7 @@ import { open } from '@tauri-apps/plugin-dialog'
 import { listen } from '@tauri-apps/api/event'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useDebouncedCallback } from 'use-debounce'
-import {
-  Refresh as RefreshIcon,
-  CreateNewFolder as CreateNewFolderIcon,
-  Search as SearchIcon,
-  Clear as ClearIcon,
-  ExpandMore as ExpandMoreIcon,
-  ChevronRight as ChevronRightIcon,
-  Folder as FolderIcon,
-  GridView as GridViewIcon,
-  ViewModule as ViewModuleIcon,
-  ViewList as ViewListIcon,
-  ViewSidebar as ViewSidebarIcon,
-  PlayArrow as PlayArrowIcon,
-  Check as CheckIcon,
-  ToggleOn as ToggleOnIcon,
-  ToggleOff as ToggleOffIcon,
-} from '@mui/icons-material'
-import { RiDeleteBin2Fill } from 'react-icons/ri'
-import { MdDriveFileMoveOutline } from "react-icons/md"
-import { IoLayersSharp } from "react-icons/io5"
-import { FaTag, FaToolbox, FaSort } from "react-icons/fa6"
-import { IoIosSettings, IoMdWarning } from "react-icons/io"
-import { GrInstall } from "react-icons/gr"
-import { GiLightningTrio } from "react-icons/gi"
+import { ArrowUpDown, Atom, Check, FolderInput, FolderPlus, Grid3x3, Layers, LayoutGrid, List, PanelRight, Play, RefreshCw, Search, Settings, Tag, ToggleLeft, ToggleRight, Toolbox, Trash2, TriangleAlert, X } from 'lucide-react' // repakxtra: one icon set
 import Checkbox from './components/ui/Checkbox'
 import ModDetailsPanel from './components/ModDetailsPanel'
 import ModsList from './components/ModsList'
@@ -771,7 +748,7 @@ function App() {
             // Show warning after success if game is running
             if (gameRunningRef.current) {
               alert.warning(
-                'Game Running',
+                'Game running',
                 'Mods installed, but changes will only take effect after restarting the game.',
                 { duration: 8000 }
               )
@@ -2886,7 +2863,7 @@ function App() {
   })
   const stableClearRenaming = useStableCallback(() => setRenamingModPath(null))
   const stableRenameBlocked = useStableCallback(() =>
-    alert.warning('Game Running', 'Cannot rename mods while game is running.')
+    alert.warning('Game running', 'Cannot rename mods while game is running.')
   )
   // repakxtra: a row's Delete while the game runs: the delete waits for the game to close (handleDeleteMod asks)
   const stableDeleteBlocked = useStableCallback((path?: string) => { if (path) void handleDeleteMod(path) })
@@ -3176,7 +3153,7 @@ function App() {
         e.preventDefault()
         if (gameRunning && !bypassGameRunningLock) {
           alert.warning(
-            'Game Running',
+            'Game running',
             'Cannot rename mods while game is running.'
           )
           return
@@ -3504,7 +3481,7 @@ function App() {
         // Show warning after success if game is running
         if (gameRunning) {
           alert.warning(
-            'Game Running',
+            'Game running',
             'Mods installed, but changes will only take effect after restarting the game.',
             { duration: 8000 }
           )
@@ -3859,7 +3836,7 @@ function App() {
 
       <InputPromptModal
         isOpen={!!renameFolderPrompt}
-        title="Rename Folder"
+        title="Rename folder"
         placeholder="Enter new folder name..."
         confirmText="Rename"
         initialValue={renameFolderPrompt?.currentName || ''}
@@ -3872,7 +3849,7 @@ function App() {
         title="New tag"
         placeholder="Enter tag name..."
         confirmText="Create"
-        icon={<FaTag />}
+        icon={<Tag size="1em" />}
         onConfirm={(tag) => {
           if (newTagPrompt?.callback) newTagPrompt.callback(tag)
           setNewTagPrompt(null)
@@ -3895,14 +3872,14 @@ function App() {
       <InputPromptModal
         isOpen={!!deleteTagConfirm}
         mode="confirm"
-        title="Delete Tag"
+        title="Delete tag"
         description={
           deleteTagConfirm
             ? `"${deleteTagConfirm.tag}" is applied to ${plural(deleteTagConfirm.modCount, 'mod')}. This will remove it from all mods.`
             : ''
         }
         confirmText="Delete"
-        icon={<FaTag />}
+        icon={<Tag size="1em" />}
         accentColor="#ef4444"
         onConfirm={confirmDeleteTag}
         onCancel={() => setDeleteTagConfirm(null)}
@@ -3946,7 +3923,7 @@ function App() {
           className="header-branding"
           data-tour="header-branding"
           onClick={() => setPanel('credits', true)}
-          title="View Credits"
+          title="View credits"
         >
           <ModularLogo size={50} className="repak-icon" />
           <div className="header-title-group">
@@ -4003,7 +3980,7 @@ function App() {
                   animate={{ opacity: 1, scale: 1 }}
                   exit={{ opacity: 0, scale: 0.5 }}
                 >
-                  <span className="blink-icon"><IoMdWarning /></span> <span className="hdr-label">Game Running</span>{/* repakxtra: hdr-label, Icons only hides it */}
+                  <span className="blink-icon"><TriangleAlert size="1em" /></span> <span className="hdr-label">Game running</span>{/* repakxtra: hdr-label, Icons only hides it */}
                 </motion.span>
               ) : launchSuccess ? (
                 <motion.span
@@ -4013,7 +3990,7 @@ function App() {
                   animate={{ opacity: 1, scale: 1 }}
                   exit={{ opacity: 0, scale: 0.5 }}
                 >
-                  <CheckIcon fontSize="small" /> <span className="hdr-label">Launched</span>
+                  <Check size={20} /> <span className="hdr-label">Launched</span>
                 </motion.span>
               ) : (
                 <motion.span
@@ -4023,7 +4000,7 @@ function App() {
                   animate={{ opacity: 1, scale: 1 }}
                   exit={{ opacity: 0, scale: 0.5 }}
                 >
-                  <PlayArrowIcon fontSize="small" /> <span className="hdr-label">Launch</span>
+                  <Play size={20} /> <span className="hdr-label">Launch</span>
                 </motion.span>
               )}
             </AnimatePresence>
@@ -4039,7 +4016,7 @@ function App() {
               await openVfxUpdaterWindow()
             }}
           >
-            <GiLightningTrio style={{ marginRight: '6px' }} />
+            <Atom size="1em" style={{ marginRight: '6px' }} />
             <span className="hdr-label">Mod Updater</span>{/* repakxtra: hdr-label, Icons only hides it */}
             <VfxDot mods={mods} />{/* repakxtra: VFX mods need an update */}
           </button>
@@ -4054,7 +4031,7 @@ function App() {
             title="Tools"
             aria-label="Tools" // repakxtra: keeps its name when Icons only hides the label
           >
-            <FaToolbox size={16} /> <span className="hdr-label">Tools</span>{/* repakxtra: hdr-label, Icons only hides it */}
+            <Toolbox size={16} /> <span className="hdr-label">Tools</span>{/* repakxtra: hdr-label, Icons only hides it */}
           </button>
           <button
             onClick={() => setPanel('settings', true)}
@@ -4064,7 +4041,7 @@ function App() {
             data-hotkey="Ctrl+,"
             aria-label="Settings" // repakxtra: icon only, named by its tooltip
           >
-            <IoIosSettings size={20} />
+            <Settings size={20} />
           </button>
         </div>
       </header>
@@ -4101,7 +4078,7 @@ function App() {
         {/* Main Action Bar */}
         <div className="main-action-bar">
           <div className="search-wrapper" data-tour="search-bar">
-            <SearchIcon className="search-icon-large" />
+            <Search size={24} className="search-icon-large" />
             <input
               ref={searchInputRef}
               type="text"
@@ -4123,7 +4100,7 @@ function App() {
                   searchInputRef.current?.focus()
                 }}
               >
-                <ClearIcon fontSize="small" />
+                <X size={20} />
               </button>
             )}
           </div>
@@ -4133,9 +4110,9 @@ function App() {
               options={[
                 { value: 'name_asc', label: 'Name (A-Z)' },
                 { value: 'name_desc', label: 'Name (Z-A)' },
-                { value: 'modified_desc', label: 'Newest First' },
-                { value: 'modified_asc', label: 'Oldest First' },
-                { value: 'enabled_asc', label: 'Enabled First' },
+                { value: 'modified_desc', label: 'Newest first' },
+                { value: 'modified_asc', label: 'Oldest first' },
+                { value: 'enabled_asc', label: 'Enabled first' },
               ]}
               value={`${sortBy}_${sortDirection}`}
               onChange={(val) => {
@@ -4144,14 +4121,14 @@ function App() {
                 setSortDirection(newSortDir as 'asc' | 'desc');
               }}
               placeholder="Sort By"
-              icon={<FaSort style={{ fontSize: '1.2rem', opacity: 1, color: 'var(--accent-primary)' }} />}
+              icon={<ArrowUpDown size="1em" style={{ fontSize: '1.2rem', opacity: 1, color: 'var(--accent-primary)' }} />}
             />
             {!tagsOff && <CustomDropdown /* repakxtra: hidden with Hide tag features */
-              options={[{ value: '', label: 'View All' }, ...allTags]}
+              options={[{ value: '', label: 'View all' }, ...allTags]}
               value={filterTag}
               onChange={setFilterTag}
               placeholder="All Tags"
-              icon={<FaTag style={{ fontSize: '1.2rem', opacity: 1, color: 'var(--accent-primary)' }} />}
+              icon={<Tag size="1em" style={{ fontSize: '1.2rem', opacity: 1, color: 'var(--accent-primary)' }} />}
               onAddNew={() => setNewTagPrompt({
                 callback: async (tag) => {
                   const trimmed = tag.trim()
@@ -4173,7 +4150,7 @@ function App() {
 
         {!gamePath && (
           <div className="config-warning">
-            <IoMdWarning size={18} style={{ flexShrink: 0 }} /> Game path not configured. <button onClick={() => setPanel('settings', true)} className="btn-link-warning">Configure in Settings</button>
+            <TriangleAlert size={18} style={{ flexShrink: 0 }} /> Game path not configured. <button onClick={() => setPanel('settings', true)} className="btn-link-warning">Configure in Settings</button>
           </div>
         )}
 
@@ -4215,7 +4192,7 @@ function App() {
                 <h3>Folders</h3>
                 <div className="sidebar-header-actions">
                   <button onClick={() => handleCreateFolder({ parentId: selectedFolderId !== 'all' ? selectedFolderId : undefined })} className="btn-icon" title="New folder">
-                    <CreateNewFolderIcon fontSize="small" />
+                    <FolderPlus size={20} />
                   </button>
                 </div>
               </div>
@@ -4238,7 +4215,7 @@ function App() {
                 <div className="header-title">
                   <h2>
                     <span className="header-title-name">
-                      {selectedFolderId === 'all' ? 'All Mods' :
+                      {selectedFolderId === 'all' ? 'All mods' :
                         folders.find(f => f.id === selectedFolderId)?.name || 'Unknown Folder'}
                     </span>
                     {/* repakxtra: say which filters narrow the list */}
@@ -4256,9 +4233,9 @@ function App() {
                   {/* repakxtra: no Asset Explorer button and no dividers here: it opens from Tools, a mod's menu, and its details */}
                   <button onClick={handleCheckClashes} className="btn-ghost btn-check-conflicts" data-hotkey="C"
                     title={conflictCount ? `${conflictCount === 1 ? 'A group of enabled mods conflicts' : `${conflictCount} groups of enabled mods conflict`}: check which` : 'Check for conflicts'}>
-                    <IoLayersSharp className="warning-icon" style={{ color: 'var(--accent-primary)', width: '18px', height: '18px' }} />
+                    <Layers className="warning-icon" style={{ color: 'var(--accent-primary)', width: '18px', height: '18px' }} />
                     {/* repakxtra: says how many while there are any, in words, even where the label otherwise folds away (theme.css) */}
-                    <span className={`btn-label${conflictCount ? ' has-conflicts' : ''}`}>{conflictCount ? `${conflictCount} ${conflictCount === 1 ? 'conflict' : 'conflicts'}` : 'Check Conflicts'}</span>
+                    <span className={`btn-label${conflictCount ? ' has-conflicts' : ''}`}>{conflictCount ? `${conflictCount} ${conflictCount === 1 ? 'conflict' : 'conflicts'}` : 'Check conflicts'}</span>
                     {conflictCount > 0 && <i className="conflict-dot" aria-label={`${conflictCount} ${conflictCount === 1 ? 'conflict' : 'conflicts'}`} />}{/* repakxtra */}
                   </button>
                   <div className="view-switcher-slot">{/* repakxtra: holds one button's room, the views open over it on hover */}
@@ -4266,31 +4243,31 @@ function App() {
                     <button
                       onClick={() => handleViewModeChange('grid')}
                       className={`btn-icon-small ${viewMode === 'grid' ? 'active' : ''}`}
-                      title="Grid View"
+                      title="Grid view"
                     >
-                      <GridViewIcon fontSize="small" />
+                      <LayoutGrid size={20} />
                     </button>
                     <button
                       onClick={() => handleViewModeChange('compact')}
                       className={`btn-icon-small ${viewMode === 'compact' ? 'active' : ''}`}
-                      title="Compact Grid View"
+                      title="Compact grid view"
                     >
-                      <ViewModuleIcon fontSize="small" />
+                      <Grid3x3 size={20} />
                     </button>
                     <button
                       onClick={() => handleViewModeChange('list')}
                       className={`btn-icon-small ${viewMode === 'list' ? 'active' : ''}`}
-                      title="List View"
+                      title="List view"
                     >
-                      <ViewListIcon fontSize="small" />
+                      <List size={20} />
                     </button>
                   </div>
                   </div>
                   {/* repakxtra: the view buttons as one menu when the header is narrow (theme.css swaps them) */}
                   <ViewModeMenu value={viewMode} onChange={(m) => handleViewModeChange(m as typeof viewMode)} modes={[
-                    { id: 'grid', label: 'Grid', icon: <GridViewIcon fontSize="small" /> },
-                    { id: 'compact', label: 'Compact grid', icon: <ViewModuleIcon fontSize="small" /> },
-                    { id: 'list', label: 'List', icon: <ViewListIcon fontSize="small" /> },
+                    { id: 'grid', label: 'Grid', icon: <LayoutGrid size={20} /> },
+                    { id: 'compact', label: 'Compact grid', icon: <Grid3x3 size={20} /> },
+                    { id: 'list', label: 'List', icon: <List size={20} /> },
                   ]} />
                   <button
                     onClick={toggleRightPanel}
@@ -4298,10 +4275,10 @@ function App() {
                     aria-pressed={isRightPanelOpen}
                     title={isRightPanelOpen ? "Collapse Details" : "Expand Details"}
                   >
-                    <ViewSidebarIcon fontSize="small" style={{ transform: isRightPanelOpen ? 'none' : 'rotate(180deg)' }} />
+                    <PanelRight size={20} style={{ transform: isRightPanelOpen ? 'none' : 'rotate(180deg)' }} />
                   </button>
                   <button onClick={() => { void loadMods().then(rescanVerdicts) }} className="btn-ghost btn-square" title="Refresh list" data-hotkey="Ctrl+Shift+R"> {/* repakxtra: and every update check */}
-                    <RefreshIcon fontSize="small" />
+                    <RefreshCw size={20} />
                   </button>
                 </div>
                 </div>
@@ -4314,7 +4291,7 @@ function App() {
                     const allPaths = shownMods.map(m => m.path) // repakxtra: the rows shown, built-ins and close matches too
                     setSelectedMods(new Set(allPaths))
                   }} className="btn-ghost" title="Select all mods in view">
-                    <span className="bulk-label-full">Select All</span>
+                    <span className="bulk-label-full">Select all</span>
                     <span className="bulk-label-short">All</span>
                   </button>
                   <button onClick={handleDeselectAll} className="btn-ghost" title="Clear selection">Clear</button>
@@ -4322,7 +4299,7 @@ function App() {
                 <div className="bulk-controls">
                   <div className="bulk-field" title="Move selected mods to a folder">
                     <CustomDropdown
-                      icon={<MdDriveFileMoveOutline style={{ fontSize: '1rem', opacity: 0.7 }} />}
+                      icon={<FolderInput size="1em" style={{ fontSize: '1rem', opacity: 0.7 }} />}
                       options={[
                         { value: 'root', label: 'Root (~mods)' }, // Option to move back to root
                         ...folders.filter(f => f.name !== '~mods').map(f => ({ value: f.id, label: f.name }))
@@ -4340,7 +4317,7 @@ function App() {
 
                   {!tagsOff && <div className="bulk-field" title="Add or remove tags on selected mods">{/* repakxtra: hidden with Hide tag features */}
                     <CustomDropdown
-                      icon={<FaTag style={{ fontSize: '1rem', opacity: 0.7 }} />}
+                      icon={<Tag size="1em" style={{ fontSize: '1rem', opacity: 0.7 }} />}
                       options={allTags.map(t => {
                         const isApplied = mods.some(m => selectedMods.has(m.path) && toTagArray(m.custom_tags).includes(t));
                         return { value: t, label: t, showDelete: isApplied };
@@ -4388,7 +4365,7 @@ function App() {
                           disabled={selectedMods.size === 0 || allEnabled}
                           title={allEnabled ? 'All selected mods are already on' : `Turn on ${disabledCount} mod${disabledCount !== 1 ? 's' : ''} that ${disabledCount !== 1 ? 'are' : 'is'} off`}
                         >
-                          <ToggleOnIcon fontSize="small" style={{ color: accentColor }} />
+                          <ToggleRight size={20} />
                           <span className="bulk-btn-label">Turn on</span>
                         </button>
                         <button
@@ -4398,7 +4375,7 @@ function App() {
                           disabled={selectedMods.size === 0 || allDisabled}
                           title={allDisabled ? 'All selected mods are already off' : `Turn off ${enabledCount} mod${enabledCount !== 1 ? 's' : ''} that ${enabledCount !== 1 ? 'are' : 'is'} on`}
                         >
-                          <ToggleOffIcon fontSize="small" style={{ opacity: 0.7 }} />
+                          <ToggleLeft size={20} style={{ opacity: 0.7 }} />
                           <span className="bulk-btn-label">Turn off</span>
                         </button>
                       </div>
@@ -4417,7 +4394,7 @@ function App() {
                   >
                     <div className="danger-bg" />
                     <span style={{ position: 'relative', zIndex: 2, display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-                      <RiDeleteBin2Fill size="1rem" />
+                      <Trash2 size="1rem" />
                       <span className="bulk-btn-label">Delete</span>
                     </span>
                   </button>
@@ -4575,7 +4552,7 @@ function App() {
               if (contextMenu.mod) {
                 if (gameRunning && !bypassGameRunningLock) {
                   alert.warning(
-                    'Game Running',
+                    'Game running',
                     'Cannot rename mods while game is running.'
                   )
                   return

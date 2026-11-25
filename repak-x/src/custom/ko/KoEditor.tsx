@@ -350,13 +350,13 @@ function Editor({ onInstall, onReplace, alert, blocked, shown }: KoEditorProps &
 
       <section className="ko-center" aria-label="Preview">
         <header className="ko-center-head">
-          <h2 className="ko-title">{hero ? `${hero.name} KO Prompt Editor` : 'KO Prompt Editor'}</h2>
+          <h2 className="ko-title">{hero ? `${hero.name} KO prompt editor` : 'KO prompt editor'}</h2>
         </header>
         <div className="ko-stage">
         <div className="ko-preview-options">
           <div className="ob-seg" role="radiogroup" aria-label="Preview background">
-            <button type="button" role="radio" aria-checked={!sceneBg} onClick={() => { setSceneBg(false); localStorage.setItem(`${STORE}.background`, 'grid'); cue('toggle') }}>Grid</button>
-            <button type="button" role="radio" aria-checked={sceneBg} onClick={() => { setSceneBg(true); localStorage.setItem(`${STORE}.background`, 'scene'); cue('toggle') }}>Scene</button>
+            <button type="button" role="radio" aria-checked={!sceneBg} disabled={!scene} onClick={() => { setSceneBg(false); localStorage.setItem(`${STORE}.background`, 'grid'); cue('toggle') }}>Grid</button>
+            <button type="button" role="radio" aria-checked={sceneBg} disabled={!scene} onClick={() => { setSceneBg(true); localStorage.setItem(`${STORE}.background`, 'scene'); cue('toggle') }}>Scene</button>
           </div>
         </div>
 

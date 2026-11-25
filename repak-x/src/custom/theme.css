@@ -1274,6 +1274,13 @@ html:not([data-view="library"]) .container > .vfx-notice { margin: 24px 0 4px; }
 .row-add-to .custom-dropdown-trigger { height: 28px !important; min-height: 0 !important; font-size: 12px !important; }
 .row-add-to .custom-dropdown-menu { min-width: 220px; right: 0; left: auto; }
 .row-remove { opacity: 1; }
+.mod-row .row-remove { margin-left: 8px; }
+/* Logs' All and Problems: the app's quiet segmented tabs (as All/On/Off), not blue chips */
+.log-drawer-chip-group { gap: 2px !important; padding: 2px; background: var(--bg-dark); border: 1px solid var(--panel-border); border-radius: var(--quiet-radius); }
+.log-drawer-chip { height: 24px; padding: 0 10px !important; border: none !important; border-radius: 6px !important; background: transparent !important;
+  color: var(--text-secondary) !important; font-size: 12px !important; font-weight: 500; }
+.log-drawer-chip:hover { color: var(--text-primary) !important; }
+.log-drawer-chip.active { background: var(--bg-lighter) !important; color: var(--text-primary) !important; }   /* clear of the row's switch and actions, so the remove x is its own target */
 
 /* New strip */
 .new-strip { margin-bottom: 28px; }
@@ -2522,8 +2529,9 @@ html[data-motion="off"] .lp-saved { animation: none !important; opacity: 1 !impo
 .settings-content .mod-state-filter.ui-scale button { font-size: 13px !important; }
 .settings-content .setting-toggle-actions > span { font-size: 13px !important; }
 .settings-content .cd-meta { font-size: 13px !important; }
-/* The mods folder field shows the path's end; its cut-off start fades instead of slicing a letter */
-.settings-content .integrated-input { -webkit-mask-image: linear-gradient(to right, transparent, #000 18px); mask-image: linear-gradient(to right, transparent, #000 18px); }
+/* A path field (TailInput.tsx) shows the path's end. Only while its start is cut off, that start fades out instead of
+   slicing a letter, and the whole path stays in the field */
+input[data-clipped] { -webkit-mask-image: linear-gradient(to right, transparent 6px, #000 36px); mask-image: linear-gradient(to right, transparent 6px, #000 36px); }
 /* Install panel: a switch's keyboard ring in its tile's color, close to the switch */
 .app .install-mod-card .install-toggle :focus-visible { outline: 2px solid color-mix(in srgb, var(--tile, #888), white 25%) !important; outline-offset: 2px !important; }
 /* Recently deleted: the row's own yes/no before deleting one mod for good */
@@ -2963,6 +2971,8 @@ html[data-motion="off"] .vfx-dot { animation: none; }
 /* Settings save as they change: a quiet note where Cancel and Save were */
 .settings-live-footer { justify-content: space-between !important; align-items: center; }
 .settings-live-note { font-size: 13px; color: var(--text-secondary); }
+.settings-live-footer .btn-primary { height: 32px !important; min-height: 0 !important; padding: 0 20px !important; font-size: 13px !important; width: auto !important; flex: none;
+  border-radius: var(--quiet-radius) !important; }   /* Check conflicts' Done */
 
 /* ---------- Numbers in a colored bubble: one centering rule for all of them (the conflicts count, the All / On / Off
    counts, a collection's count, the setup step numbers, the selection numbers). Tabular digits, so a 1 sits in the
@@ -3262,13 +3272,12 @@ html[data-motion="off"] .ct-pop, html[data-motion="off"] .ct-btn svg { animation
 .ko-hero-group .ko-group-head { display: flex; align-items: center; gap: 6px; }
 
 /* The beta notice (custom/BetaNote.tsx) */
-.beta-note { --beta: #f04b4b; display: grid; grid-template-columns: 33px 1fr; column-gap: 12px; align-items: center; margin: 0; padding: 12px 16px; box-sizing: border-box;
-  font-size: 13px; line-height: 1.5; color: var(--beta); border: 1px solid color-mix(in srgb, var(--beta), transparent 70%); border-radius: 10px; background: color-mix(in srgb, var(--beta), transparent 91%); }
-/* red on purpose (cable, 2026-11-02): the one warning that is not meant to blend in */
-:root[data-theme="light"] .beta-note { --beta: #b3261e; }
-/* the mark beside the warning: its picture as a mask, in the note's red */
-.beta-mark { display: block; width: 33px; height: 33px; background: var(--beta); mask: center / contain no-repeat; -webkit-mask: center / contain no-repeat; }
-.beta-note a { color: inherit; text-decoration: underline; text-underline-offset: 2px; }
+/* a quiet hairline info strip: no tint and no red, grey words and mark (cable, 2026-11-24, was red since 2026-11-02) */
+.beta-note { display: grid; grid-template-columns: 20px 1fr; column-gap: 12px; align-items: center; margin: 0; padding: 10px 14px; box-sizing: border-box;
+  font-size: 13px; line-height: 1.5; color: var(--text-secondary); border: 1px solid var(--panel-border); border-radius: 10px; background: transparent; }
+/* the mark beside the note: its picture as a mask, in the note's grey */
+.beta-mark { display: block; width: 20px; height: 20px; background: currentColor; mask: center / contain no-repeat; -webkit-mask: center / contain no-repeat; }
+.beta-note a { color: var(--text-primary); text-decoration: underline; text-underline-offset: 2px; }
 .wi-beta { margin: 0 28px 20px; }
 
 .mod-type-badge.broken-badge.is-unknown { background: transparent !important; }
@@ -3281,6 +3290,10 @@ html[data-motion="off"] .ct-pop, html[data-motion="off"] .ct-btn svg { animation
 .settings-search-clear:hover { background: var(--quiet-hover); color: var(--text-primary); }
 .settings-content [hidden] { display: none !important; }
 .settings-content .setting-section[data-first-shown] { border-top: none; padding-top: 0; margin-top: 0; }
+/* a page's start mark sits between two pages' sections while searching: the separator still goes between them */
+.settings-content [data-page] + .setting-section:not([data-first-shown]) { border-top: 1px solid var(--panel-border); padding-top: 20px; margin-top: 4px; }
+/* while searching, pages with nothing that matches step back in the list (Enter opens the first page that matches) */
+.settings-nav-item.no-match { opacity: 0.45; }
 .settings-search-empty { margin: 0; color: var(--text-secondary); font-size: 0.9rem; }
 
 /* The mod checks' progress in the header (ScanStatus.tsx): a quiet pill that rises in (transitions.dev Stagger) while a

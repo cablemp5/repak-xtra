@@ -19,9 +19,9 @@
 .upd-notes a { color: color-mix(in srgb, var(--accent-primary), white 30%); cursor: pointer; overflow-wrap: anywhere; }
 .upd-notes a:hover { text-decoration: underline; }
 
-.upd-progress { display: flex; align-items: center; gap: 12px; font: 13px var(--font-mono); color: var(--text-secondary); }
+.upd-progress { display: flex; align-items: center; gap: 12px; padding: 12px 20px; border-top: 1px solid var(--panel-border); font: 13px var(--font-mono); color: var(--text-secondary); }
 .upd-bar { flex: 1; height: 4px; border-radius: 999px; overflow: hidden; background: var(--bg-lighter); }
-.upd-bar i { display: block; height: 100%; background: var(--accent-primary); transition: width 0.2s ease; }
+.upd-bar i { display: block; height: 100%; background: var(--accent-primary); }   /* GlideFill sets the width and its easing */
 .upd-ready { display: flex; align-items: flex-start; gap: 12px; margin: 0; font-size: 13px; line-height: 1.5; color: var(--text-secondary); }
 .upd-ready svg { flex: none; margin-top: 2px; color: #3ecf6e; }
 

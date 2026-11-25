@@ -106,7 +106,7 @@ function Dialog({ onClose, onConfirm, oldMod, newSourcePath }: Props & { oldMod:
 
         <div className="modal-footer um-footer">
           <button type="button" className="lo-text-btn" onClick={onClose}>Cancel</button>
-          <button type="button" className="btn-primary" onClick={() => onConfirm(keepName, false)} autoFocus>
+          <button type="button" className="btn-primary" onClick={() => onConfirm(keepName, false)}>
             <RefreshCw size={14} aria-hidden="true" /> Replace
           </button>
         </div>

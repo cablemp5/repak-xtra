@@ -212,7 +212,7 @@ export default function LoadoutPage({ p, l, busy, onToggle, onBack, onPickMedia,
     const from = modKey(mod.path)
     const next = to.trim()
     if (!next || next === nameKey(mod.path)) return
-    if (p.isBlocked()) { p.alert.warning('Game Running', 'Cannot rename mods while game is running.'); return }
+    if (p.isBlocked()) { p.alert.warning('Game running', 'Cannot rename mods while game is running.'); return }
     try {
       const path = await invoke<string>('rename_mod', { modPath: mod.path, newName: next })
       renameModKey(from, modKey(path))
@@ -318,7 +318,7 @@ export default function LoadoutPage({ p, l, busy, onToggle, onBack, onPickMedia,
               {/* On, Off, or how far it is on, each with its dot (green, red, yellow) */}
               <span className="lp-switch-state">
                 <SwapText text={busy ? 'Switching…' : active ? 'On' : onNow ? `${onNow}/${present}` : 'Off'} />
-                {!busy && present > 0 && <OnDot on={onNow} of={present} />}
+                {!busy && present > 0 && onNow < present && <OnDot on={onNow} of={present} />}{/* fully on: the switch and On say it, no dot */}
               </span>
             </label>
             {/* Rotate in 3D: the loadout's mods together on its hero, in a centered window so the model shows big */}

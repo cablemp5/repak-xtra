@@ -382,7 +382,7 @@ const ModItem = memo(function ModItem({
                             src={heroImage}
                             alt=""
                             className="mod-hero-icon-inline"
-                            title={characterName ? heroLabel(characterName) /* repakxtra */ : 'Unknown Hero'}
+                            title={characterName ? heroLabel(characterName) /* repakxtra */ : 'Unknown hero'}
                         />
                     )
                 )}
@@ -459,7 +459,7 @@ const ModItem = memo(function ModItem({
                                 <img src={heroImage} alt="" className="mod-hero-icon-badge" />
                             </HoverTip>
                         ) : (
-                            <img src={heroImage} alt="" className="mod-hero-icon-badge" title={characterName ? heroLabel(characterName) /* repakxtra */ : 'Unknown Hero'} />
+                            <img src={heroImage} alt="" className="mod-hero-icon-badge" title={characterName ? heroLabel(characterName) /* repakxtra */ : 'Unknown hero'} />
                         )
                     )}
                     {/* Type badge at start for card views */}
@@ -507,7 +507,7 @@ const ModItem = memo(function ModItem({
                     {/* Type badge at end for list view */}
                     {!isCardView && sizeTag}
                     {/* repakxtra: on, and clashing with another enabled mod (same priority, same files), right of the file size */}
-                    {conflicting && <span className="mod-type-badge conflict-badge" title="Conflicts with another enabled mod: Check Conflicts shows which">Conflict</span>}
+                    {conflicting && <span className="mod-type-badge conflict-badge" title="Conflicts with another enabled mod: Check conflicts shows which">Conflict</span>}
                     {verdict && <VerdictBadge path={mod.path} verdict={verdict} />}
                     {unreadable && <UnreadableBadge />}{/* repakxtra */}
                     {risk && <RiskBadge path={mod.path} risk={risk} name={mod.custom_name} />}

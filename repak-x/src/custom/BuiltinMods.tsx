@@ -111,7 +111,7 @@ export const retryable = (error?: string) => Boolean(error) && !error!.startsWit
 
 /** A partly built one's line: what is missing in the game, and that it completes by itself. */
 export const partialText = (n: number) =>
-  `In the game, but ${n === 1 ? '1 file' : `${n} files`} the last patch changed ${n === 1 ? 'is' : 'are'} left as the game ships ${n === 1 ? 'it' : 'them'} until the game's new USMAP is out. Then it completes by itself`
+  `In the game, but ${n === 1 ? '1 file' : `${n} files`} the last patch changed ${n === 1 ? 'is' : 'are'} left as the game ships ${n === 1 ? 'it' : 'them'} until the new game mappings are out. Then it completes by itself`
 
 function status(b: Builtin, building: boolean) {
   if (building) return b.active ? 'Rebuilding from your game files. The last build stays in use' : 'Building from your game files. Not in the game yet'

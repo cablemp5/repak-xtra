@@ -429,7 +429,7 @@ const ContextMenu = ({ x, y, mod, folder, onClose, onAssignTag, onNewTag, onMove
           {/* repakxtra: the player's question first (Serial Position Effect), then the two Check items as a pair (Law of Similarity) */}
           {selectionCount <= 1 && <div className="context-menu-item" onClick={() => { openWhy(mod.path, mod.custom_name); onClose(); }}>Why isn't it working?</div>}
           <div className="context-menu-item" onClick={() => { if (onCheckConflicts) onCheckConflicts(); onClose(); }}>
-            Check Conflicts
+            Check conflicts
           </div>
           {onCheckVfx && <div className="context-menu-item" onClick={() => { onCheckVfx(); onClose(); }}>Check for update</div>}
         </div>

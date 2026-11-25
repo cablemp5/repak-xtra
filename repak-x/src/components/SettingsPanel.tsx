@@ -4,34 +4,17 @@ import Checkbox from './ui/Checkbox'
 import { UiScaleSection, MotionSection, InstallingSection, HeaderButtonsSection, SearchSection, ModPrefs, WarningPrefs, NewStripPref, BuiltinsPref, AutoUpdatePref, resetUiPrefs } from '../custom/uiPrefs' // repakxtra
 import RecentlyDeleted from '../custom/RecentlyDeleted' // repakxtra: Settings > Recently deleted
 import CrashReports from '../custom/CrashReports' // repakxtra: Settings > Crash reports
-import { TriangleAlert } from 'lucide-react' // repakxtra: setting warnings
+import { ArchiveRestore, Bug, CircleHelp, ExternalLink, FileText, FolderOpen, FolderSearch, Gauge, GraduationCap, HardDrive, Keyboard, Library, LifeBuoy, List, Palette, RefreshCw, Rocket, RotateCcw, Settings, Settings2, SlidersHorizontal, Tags, TriangleAlert, Users, WandSparkles } from 'lucide-react' // repakxtra: one icon set, brand logos below stay
 import { useDialogFocus } from '../custom/dialogFocus' // repakxtra
 import { SettingsSearch, useSettingsFilter } from '../custom/settingsSearch' // repakxtra: Settings search
 import TailInput from './ui/TailInput'
 import ConfirmRow from '../custom/ConfirmRow' // repakxtra: Auto-detect asks before it replaces a saved folder
-import { LuFolderInput, LuFolderOpen, LuLibrary, LuLifeBuoy, LuRefreshCw, LuRocket, LuRotateCcw, LuSlidersHorizontal, LuTags, LuUsers } from "react-icons/lu"
-import { RiSparkling2Fill } from "react-icons/ri"
-import {
-  MdRefresh,
-  MdArticle,
-  MdTune,
-  MdBugReport, // repakxtra: Crash reports
-  MdPalette,
-  MdHelpOutline,
-  MdRestoreFromTrash,
-  MdViewList
-} from "react-icons/md"
 import { FaDiscord, FaSteam } from "react-icons/fa"
-import { CgPerformance } from "react-icons/cg"
 import { SiEpicgames } from "react-icons/si"
 import { LoadingBayIcon } from "../custom/icons/loadingBay" // repakxtra
-import { RiGraduationCapFill } from "react-icons/ri"
-import { BsKeyboardFill } from "react-icons/bs"
-import { IoIosSettings } from "react-icons/io"
 import { REPAKXTRA_VERSION } from '../custom/version' // repakxtra
 import CableDiscord, { RepakXDiscord } from '../custom/CableDiscord' // repakxtra: both servers as quiet cards
 import CopySetupReport from '../custom/CopySetupReport' // repakxtra: setup report for help channels
-import BetaNote from '../custom/BetaNote' // repakxtra
 import AppFiles from '../custom/AppFiles' // repakxtra: Check app files and Repair
 import StorageCleanup from '../custom/StorageCleanup' // repakxtra: Settings > Storage
 import Support from '../custom/Support'
@@ -54,12 +37,13 @@ const ACCENT_COLORS = {
 };
 
 const CATEGORIES = [
-  { id: 'general', label: 'General', icon: MdTune },
-  { id: 'interface', label: 'Interface', icon: MdPalette },
-  { id: 'library', label: 'Library', icon: MdViewList }, // repakxtra: Interface's mod and Library settings, its own page
-  { id: 'trash', label: 'Recently deleted', icon: MdRestoreFromTrash }, // repakxtra
-  { id: 'crashes', label: 'Crash reports', icon: MdBugReport }, // repakxtra
-  { id: 'help', label: 'Help & Community', icon: MdHelpOutline }
+  { id: 'general', label: 'General', icon: Settings2 },
+  { id: 'interface', label: 'Interface', icon: Palette },
+  { id: 'library', label: 'Library', icon: List }, // repakxtra: Interface's mod and Library settings, its own page
+  { id: 'storage', label: 'Storage', icon: HardDrive }, // repakxtra: its own page, by the other housekeeping pages
+  { id: 'trash', label: 'Recently deleted', icon: ArchiveRestore }, // repakxtra
+  { id: 'crashes', label: 'Crash reports', icon: Bug }, // repakxtra
+  { id: 'help', label: 'Help & Community', icon: CircleHelp }
 ] as const;
 
 type CategoryId = typeof CATEGORIES[number]['id'];
@@ -113,8 +97,11 @@ export default function SettingsPanel({ settings, onSave, onClose, theme, setThe
   const [query, setQuery] = useState(''); // repakxtra: Settings search, every page at once while it has text
   const searching = Boolean(query.trim());
   const contentRef = useRef<HTMLDivElement>(null);
-  useSettingsFilter(contentRef, query);
+  const [matchPages, setMatchPages] = useState<string[]>([]); // repakxtra: the pages a search found something on
+  useSettingsFilter(contentRef, query, setMatchPages);
   const shows = (id: CategoryId) => searching ? id !== 'trash' && id !== 'crashes' : activeCategory === id;
+  const mark = (id: CategoryId) => searching && <span data-page={id} hidden />; // where a page starts, for the search
+  const openPage = (id: CategoryId) => { setActiveCategory(id); setQuery('') };
   const [hideSuffix, setHideSuffix] = useState(settings.hideSuffix || false);
   const [autoOpenDetails, setAutoOpenDetails] = useState(settings.autoOpenDetails || false);
   const [showHeroIcons, setShowHeroIcons] = useState(settings.showHeroIcons || false);
@@ -147,7 +134,7 @@ export default function SettingsPanel({ settings, onSave, onClose, theme, setThe
     onSave({ [key]: v } as Partial<SettingsPayload>)
   }
 
-  // repakxtra: one Reset for the Interface and Library pages, at the end of each (it resets both)
+  // repakxtra: one Reset for the Interface and Library pages, at the end of Interface (it resets both)
   const resetSection = <ResetInterface onReset={() => {
     resetUiPrefs()
     onSave({ hideSuffix: true, autoOpenDetails: false, showHeroIcons: true, showHeroBg: true, showModType: true,
@@ -198,20 +185,20 @@ export default function SettingsPanel({ settings, onSave, onClose, theme, setThe
       >
         <div className="modal-header">
           <h2>
-            <IoIosSettings size={20} /> Settings
+            <Settings size={20} aria-hidden="true" /> Settings
           </h2>
           <button className="modal-close" onClick={onClose} aria-label="Close">×</button>
         </div>
 
         <div className="settings-layout">
           <nav className="settings-sidebar" aria-label="Settings categories">
-            <SettingsSearch value={query} onChange={setQuery} />{/* repakxtra */}
+            <SettingsSearch value={query} onChange={setQuery} onEnter={() => { if (matchPages[0]) openPage(matchPages[0] as CategoryId) }} />{/* repakxtra */}
             {CATEGORIES.map(({ id, label, icon: Icon }) => (
               <button
                 key={id}
                 type="button"
-                className={`settings-nav-item ${activeCategory === id && !searching ? 'active' : ''}`}
-                onClick={() => { setActiveCategory(id); setQuery('') }}
+                className={`settings-nav-item ${activeCategory === id && !searching ? 'active' : ''}${searching && !matchPages.includes(id) ? ' no-match' : ''}`}
+                onClick={() => openPage(id)}
                 aria-current={activeCategory === id && !searching ? 'page' : undefined}
               >
                 <Icon size={16} className="settings-nav-icon" />
@@ -224,9 +211,9 @@ export default function SettingsPanel({ settings, onSave, onClose, theme, setThe
             {searching && <p className="settings-search-empty" hidden>No settings match “{query.trim()}”.</p>}
             {shows('general') && (
               <>
-                <div className="setting-section"><BetaNote /></div>{/* repakxtra */}
+                {mark('general')}
                 <div className="setting-section">
-                  <h3 className="setting-icon-label"><LuFolderOpen size={18} aria-hidden="true" />Mods folder</h3>
+                  <h3 className="setting-icon-label"><FolderOpen size={18} aria-hidden="true" />Mods folder</h3>
                   <div className="setting-group">
                     <p className="setting-hint">Your game's mods folder path.</p>
                     <div className="combined-input-group">
@@ -242,20 +229,20 @@ export default function SettingsPanel({ settings, onSave, onClose, theme, setThe
                           className="action-btn"
                           title="Find the game's mods folder"
                         >
-                          <RiSparkling2Fill />
+                          <WandSparkles size={16} aria-hidden="true" />
                           {isGamePathLoading ? 'Detecting…' : 'Auto-detect'}
                         </button>
                         <button
                           onClick={onBrowseGamePath}
                           className="action-btn icon-only"
-                          title="Browse for the folder"
+                          title="Browse for the folder" aria-label="Browse for the folder"
                         >
-                          <LuFolderInput size={16} />
+                          <FolderSearch size={16} />
                         </button>
                         <button type="button" className="action-btn icon-only" disabled={!gamePath}
                           title="Open selected mods folder" aria-label="Open selected mods folder"
                           onClick={() => void invoke('open_in_explorer', { path: gamePath }).catch(e => alert.warning('Could not open mods folder', String(e)))}>
-                          <LuFolderOpen size={16} />
+                          <ExternalLink size={16} />
                         </button>
                       </div>
                     </div>
@@ -265,7 +252,7 @@ export default function SettingsPanel({ settings, onSave, onClose, theme, setThe
                 </div>
 
                 <div className="setting-section">
-                  <h3 className="setting-icon-label"><LuRocket size={18} aria-hidden="true" />Launcher</h3>
+                  <h3 className="setting-icon-label"><Rocket size={18} aria-hidden="true" />Launcher</h3>
                   <div className="setting-group">
                     <p className="setting-hint">Which launcher Launch uses.</p>
 
@@ -296,7 +283,7 @@ export default function SettingsPanel({ settings, onSave, onClose, theme, setThe
                 </div>
 
                 <div className="setting-section">
-                  <h3 className="setting-icon-label"><CgPerformance size={18} aria-hidden="true" />Performance</h3>
+                  <h3 className="setting-icon-label"><Gauge size={18} aria-hidden="true" />Performance</h3>
                   <div className="setting-group">
                     <div className="setting-item">
                       <Checkbox
@@ -331,10 +318,9 @@ export default function SettingsPanel({ settings, onSave, onClose, theme, setThe
 
 
                 <ShortcutSetting />{/* repakxtra: desktop shortcut */}
-                <PreviewRimSetting />{/* repakxtra: rim light on previews */}
 
                 <div className="setting-section">
-                  <h3 className="setting-icon-label"><LuRefreshCw size={18} aria-hidden="true" />Updates</h3>
+                  <h3 className="setting-icon-label"><RefreshCw size={18} aria-hidden="true" />Updates</h3>
                   <div className="setting-group">
                     <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
                       <button
@@ -344,7 +330,7 @@ export default function SettingsPanel({ settings, onSave, onClose, theme, setThe
                         title="Check for updates now"
                         style={{ minWidth: '140px' }}
                       >
-                        <MdRefresh className={isCheckingUpdates ? 'spin-icon' : ''} />
+                        <RefreshCw size={16} className={isCheckingUpdates ? 'spin-icon' : ''} aria-hidden="true" />
                         {isCheckingUpdates ? 'Checking…' : 'Check now'}
                       </button>
                       <button
@@ -353,7 +339,7 @@ export default function SettingsPanel({ settings, onSave, onClose, theme, setThe
                         title="View changelog"
                         style={{ minWidth: '160px' }}
                       >
-                        <MdArticle />
+                        <FileText size={16} aria-hidden="true" />
                         View changelog
                       </button>
                       <span style={{ fontSize: '0.8rem', opacity: 0.6 }}>Current version v{REPAKXTRA_VERSION}</span>{/* repakxtra: repakxtra's version, which the updater checks */}
@@ -369,12 +355,12 @@ export default function SettingsPanel({ settings, onSave, onClose, theme, setThe
                     <AppFiles alert={alert} />{/* repakxtra */}
                   </div>
                 </div>
-                <StorageCleanup alert={alert} />{/* repakxtra: its own section, not under Updates */}
               </>
             )}
 
             {shows('interface') && (
               <>
+                {mark('interface')}
                 <UiScaleSection />
                 <MotionSection extra={
                   <div className="setting-item">
@@ -396,9 +382,10 @@ export default function SettingsPanel({ settings, onSave, onClose, theme, setThe
             {/* repakxtra: Library, split from Interface so neither page holds 26 switches */}
             {shows('library') && (
               <>
+                {mark('library')}
                 <InstallingSection />
                 <div className="setting-section">{/* repakxtra: every badge and tag on a mod, in one place */}
-                  <h3 className="setting-icon-label"><LuTags size={18} aria-hidden="true" />On each mod</h3>
+                  <h3 className="setting-icon-label"><Tags size={18} aria-hidden="true" />On each mod</h3>
                   <div className="setting-group">
                     <div className="setting-item">
                       <Checkbox checked={showHeroIcons} onChange={(checked: boolean) => live('showHeroIcons', setShowHeroIcons)(checked)}>
@@ -421,7 +408,7 @@ export default function SettingsPanel({ settings, onSave, onClose, theme, setThe
                 <WarningPrefs />{/* repakxtra */}
 
                 <div className="setting-section">
-                  <h3 className="setting-icon-label"><LuLibrary size={18} aria-hidden="true" />Library</h3>
+                  <h3 className="setting-icon-label"><Library size={18} aria-hidden="true" />Library</h3>
                   <div className="setting-group">
                     <div className="setting-item">
                       <Checkbox checked={hideSuffix} onChange={(checked: boolean) => live('hideSuffix', setHideSuffix)(checked)}>
@@ -443,9 +430,10 @@ export default function SettingsPanel({ settings, onSave, onClose, theme, setThe
                     <BuiltinsPref />{/* repakxtra */}
                   </div>
                 </div>
+                <PreviewRimSetting />{/* repakxtra: rim light on previews, with the other look-of-a-mod settings */}
 
                 <div className="setting-section">
-                  <h3 className="setting-icon-label"><LuSlidersHorizontal size={18} aria-hidden="true" />Advanced</h3>
+                  <h3 className="setting-icon-label"><SlidersHorizontal size={18} aria-hidden="true" />Advanced</h3>
                   <div className="setting-group">
                     <div className="setting-item">
                       <Checkbox
@@ -491,17 +479,18 @@ export default function SettingsPanel({ settings, onSave, onClose, theme, setThe
                     </div>
                   </div>
                 </div>
-                {!searching && resetSection}{/* repakxtra: Interface's Reset is the same one */}
               </>
             )}
 
+            {shows('storage') && <>{mark('storage')}<StorageCleanup alert={alert} /></>}{/* repakxtra */}
             {shows('trash') && <RecentlyDeleted />}{/* repakxtra */}
             {shows('crashes') && <CrashReports />}{/* repakxtra */}
 
             {shows('help') && (
               <>
+                {mark('help')}
                 <div className="setting-section">
-                  <h3 className="setting-icon-label"><LuLifeBuoy size={18} aria-hidden="true" />Help</h3>
+                  <h3 className="setting-icon-label"><LifeBuoy size={18} aria-hidden="true" />Help</h3>
                   <div className="setting-group">{/* repakxtra: a label, a gray note and a button per row, like the other sections */}
                     <div className="xs-row">
                       <div className="xs-text">
@@ -509,7 +498,7 @@ export default function SettingsPanel({ settings, onSave, onClose, theme, setThe
                         <span className="setting-subtext">A short walk through the main screens and features.</span>
                       </div>
                       <button onClick={onReplayTour} className="action-btn" title="Replay the onboarding tour">
-                        <RiGraduationCapFill /> Replay tour
+                        <GraduationCap size={16} aria-hidden="true" /> Replay tour
                       </button>
                     </div>
                     <div className="xs-row">
@@ -518,7 +507,7 @@ export default function SettingsPanel({ settings, onSave, onClose, theme, setThe
                         <span className="setting-subtext">Every shortcut in one list. F1 opens it from anywhere.</span>
                       </div>
                       <button onClick={onOpenShortcuts} className="action-btn" title="View keyboard shortcuts">
-                        <BsKeyboardFill /> Shortcuts
+                        <Keyboard size={16} aria-hidden="true" /> Shortcuts
                       </button>
                     </div>
                     <div className="xs-row">{/* repakxtra: setup report */}
@@ -532,7 +521,7 @@ export default function SettingsPanel({ settings, onSave, onClose, theme, setThe
                 </div>
 
                 <div className="setting-section">
-                  <h3 className="setting-icon-label"><LuUsers size={18} aria-hidden="true" />Community</h3>
+                  <h3 className="setting-icon-label"><Users size={18} aria-hidden="true" />Community</h3>
                   <div className="setting-group">
                     <p className="setting-subtext xs-note">{/* repakxtra: one gray note like the other sections */}
                       For help, bug reports, or ideas, join a Discord server: cable's for {APP_NAME}, or Repak X's for the app it is built on.
@@ -552,31 +541,24 @@ export default function SettingsPanel({ settings, onSave, onClose, theme, setThe
 
         <div className="modal-footer settings-live-footer">{/* repakxtra: settings save as they change */}
           <span className="settings-live-note">Changes save as you make them.</span>
-          <button onClick={onClose} className="btn-secondary" style={{ padding: '0.4rem 1rem', fontSize: '0.9rem', minWidth: 'auto' }}>
-            Done
-          </button>
+          <button type="button" onClick={onClose} className="btn-primary">Done</button>{/* repakxtra: the same blue Done as the other dialogs */}
         </div>
       </motion.div>
     </div>
   )
 }
 
-/** repakxtra: Reset, with a second click to confirm (nothing else in Settings is undoable in one step). */
+/** repakxtra: Reset, asked in the app's one in-place confirm (nothing else in Settings is undoable in one step). */
 function ResetInterface({ onReset }: { onReset: () => void }) {
   const [sure, setSure] = useState(false)
   return (
     <div className="setting-section">
-      <h3 className="setting-icon-label"><LuRotateCcw size={18} aria-hidden="true" />Reset</h3>
+      <h3 className="setting-icon-label"><RotateCcw size={18} aria-hidden="true" />Reset</h3>
       <div className="setting-group">
         <p className="setting-hint">Puts every setting on the Interface and Library pages back to how {APP_NAME} starts. Your mods folder, launcher, loadouts, and mods stay as they are.</p>
-        <div style={{ display: 'flex', gap: 8 }}>
-          {!sure
-            ? <button type="button" className="action-btn settings-reset-btn" onClick={() => setSure(true)}><LuRotateCcw size={15} aria-hidden="true" /> Reset to defaults</button>
-            : <>
-                <button type="button" className="action-btn settings-reset-btn is-confirm" onClick={() => { onReset(); setSure(false) }}>Yes, reset them</button>
-                <button type="button" className="action-btn" onClick={() => setSure(false)}>Cancel</button>
-              </>}
-        </div>
+        {sure
+          ? <ConfirmRow text="Reset every Interface and Library setting?" yes="Reset" onYes={() => { onReset(); setSure(false) }} onNo={() => setSure(false)} />
+          : <div><button type="button" className="action-btn settings-reset-btn" onClick={() => setSure(true)}><RotateCcw size={15} aria-hidden="true" /> Reset Interface and Library to defaults</button></div>}
       </div>
     </div>
   )

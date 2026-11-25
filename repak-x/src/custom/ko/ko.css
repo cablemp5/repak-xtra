@@ -81,7 +81,10 @@
   background: var(--ko-gaps, none), linear-gradient(90deg, var(--accent-primary) var(--ko-at, 0%), rgba(255, 255, 255, 0.12) var(--ko-at, 0%)); }
 .ko-timeline input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 3px; height: 18px; margin-top: -6px; border: 0; background: transparent;
   box-shadow: none; }   /* no playhead mark (cable, 2026-11-01): the fill's edge shows where it is, the thumb stays for dragging */
-.ko-timeline input[type="range"]:disabled { cursor: default; }
+.ko-timeline input[type="range"]:disabled { opacity: 0.4; cursor: default; }
+/* until a hero loads: the background toggle and the name field dim like the other disabled controls */
+.ko-preview-options .ob-seg button:disabled, .ko-input:disabled { opacity: 0.4; cursor: default; }
+.ko-preview-options .ob-seg button:disabled:hover { color: var(--text-secondary); background: transparent; }
 /* while a prompt loads: an empty track with a light passing over it, no old fill and no playhead */
 .ko-timeline.is-loading input[type="range"]::-webkit-slider-runnable-track { background: rgba(255, 255, 255, 0.06); }
 .ko-timeline.is-loading input[type="range"]::-webkit-slider-thumb { opacity: 0; }

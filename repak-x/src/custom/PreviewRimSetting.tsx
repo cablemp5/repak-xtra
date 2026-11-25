@@ -1,4 +1,4 @@
-// repakxtra: Settings > General > Previews, the rim light on preview renders, on or off (backend: xtra_previews.rs). Off by
+// repakxtra: Settings > Library > Previews, the rim light on preview renders, on or off (backend: xtra_previews.rs). Off by
 // default, and changing it never renders anything: it applies to previews made from then on, so the person regenerates
 // the ones they want to see change. Also Outline in 3D (viewerOutline.ts): Rotate in 3D's outline, on by default, applied
 // to an open viewer at once.
