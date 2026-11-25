@@ -2767,8 +2767,13 @@ html.is-dragging-card .lo-card:hover { border-color: var(--panel-border); }
 /* custom/fit.ts sets data-compact when the labeled buttons would not fit the window (any width, scale, or font): Launch
    keeps its label (the one primary action), the rest become even 36px squares with the icon centered. Keyed on Launch,
    not :first-child, since the scan status button can sit before it */
+.header[data-compact] .header-actions-right { gap: 6px; padding-left: 8px; }
+.header[data-compact] .view-tabs button { padding-left: 10px !important; padding-right: 10px !important; }
 .header[data-compact] .header-actions-right .btn-settings:not([data-tour="launch-btn"]) { font-size: 0 !important; gap: 0 !important; width: 36px; padding: 0 !important; justify-content: center; }
 .header[data-compact] .header-actions-right .btn-settings:not([data-tour="launch-btn"]) > svg { margin: 0 !important; }
+.header[data-compact] .scan-status { width: 36px; min-width: 0; padding: 0 !important; justify-content: center; font-size: 0 !important; gap: 0 !important; }
+.header[data-compact] .scan-status .scan-status-in { font-size: 0 !important; gap: 0 !important; }
+.header[data-compact] .scan-status svg { margin: 0 !important; }
 /* Light theme (no Settings entry now; an older settings.json can still pick it): the same blue accent, never the
    upstream red the app sets inline */
 :root[data-theme="light"] { --accent-primary: #346bf1 !important; --accent-secondary: #346bf1 !important; }
@@ -3297,7 +3302,7 @@ html[data-motion="off"] .ct-pop, html[data-motion="off"] .ct-btn svg { animation
 .bs-alert > svg { flex: none; margin-top: 2px; color: #f5a524; }
 .bs-alert p { margin: 0; font-size: 13px; line-height: 1.5; }
 /* toasts about other things wait behind the test dialog instead of covering its buttons; its own problems show inside */
-body:has(.bs-modal) .toast-container { z-index: 1999; }
+body:has(.bs-modal) .toast-container:not(.has-modal-toast) { z-index: 1999; }
 /* any dialog: toasts from before it opened wait behind it (kept, back in front once it closes) instead of covering its
    footer. One shown while it is open (.has-modal-toast, AlertHandler.tsx) is about it and stays in front */
 body:has(:is(.modal-overlay, .install-mod-overlay, .input-prompt-overlay, .quick-organize-overlay, .extension-overlay)) .toast-container:not(.has-modal-toast) { z-index: 999; }

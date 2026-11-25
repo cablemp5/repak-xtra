@@ -6,7 +6,7 @@ import './ui/Alert.css';
 import { alertSound } from '../custom/sounds' // repakxtra
 import { quietToast } from '../custom/uiPrefs' // repakxtra
 import { ToastAnnouncer, clockElapsed, holdClock, survivor, type ToastClock } from '../custom/toastA11y' // repakxtra
-import { focusInto, modalOpen, topModal } from '../custom/dialogFocus' // repakxtra
+import { focusInto, topModal } from '../custom/dialogFocus' // repakxtra
 import { useToastExit } from '../custom/toastExit' // repakxtra: retain the faded frame until removal
 import { logProblem } from '../custom/toastLog' // repakxtra: problem toasts land in Logs, with Details
 
@@ -72,6 +72,7 @@ type Toast = {
     action?: ToastAction | React.ReactNode;
     isLoading?: boolean;
     progressValue?: number;
+    ownerModal?: HTMLElement | null; // repakxtra: the dialog open when this toast fired, if any
     [key: string]: unknown;
 };
 
@@ -131,6 +132,14 @@ export function AlertProvider({ children, placement = DEFAULT_CONFIG.placement }
     const [toasts, setToasts] = useState<Toast[]>([]);
     const toastsNow = useRef(toasts); // repakxtra: read by dismissals, so their onDismiss runs once, outside a state update
     toastsNow.current = toasts;
+    const [activeModal, setActiveModal] = useState<HTMLElement | null>(() => topModal()); // repakxtra: tracks open dialogs to layer and pause background toasts
+    useEffect(() => {
+        const sync = () => setActiveModal(prev => { const next = topModal(); return prev === next ? prev : next; });
+        const mo = new MutationObserver(sync);
+        mo.observe(document.body, { childList: true, subtree: true });
+        sync();
+        return () => mo.disconnect();
+    }, []);
 
     // Add a new toast
     const showAlert = useCallback((alertConfig: AlertOptions) => {
@@ -150,7 +159,7 @@ export function AlertProvider({ children, placement = DEFAULT_CONFIG.placement }
                 ? alertConfig.duration
                 : DEFAULT_CONFIG.defaultDuration,
             createdAt: Date.now(),
-            overModal: modalOpen() // repakxtra: shown while a dialog is open, so it is about that dialog (theme.css .has-modal-toast)
+            ownerModal: topModal() // repakxtra: layered above its owning dialog only (older background toasts stay behind)
         };
 
         toastsNow.current = [...toastsNow.current, toast]; // repakxtra: a second call in the same tick sees it
@@ -290,15 +299,30 @@ export function AlertProvider({ children, placement = DEFAULT_CONFIG.placement }
         promise
     }), [showAlert, dismissAlert, dismissAllAlerts, updateToast, success, error, warning, info, crash, promise]);
 
+    // repakxtra: separate background toasts from toasts owned by the active dialog so older toasts never jump over an open dialog
+    const isModalToast = (t: Toast) => Boolean(activeModal && t.ownerModal === activeModal);
+    const modalToasts = activeModal ? toasts.filter(isModalToast) : [];
+    const bgToasts = activeModal ? toasts.filter(t => !isModalToast(t)) : toasts;
+
     return (
         <AlertContext.Provider value={contextValue}>
             {children}
             <ToastContainer
-                toasts={toasts}
+                toasts={bgToasts}
                 onDismiss={dismissAlert}
-                onDismissAll={dismissAllAlerts}
+                onDismissAll={() => bgToasts.forEach(t => dismissAlert(t.id))}
                 placement={placement}
+                behindModal={Boolean(activeModal)}
             />
+            {modalToasts.length > 0 && (
+                <ToastContainer
+                    toasts={modalToasts}
+                    onDismiss={dismissAlert}
+                    onDismissAll={() => modalToasts.forEach(t => dismissAlert(t.id))}
+                    placement={placement}
+                    overModal
+                />
+            )}
             <ToastAnnouncer toasts={toasts} />{/* repakxtra: results read out once, failures at once */}
         </AlertContext.Provider>
     );
@@ -355,7 +379,7 @@ export function stackBack(index: number, ownH: number, frontH: number) {
 }
 
 // Toast Container - renders all active toasts with card stacking
-function ToastContainer({ toasts, onDismiss, onDismissAll, placement }: { toasts: Toast[]; onDismiss: (id: number) => void; onDismissAll: () => void; placement: string }) {
+function ToastContainer({ toasts, onDismiss, onDismissAll, placement, behindModal = false, overModal = false }: { toasts: Toast[]; onDismiss: (id: number) => void; onDismissAll: () => void; placement: string; behindModal?: boolean; overModal?: boolean }) {
     // repakxtra: Banner stacking's spread is pointer geometry, not :hover. The pointer inside the collapsed stack spreads
     // it, and it holds until the pointer leaves the taller spread column (the wrapper takes the pointer while spread, so
     // the gaps between spread toasts count as inside)
@@ -425,7 +449,7 @@ function ToastContainer({ toasts, onDismiss, onDismissAll, placement }: { toasts
 
     return (
         <div
-            className={`toast-container ${placement}${toasts.some(t => t.overModal) ? ' has-modal-toast' : ''}`} /* repakxtra */
+            className={`toast-container ${placement}${overModal ? ' has-modal-toast' : ''}`} /* repakxtra */
             onPointerMove={onPointerMove}
             onPointerLeave={() => setSpread(false)}
             onFocus={onFocus} onBlur={onBlur} // repakxtra
@@ -454,6 +478,7 @@ function ToastContainer({ toasts, onDismiss, onDismissAll, placement }: { toasts
                             index={index}
                             footerLift={isBottom && toasts.length > 1 ? 36 : 0}
                             isHovered={isHovered}
+                            behindModal={behindModal}
                             placement={placement}
                             spread={spread[index]}
                             frontH={frontH} ownH={heights[toast.id] ?? 72}
@@ -485,7 +510,7 @@ function ToastContainer({ toasts, onDismiss, onDismissAll, placement }: { toasts
 }
 
 // Individual Toast Item with card stacking effect - memoized to prevent unnecessary re-renders
-const ToastItem = memo(function ToastItem({ toast, onDismiss, index, footerLift, isHovered, placement, spread = index * 100, frontH = 72, ownH = 72, onHeight }: any) {
+const ToastItem = memo(function ToastItem({ toast, onDismiss, index, footerLift, isHovered, behindModal = false, placement, spread = index * 100, frontH = 72, ownH = 72, onHeight }: any) {
     const itemRef = useRef<HTMLDivElement>(null);
     const isPresent = useToastExit(itemRef); // repakxtra
     useEffect(() => { // repakxtra: report this toast's height so the hovered stack spaces by it
@@ -498,7 +523,7 @@ const ToastItem = memo(function ToastItem({ toast, onDismiss, index, footerLift,
     const progress = useMotionValue(1); // repakxtra: the countdown updates its bar without rerendering the toast
     const [isPaused, setIsPaused] = useState(false);
     const [hasFocus, setHasFocus] = useState(false); // repakxtra: focus in the toast holds its timer, like the pointer
-    const held = isPaused || hasFocus || isHovered; // repakxtra: a spread stack is being read, gaps included
+    const held = isPaused || hasFocus || isHovered || Boolean(behindModal); // repakxtra: paused while hovered, focused, or hidden behind a dialog
     const clock = useRef<ToastClock>({ elapsed: 0, since: null }); // repakxtra: time run so far, kept across holds
 
     const { id, title, description, color, variant, icon, hideIcon, duration, endContent, action, isLoading, progressValue } = toast;
