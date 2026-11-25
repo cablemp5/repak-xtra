@@ -79,7 +79,13 @@ export default function CrashSuspects({ deps, mods, details, heroes }: {
   const [showFile, setShowFile] = useState(false)
   const [copied, setCopied] = useState(false) // Copy says Copied for 2 s
   const copiedTimer = useRef<ReturnType<typeof setTimeout>>()
-  useEffect(() => () => clearTimeout(copiedTimer.current), [])
+  const copySeq = useRef(0) // scopes clipboard completion and feedback to the open report
+  useEffect(() => {
+    copySeq.current++
+    clearTimeout(copiedTimer.current)
+    setCopied(false)
+    return () => { copySeq.current++; clearTimeout(copiedTimer.current) }
+  }, [crash])
   // focus moves into the dialog, Tab stays in it, and it goes back to the toast's button on close
   const { ref, onKeyDown } = useDialogFocus(Boolean(crash), () => setCrash(null))
   useEffect(() => {
@@ -126,9 +132,13 @@ export default function CrashSuspects({ deps, mods, details, heroes }: {
                 {showFile && <div className="cs-details">
                   {/* the path may break only before a slash, never inside a folder name */}
                   <p className="cs-sub">{p.crash_type && <>{p.crash_type}<br /></>}{(p.asset_path ?? 'The crash report names no asset.').split('/').map((s, i) => <Fragment key={i}>{i > 0 && <><wbr />/</>}{s}</Fragment>)}</p>
-                  <button type="button" className="lo-text-btn" onClick={() => void navigator.clipboard.writeText([p.crash_type, p.asset_path].filter(Boolean).join('\n')).then(() => {
-                    setCopied(true); clearTimeout(copiedTimer.current); copiedTimer.current = setTimeout(() => setCopied(false), 2000)
-                  }, () => {})}>{copied ? 'Copied' : 'Copy'}</button>
+                  <button type="button" className="lo-text-btn" onClick={() => {
+                    const seq = ++copySeq.current
+                    void navigator.clipboard.writeText([p.crash_type, p.asset_path].filter(Boolean).join('\n')).then(() => {
+                      if (seq !== copySeq.current) return
+                      setCopied(true); clearTimeout(copiedTimer.current); copiedTimer.current = setTimeout(() => setCopied(false), 2000)
+                    }, () => {})
+                  }}>{copied ? 'Copied' : 'Copy'}</button>
                 </div>}
               </details>
             )}

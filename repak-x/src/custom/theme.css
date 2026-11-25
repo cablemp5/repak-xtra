@@ -1890,6 +1890,7 @@ html[data-motion="off"] .lo-skel, html[data-motion="off"] .lo-media.is-running .
 .su-chip.is-installed { color: var(--text-primary); }
 /* quiet tints: the card's one blue button is the call to act, its chip only names the state */
 .su-chip.is-update, .su-chip.is-missing, .su-chip.is-other { color: color-mix(in srgb, var(--accent-primary), white 30%); background: color-mix(in srgb, var(--accent-primary), transparent 85%); }
+[data-theme="light"] .su-chip.is-update, [data-theme="light"] .su-chip.is-missing, [data-theme="light"] .su-chip.is-other { color: color-mix(in srgb, var(--accent-primary), black 25%); background: color-mix(in srgb, var(--accent-primary), transparent 88%); }
 .su-chip.is-current { color: #3ecf6e; }
 [data-theme="light"] .su-chip.is-current { color: #1f8a46; }
 .su-note, .su-meta { font-size: 13px; color: var(--text-secondary); }

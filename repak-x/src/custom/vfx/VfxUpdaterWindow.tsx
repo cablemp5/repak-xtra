@@ -148,6 +148,20 @@ function placedText(r: VfxReport) {
     + (p.replaced ? ' An earlier copy is in Recently deleted.' : '')
 }
 
+/** Rewrites technical USMAP/build error strings into plain English, keeping the build numbers for the tooltip. */
+function plainReportError(error: string): { text: string; tip?: string } {
+  const builds = [...error.matchAll(/game build (\d+)/g)].map(m => m[1])
+  const tip = builds.length >= 2 ? `Mappings for build ${builds[0]}, the game is on build ${builds[1]}` : builds.length === 1 ? `Game build ${builds[0]}` : undefined
+  const text = error
+    .replace(/the saved USMAP \(game build \d+\)/g, 'the current game mappings')
+    .replace(/once the USMAP for game build \d+ is out/g, 'once the mappings for this game update are out')
+    .replace(/the USMAP for game build \d+/g, 'the mappings for this game update')
+    .replace(/If the USMAP in Advanced is current/g, 'If the game mappings in Advanced are current')
+    .replace(/the USMAP in Advanced/g, 'the game mappings in Advanced')
+    .replace(/\bUSMAP\b/g, 'game mappings')
+  return { text, tip }
+}
+
 /** A run's report under its pill. A failed one says what happened to the original and offers the one next step that
  *  fits: Retry in Best effort (a rejection only Strict makes), Try again, or the mod's page for a newer copy. */
 function Report({ r, path, on, onRetry, onRetryBest, onUsmap, busy }: { r: VfxReport; path: string; on: boolean; onRetry: () => void; onRetryBest: () => void; onUsmap: () => void; busy: boolean }) {
@@ -161,13 +175,14 @@ function Report({ r, path, on, onRetry, onRetryBest, onUsmap, busy }: { r: VfxRe
   </ul>
   const next = r.status === 'failed' ? failedNext(r) : r.status === 'cancelled' ? 'again' : null
   const page = next === 'page' ? sourceOf(path) : undefined // by the mod's own file: Nexus sources are kept by its name
+  const err = r.error && r.status !== 'cancelled' ? plainReportError(r.error) : null
   return (
     <div className="vf-report">
       {r.status === 'fixed'
         ? <p className="vf-note">{r.counts.updated ? `Rebuilt ${r.counts.updated.toLocaleString()} of ${plural(r.assets.length, 'asset')} with ${plural(r.counts.changes, 'edit')}. ` : ''}{r.counts.left ? `${leftText(r)} ` : ''}{ownText(r) ? `${ownText(r)} ` : ''}{placedText(r)}</p>
-        // a cancelled run's pill already says so: no "Cancelled." under it. An error that sends the user to the USMAP
+        // a cancelled run's pill already says so: no "Cancelled." under it. An error that sends the user to the mappings
         // links to it (Advanced opens on it)
-        : r.error && r.status !== 'cancelled' && <p className="vf-note">{r.error}{/USMAP in Advanced/.test(r.error) && <>{' '}<button type="button" className="su-link" onClick={onUsmap}>Open the mappings setting</button></>}</p>}
+        : err && <p className="vf-note" title={err.tip}>{err.text}{/USMAP in Advanced/.test(r.error!) && <>{' '}<button type="button" className="su-link" onClick={onUsmap}>Open the mappings setting</button></>}</p>}
       {(r.status === 'failed' || r.status === 'mappings') && !r.turnedOff && <p className="vf-note">No replacement was installed. The original keeps its name and loadouts, and is {on ? 'on' : 'off'} as before.</p>}
       {r.offError && <p className="vf-note">Safety could not turn it off ({r.offError.replace(/[.!]?\s*$/, '')}), so it is still on.</p>}
       {next === 'best' && <button type="button" className="row-action" disabled={busy} onClick={onRetryBest} title="Update this mod again with Best effort, which installs what could be rebuilt"><RotateCcw size={13} aria-hidden="true" /> Retry in Best effort</button>}
@@ -357,6 +372,8 @@ export function VfxUpdaterPanel() {
   const [q, setQ] = useState('')
   const [hero, setHero] = useState('') // '' = every hero (the same filter as a loadout's Add mods)
   const [foldedIds, setFoldedIds] = useState<string[]>(START_FOLDED)
+  const [filterClosed, setFilterClosed] = useState<string[]>([]) // manual folds while a search or hero filter is active
+  useEffect(() => { setFilterClosed([]) }, [q, hero])
   const loadouts = useLoadouts()
   const [open, setOpen] = useState<Set<string>>(new Set())
   const [paks, setPaks] = useState<string | null>(null)
@@ -576,7 +593,9 @@ export function VfxUpdaterPanel() {
       const key = norm(utocOf(r.placed?.fixed ?? r.mod))
       setRuns(rs => ({ ...rs, [key]: { status: r.status, report: r } }))
       setOpen(o => new Set(o).add(key))
-      setFoldedIds(f => f.filter(x => !['needs', 'waiting', 'failed', 'updated'].includes(x))) // wherever its row lands
+      const reportGroup = r.status === 'fixed' ? 'updated' : r.status === 'failed' ? 'failed' : r.status === 'mappings' ? 'waiting' : 'needs'
+      setFoldedIds(f => f.filter(x => x !== reportGroup)) // reveal only this report's group, keeping other manual folds
+      setFilterClosed(f => f.filter(x => x !== reportGroup))
       setReload(n => n + 1)
       setTimeout(() => document.querySelector(`[data-key="${CSS.escape(key)}"]`)?.scrollIntoView({ block: 'center', behavior: 'smooth' }), 600)
     }
@@ -867,6 +886,10 @@ export function VfxUpdaterPanel() {
   ]
   const inLoadouts = (m: Mod) => { const k = canonKey(modKey(m.path)); return loadouts.filter(l => l.on.some(x => canonKey(x) === k)).map(l => ({ id: l.id, name: l.name })) }
   const fold = (id: string) => setFoldedIds(f => (f.includes(id) ? f.filter(x => x !== id) : [...f, id]))
+  const filtering = Boolean(needle || hero)
+  const toggleGroup = (id: string) => filtering
+    ? setFilterClosed(f => (f.includes(id) ? f.filter(x => x !== id) : [...f, id]))
+    : fold(id)
   // a ticked mod that waits for the USMAP is skipped by Update, so it is not counted (its tick shows off)
   const todo = [...picked].filter(k => !isDone(runs[k]?.status) && !waits.has(k)).length
   const runningAt = batch.findIndex(k => runs[k]?.status === 'running')
@@ -947,7 +970,9 @@ export function VfxUpdaterPanel() {
         {behind && !usmapMissing && (
           <p className="vf-warn" role="note">
             <AlertTriangle size={14} aria-hidden="true" />
-            <span title={`Mappings for build ${cl}, the game is on build ${build!.cl}`}>The game updated and its new mappings are not out yet. {waits.size
+            <span title={`Mappings for build ${cl}, the game is on build ${build!.cl}`}>{usmapInfo?.upToDate || usmapInfo?.updated
+              ? 'The game updated and its new mappings are not out yet.'
+              : 'The selected game mappings are older than the game.'} {waits.size
               ? `${plural(waits.size, 'mod')} ${waits.size === 1 ? 'uses' : 'use'} files this update changed and ${waits.size === 1 ? 'waits' : 'wait'} for them. Every other mod updates now`
               : 'This update did not change the files any of these mods rebuild, so they all update now'}.{' '}
               <button type="button" className="su-link" disabled={checking || busy} onClick={() => usmapCheck(true)}>{checking ? 'Checking…' : 'Check for updates'}</button></span>
@@ -956,11 +981,11 @@ export function VfxUpdaterPanel() {
         {mods === null
           ? <ModRowsSkeleton />
           : shown.length === 0
-            ? (loadError && !needle ? null : <p className="lp-empty">{needle || hero ? `No mods match${needle ? ` “${q.trim()}”` : ''}${hero ? ` for ${hero}` : ''}.` : 'No VFX mods in the mods folder. VFX mods and mods with material instances (MI_ files) appear here. Add .utoc takes any other mod.'}</p>)
+            ? (loadError ? null : <p className="lp-empty">{needle || hero ? `No mods match${needle ? ` “${q.trim()}”` : ''}${hero ? ` for ${hero}` : ''}.` : 'No VFX mods in the mods folder. VFX mods and mods with material instances (MI_ files) appear here. Add .utoc takes any other mod.'}</p>)
             : <div className="vf-groups">{groups.map(g => g.mods.length > 0 && (
               <Group key={g.id} title={g.title} count={g.count} tone={g.id === 'needs' ? 'needs' : g.id === 'failed' ? 'failed' : g.id === 'updating' ? 'busy' : g.id === 'updated' ? 'done' : g.id === 'waiting' ? 'waiting' : undefined} busy={busy} all={g.all} none={g.none}
                 about={g.id === 'waiting' ? MAPPINGS_NOTE : undefined} selectable={!['waiting', 'updating', 'updated'].includes(g.id)}
-                open={Boolean(needle || hero) || !foldedIds.includes(g.id)} onFold={() => fold(g.id)} onPick={on => userPick(g.keys, on)}>
+                open={filtering ? !filterClosed.includes(g.id) : !foldedIds.includes(g.id)} onFold={() => toggleGroup(g.id)} onPick={on => userPick(g.keys, on)}>
                 <ul className="mod-rows vf-rows">
                   {g.mods.map(m => {
                     const key = norm(m.utoc)

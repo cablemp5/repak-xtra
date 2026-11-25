@@ -122,7 +122,7 @@ const PartMark = ({ ok }: { ok: boolean }) => (
 
 /** The preview kit: what this PC needs to render mod previews (xtra_kit.rs, shared logic in previewKit.tsx). Its two
  *  parts, the kit and Blender, are one row each with their state and links; one main button sets up what is missing. */
-function PreviewKitCard({ alert, primary }: { alert: Alert; primary: boolean }) {
+function PreviewKitCard({ alert, primary, onNeedsAction }: { alert: Alert; primary: boolean; onNeedsAction?: (needs: boolean) => void }) {
   const k = usePreviewKit(alert)
   const { kit, latest, busy, update } = k
   const [notes, setNotes] = useState<string | null>(null)
@@ -139,6 +139,7 @@ function PreviewKitCard({ alert, primary }: { alert: Alert; primary: boolean }) 
   const ready = Boolean(kit?.version && kit?.blender)
   const chip = !kit ? 'Checking…' : ready ? (update ? 'Update available' : latest ? 'Up to date' : 'Installed') : 'Not set up'
   const missing = kit && !ready
+  useEffect(() => { onNeedsAction?.(Boolean(missing || update)) }, [missing, update, onNeedsAction])
   const kitOk = Boolean(kit?.version)
   const from = kit?.source === 'github' ? 'Downloaded from GitHub' : kit?.source === 'file' ? 'Loaded from a file' : null
   const size = latest?.size ? Math.round(latest.size / 1048576) : null
@@ -230,6 +231,7 @@ export function SetupPanel({ alert, onClose, focus }: { alert: Alert; onClose: (
   const trap = useDialogFocus(true, onClose) // focus inside, Tab stays inside, Esc closes (an open changelog first), back to the opener
   const [notes, setNotes] = useState<string | null>(null)
   const [askGalacta, setAskGalacta] = useState(false) // Galacta's Remove asks first
+  const [previewNext, setPreviewNext] = useState(false) // Mod previews has an install or update action
   const { finished, finish } = useFinished() // an install that just finished, said in its card for a moment
   const acted = useRef(0) // bumped by every action: a quiet check that started before one is out of date
 
@@ -424,7 +426,7 @@ export function SetupPanel({ alert, onClose, focus }: { alert: Alert; onClose: (
             )}
           </section>
 
-          <PreviewKitCard alert={alert} primary={!bypassNext && !galactaNext} />
+          <PreviewKitCard alert={alert} primary={!bypassNext && !galactaNext} onNeedsAction={setPreviewNext} />
 
           {/* repakxtra: optional tools under what every player needs, folded away (Progressive Disclosure) */}
           <button type="button" className="su-group" aria-expanded={advanced} onClick={() => setAdvanced(v => !v)}>
@@ -432,7 +434,7 @@ export function SetupPanel({ alert, onClose, focus }: { alert: Alert; onClose: (
           </button>
           <div className="t-acc-panel" data-open={advanced} ref={el => el?.toggleAttribute('inert', !advanced)}>
             <div className="t-acc-panel-inner su-group-inner">
-              <SnapshotCard alert={alert} />
+              <SnapshotCard alert={alert} primary={!bypassNext && !galactaNext && !previewNext} />
               <SafetyCard alert={alert} />
             </div>
           </div>

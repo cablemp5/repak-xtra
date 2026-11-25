@@ -178,7 +178,7 @@ function GalactaPanel() {
           ? <ModRowsSkeleton />
           : shown.length === 0
             // the folder could not be read: the warning above says so, no empty box under it (as in the Mod Updater)
-            ? (loadError && !needle ? null : <p className="lp-empty">{needle || hero ? `No mods match${needle ? ` “${q.trim()}”` : ''}${hero ? ` for ${hero}` : ''}.` : 'No mesh or texture mods in the mods folder.'}</p>)
+            ? (loadError ? null : <p className="lp-empty">{needle || hero ? `No mods match${needle ? ` “${q.trim()}”` : ''}${hero ? ` for ${hero}` : ''}.` : 'No mesh or texture mods in the mods folder.'}</p>)
             : <div className="vf-groups">{groups.map(g => {
                 const keys = g.mods.map(m => norm(m.path))
                 return g.mods.length > 0 && (
