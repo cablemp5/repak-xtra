@@ -186,7 +186,10 @@ fn move_trash(from: &Path, to: &Path, since: Option<SystemTime>) -> bool {
                 continue; // an older build's deletion: its record is new, its file keeps the mod's old date, both stay
             }
             let file = from.join(payload);
-            done &= (gone(&file) || move_entry(&file, &to.join(payload), since)) && move_entry(&path, &dest, since);
+            let file_moved = gone(&file) || move_entry(&file, &to.join(payload), since);
+            // the record follows once the file is in the new folder, also when its old copy could not be deleted yet
+            let record_moved = (file_moved || to.join(payload).exists()) && move_entry(&path, &dest, since);
+            done &= file_moved && record_moved;
         } else if to.join(format!("{name}.from")).exists() && gone(&from.join(format!("{name}.from"))) {
             // a file whose record moved before (its own record still here means it is that record's, handled above)
             done &= move_entry(&path, &dest, since);
