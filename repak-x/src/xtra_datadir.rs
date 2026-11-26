@@ -534,6 +534,7 @@ mod tests {
         put(&old.join(r"trash\held\a.pak"), "mod");
         put(&old.join(r"trash\held\a.pak.from"), r"C:\mods\a.pak");
         put(&old.join(r"sounds\mine.wav"), "mine");
+        put(&old.join(r"trash\flat_late.pak"), "the mod, with its old date"); // an older build trashes it after the start
         marker(&new, &["previews", "trash", "sounds"]);
         put(&old.join(r"sounds\theirs.wav"), "an old build's sound");
         put(&old.join(r"previews\after.png"), "an old build's render");
@@ -548,6 +549,7 @@ mod tests {
         assert!(!new.join(r"previews\after.3d").exists() && old.join(r"previews\after.3d\model.glb").exists());
         assert!(!new.join(r"trash\later").exists() && old.join(r"trash\later\b.pak").exists());
         assert!(!new.join(r"trash\flat_late.pak.from").exists() && old.join(r"trash\flat_late.pak.from").exists());
+        assert!(!new.join(r"trash\flat_late.pak").exists() && old.join(r"trash\flat_late.pak").exists(), "the pair stays together");
         // a folder the cut-off run never reached is walked on the retry, not renamed whole
         assert!(new.join(r"sounds\mine.wav").exists() && !new.join(r"sounds\theirs.wav").exists() && old.join(r"sounds\theirs.wav").exists());
     }
