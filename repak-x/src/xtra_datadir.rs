@@ -259,7 +259,7 @@ fn same_content(a: &Path, b: &Path) -> bool {
             Err(_) => return false,
         };
         if n == 0 {
-            return true;
+            return y.read(&mut by[..1]).is_ok_and(|m| m == 0); // and `b` ends there too
         }
         if y.read_exact(&mut by[..n]).is_err() || bx[..n] != by[..n] {
             return false;
@@ -534,7 +534,10 @@ mod tests {
         put(&old.join(r"trash\held\a.pak"), "mod");
         put(&old.join(r"trash\held\a.pak.from"), r"C:\mods\a.pak");
         put(&old.join(r"sounds\mine.wav"), "mine");
-        put(&old.join(r"trash\flat_late.pak"), "the mod, with its old date"); // an older build trashes it after the start
+        // an earlier pair of this name moved already, then an older build trashes the same mod again after the start
+        put(&new.join(r"trash\flat_late.pak"), "the mod, with its old date");
+        put(&new.join(r"trash\flat_late.pak.from"), r"C:\mods\flat_late.pak");
+        put(&old.join(r"trash\flat_late.pak"), "the mod, with its old date");
         marker(&new, &["previews", "trash", "sounds"]);
         put(&old.join(r"sounds\theirs.wav"), "an old build's sound");
         put(&old.join(r"previews\after.png"), "an old build's render");
@@ -548,8 +551,7 @@ mod tests {
         assert!(!new.join(r"previews\after.png").exists() && old.join(r"previews\after.png").exists());
         assert!(!new.join(r"previews\after.3d").exists() && old.join(r"previews\after.3d\model.glb").exists());
         assert!(!new.join(r"trash\later").exists() && old.join(r"trash\later\b.pak").exists());
-        assert!(!new.join(r"trash\flat_late.pak.from").exists() && old.join(r"trash\flat_late.pak.from").exists());
-        assert!(!new.join(r"trash\flat_late.pak").exists() && old.join(r"trash\flat_late.pak").exists(), "the pair stays together");
+        assert!(old.join(r"trash\flat_late.pak.from").exists() && old.join(r"trash\flat_late.pak").exists(), "the late pair stays together");
         // a folder the cut-off run never reached is walked on the retry, not renamed whole
         assert!(new.join(r"sounds\mine.wav").exists() && !new.join(r"sounds\theirs.wav").exists() && old.join(r"sounds\theirs.wav").exists());
     }
