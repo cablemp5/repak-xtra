@@ -4,8 +4,8 @@
 import fs from 'node:fs'
 import path from 'node:path'
 
-const appDir = path.join(process.env.APPDATA, 'Repak-X')
-const state = JSON.parse(fs.readFileSync(path.join(appDir, 'state.json'), 'utf8'))
+const appDir = path.join(process.env.APPDATA, 'repakxtra')
+const state = JSON.parse(fs.readFileSync(path.join(appDir, 'repakxtra-state.json'), 'utf8'))
 const characterData = JSON.parse(fs.readFileSync(path.join(appDir, 'character_data.json'), 'utf8'))
 const root = path.normalize(state.game_path)
 const rootName = path.basename(root)

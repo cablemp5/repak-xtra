@@ -1,7 +1,6 @@
 use crate::install_mod::{InstallableMod, AES_KEY_HEX};
 use crate::utils::collect_files;
 use chrono;
-use dirs;
 use log::{debug, info};
 use path_slash::PathExt;
 use rayon::iter::IntoParallelRefIterator;
@@ -22,8 +21,8 @@ pub fn extract_pak_to_dir(pak: &InstallableMod, install_dir: PathBuf) -> Result<
     info!("[ExtractPak] install_dir={}", install_dir.display());
 
     // Write debug info
-    if let Some(config_dir) = dirs::config_dir() {
-        let debug_log = config_dir.join("Repak-X").join("extract_pak_debug.log");
+    {
+        let debug_log = crate::app_dir().join("extract_pak_debug.log"); // repakxtra: one data folder for every path
         let _ = std::fs::create_dir_all(debug_log.parent().unwrap());
         let log_content = format!(
             "=== ExtractPak Debug ({}) ===\nmod_name: {}\nmod_path: {}\ninstall_dir: {}\n",

@@ -1,5 +1,5 @@
 //! repakxtra: Rotate in 3D (custom/viewer3d) and the texture check, both made by the preview kit (kit 19 and newer):
-//! `--viewer` writes %APPDATA%\Repak-X\previews\<key>.3d\ (model.glb, Materials, tex, textures.json, idle.json and
+//! `--viewer` writes %APPDATA%\repakxtra\previews\<key>.3d\ (model.glb, Materials, tex, textures.json, idle.json and
 //! idle.bin, props.json), `--texcheck` writes previews\texcheck.json and prints a TEXCHECK line per mod. Both runs hold
 //! the same reservation as previews (xtra_previews.rs), so they never run beside a preview run or a kit install.
 

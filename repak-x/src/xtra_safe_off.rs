@@ -22,7 +22,7 @@ struct Off {
 }
 
 fn store() -> PathBuf {
-    dirs::config_dir().unwrap_or_else(|| PathBuf::from(".")).join("Repak-X").join("repakxtra-safe-off.json")
+    crate::app_dir().join("repakxtra-safe-off.json")
 }
 
 fn load(store: &Path) -> HashMap<String, Off> {

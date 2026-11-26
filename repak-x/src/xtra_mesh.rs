@@ -27,7 +27,7 @@ pub(crate) struct Done {
 }
 
 pub(crate) fn store() -> PathBuf {
-    dirs::config_dir().unwrap_or_else(|| PathBuf::from(".")).join("Repak-X").join("repakxtra-mesh-checked.json")
+    crate::app_dir().join("repakxtra-mesh-checked.json")
 }
 
 pub(crate) fn load_done() -> HashMap<String, Done> {

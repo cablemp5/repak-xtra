@@ -3,7 +3,6 @@ pub mod iotoc;
 pub mod pak_files;
 
 use crate::install_mod::InstallableMod;
-use dirs;
 use iotoc::convert_to_iostore_directory;
 use log::{error, info, warn};
 use pak_files::create_repak_from_pak;
@@ -327,8 +326,7 @@ pub fn record_installed_tags(base_name: &str, tags: &Vec<String>) {
     if tags.is_empty() {
         return;
     }
-    let mut cfg_dir = dirs::config_dir().unwrap_or_else(|| PathBuf::from("."));
-    cfg_dir.push("Repak-X");
+    let cfg_dir = crate::app_dir(); // repakxtra: one data folder for every path
     let _ = fs::create_dir_all(&cfg_dir);
     let mut path = cfg_dir.clone();
     path.push("pending_custom_tags.json");

@@ -1,5 +1,5 @@
 //! repakxtra: snapshots of the mods folder (Setup > Snapshots, custom/SnapshotCard.tsx). A snapshot is a full copy of
-//! ~mods and the Setup files in Binaries\Win64 (dsound.dll and plugins\) in %APPDATA%\Repak-X\snapshots\<unix secs>.
+//! ~mods and the Setup files in Binaries\Win64 (dsound.dll and plugins\) in %APPDATA%\repakxtra\snapshots\<unix secs>.
 //! A game update, a reinstall, or Steam's Verify integrity of game files can leave mods or the bypass missing. Restore
 //! puts back only what is gone and never overwrites or deletes a file that is there, so it cannot undo later changes.
 //! A mod counts as there under another priority (a rename) or switched off (.bak_repak), so restore never doubles one.

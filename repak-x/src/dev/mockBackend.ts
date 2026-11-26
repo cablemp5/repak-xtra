@@ -160,7 +160,7 @@ if (import.meta.env.DEV && !('__TAURI_INTERNALS__' in window)) {
       })
       case 'get_hero_image_ids': return data.heroIds ?? []
       case 'get_hero_cache_dir': return '/src/dev/heroes.local' // served by Vite (convertFileSrc below)
-      // the real one lists %APPDATA%\Repak-X\previews; a loadout render made in this page shows a local copy ('mock.setImage')
+      // the real one lists %APPDATA%\repakxtra\previews; a loadout render made in this page shows a local copy ('mock.setImage')
       case 'list_preview_files': {
         const files: Record<string, [string, number]> = {}
         for (const f of Object.keys(previewUrls)) files[f.replace(/^.*\//, '').replace(/\.(png|webp|webm)$/, '')] = [f.replace(/^.*\//, ''), 0]
@@ -172,7 +172,7 @@ if (import.meta.env.DEV && !('__TAURI_INTERNALS__' in window)) {
           .then(c => ({ covers: c?.covers ?? [], members: c?.members ?? null })) ?? { covers: [], members: null }] as const))
           .then(covers => ({ dir: '/src/dev/previews.local', files, covers: Object.fromEntries(covers) })))
       }
-      case 'list_mod_previews': // copies of %APPDATA%\Repak-X\previews in src/dev/previews.local
+      case 'list_mod_previews': // copies of %APPDATA%\repakxtra\previews in src/dev/previews.local
         return Object.keys(previewUrls).map(f => f.replace(/^.*\/|\.(png|webp|webm)$/g, ''))
 
       case 'generate_mod_previews': { // pretend run: each job reports back as already rendered
@@ -493,7 +493,7 @@ if (import.meta.env.DEV && !('__TAURI_INTERNALS__' in window)) {
       case 'sounds_set': return null
       case 'sounds_clear': if (mock.__soundNames) delete mock.__soundNames[args.slot]; return null
       case 'sounds_folder': return []
-      case 'sounds_make': return new Promise(r => setTimeout(() => r('C:\\Users\\you\\AppData\\Roaming\\Repak-X\\sounds\\out\\Sound_mod_9999999_P.pak'), 1500))
+      case 'sounds_make': return new Promise(r => setTimeout(() => r('C:\\Users\\you\\AppData\\Roaming\\repakxtra\\sounds\\out\\Sound_mod_9999999_P.pak'), 1500))
       default: {
         const vfx = mockVfx(cmd, args) // the Mod Updater window's commands
         if (vfx !== undefined) return vfx
@@ -526,7 +526,7 @@ const vfxAssets = (dir: string) => [
   ...(localStorage.getItem('mock.vfxUnreadable') ? [`${dir}/Marvel/Content/Marvel/VFX/Materials/Characters/1026/MI_1026_Broken.uasset`] : []),
   `${dir}/Marvel/Content/Marvel/VFX/Materials/Characters/1026/MI_1026_ModOwn.uasset`]
 let vfxLock: { token: string; window: string; name?: string | null } | null = null
-const VFX_USMAP = 'C:\\Users\\you\\AppData\\Roaming\\Repak-X\\usmap\\5.3.2-3939753+++depot_marvel+S10.5_release-Marvel.usmap'
+const VFX_USMAP = 'C:\\Users\\you\\AppData\\Roaming\\repakxtra\\usmap\\5.3.2-3939753+++depot_marvel+S10.5_release-Marvel.usmap'
 function mockVfx(cmd: string, args: any): unknown {
   const dirOf = (k: string) => `C:/Temp/xvfx/${k}`
   switch (cmd) {

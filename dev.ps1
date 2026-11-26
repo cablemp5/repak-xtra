@@ -2,7 +2,7 @@
 #   .\dev.ps1    starts it; interface edits show about a second after a save, Rust edits rebuild and reopen the app.
 #                Stop it with Ctrl+C in this window (or close the app window).
 # The first start compiles a debug build (several minutes); later starts reuse it. It marks itself (amber "xtra",
-# "dev build" in the version line). It is the real app: mods, Setup and %APPDATA%\Repak-X are the stable copy's, and loadouts
+# "dev build" in the version line). It is the real app: mods, Setup and %APPDATA%\repakxtra are the stable copy's, and loadouts
 # and settings are shared both ways with it, the newest save winning (custom/devStorage.ts). The app runs one copy at a
 # time: close the stable repakxtra first. Before a PR, a real .\build.ps1 -Test is still the final check.
 #   .\dev.ps1 -Sandbox   the same app on a fresh PC, for trying first-launch setup: its settings, WebView storage, desktop

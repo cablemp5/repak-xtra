@@ -20,7 +20,7 @@ pub(crate) struct Stamp {
 }
 
 fn store() -> PathBuf {
-    dirs::config_dir().unwrap_or_else(|| PathBuf::from(".")).join("Repak-X").join("repakxtra-made-for.json")
+    crate::app_dir().join("repakxtra-made-for.json")
 }
 
 fn key(mod_path: &Path) -> Option<String> {

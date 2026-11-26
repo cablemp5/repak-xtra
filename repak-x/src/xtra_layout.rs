@@ -490,7 +490,7 @@ pub(crate) struct Done {
 }
 
 pub(crate) fn store() -> PathBuf {
-    dirs::config_dir().unwrap_or_else(|| PathBuf::from(".")).join("Repak-X").join("repakxtra-layout-checked.json")
+    crate::app_dir().join("repakxtra-layout-checked.json")
 }
 
 fn load(store: &Path) -> HashMap<String, Done> {

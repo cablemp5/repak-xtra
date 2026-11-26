@@ -117,7 +117,7 @@ export function SafetyCard({ alert }: { alert: Alert }) {
   const remove = (p: Plugin) => {
     setAsking(null); setBusy(p.name)
     invoke<Plugin[]>('xtra_safety_remove_plugin', { name: p.name, place: p.place })
-      .then(ps => { setPlugins(ps); alert.success('Removed', `${p.name} was moved to %APPDATA%\\Repak-X\\removed-plugins. Move it back by hand to undo.`); window.dispatchEvent(new Event('bypass-changed')) })
+      .then(ps => { setPlugins(ps); alert.success('Removed', `${p.name} was moved to %APPDATA%\\repakxtra\\removed-plugins. Move it back by hand to undo.`); window.dispatchEvent(new Event('bypass-changed')) })
       .catch(e => alert.warning(`Could not remove ${p.name}`, String(e))).finally(() => setBusy(null))
   }
   const flagged = (plugins ?? []).filter(p => p.kind !== 'bundled')
@@ -196,10 +196,10 @@ export function SafetyCard({ alert }: { alert: Alert }) {
             </div>
             <span className="su-part-links">
               <button type="button" className="su-link" disabled={Boolean(busy || asking)} onClick={() => setAsking(p)}
-                title="Moves it out of the game folder to %APPDATA%\Repak-X\removed-plugins">{busy === p.name ? 'Removing…' : 'Remove'}</button>
+                title="Moves it out of the game folder to %APPDATA%\repakxtra\removed-plugins">{busy === p.name ? 'Removing…' : 'Remove'}</button>
             </span>
             {asking === p && <div className="su-confirm su-row-confirm" role="alert">
-              <span>Remove {p.name}? It moves to %APPDATA%\Repak-X\removed-plugins{p.kind === 'unknown' ? ', and whatever tool it belongs to stops working' : ''}.</span>
+              <span>Remove {p.name}? It moves to %APPDATA%\repakxtra\removed-plugins{p.kind === 'unknown' ? ', and whatever tool it belongs to stops working' : ''}.</span>
               <button type="button" className="lo-text-btn" autoFocus onClick={() => setAsking(null)}>Cancel</button>
               <button type="button" className="lo-text-btn su-confirm-yes" onClick={() => remove(p)}>Remove</button>
             </div>}

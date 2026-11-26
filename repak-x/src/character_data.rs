@@ -103,9 +103,7 @@ pub fn get_character_name_from_id(char_id: &str) -> Option<String> {
 
 /// Get the path to the character data JSON file in roaming folder
 pub fn character_data_path() -> PathBuf {
-    let app_dir = dirs::config_dir()
-        .unwrap_or_else(|| PathBuf::from("."))
-        .join("Repak-X");
+    let app_dir = crate::app_dir(); // repakxtra: one data folder for every path
 
     // Ensure directory exists
     let _ = fs::create_dir_all(&app_dir);
@@ -809,10 +807,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 const AUTO_UPDATE_CHECK_INTERVAL_SECS: u64 = 24 * 60 * 60;
 
 fn last_check_path() -> PathBuf {
-    dirs::config_dir()
-        .unwrap_or_else(|| PathBuf::from("."))
-        .join("Repak-X")
-        .join("character_data_last_check.txt")
+    crate::app_dir().join("character_data_last_check.txt") // repakxtra: one data folder for every path
 }
 
 fn read_last_check_time() -> Option<u64> {

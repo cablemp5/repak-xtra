@@ -113,7 +113,7 @@ pub async fn xtra_safety_plugins(state: State<'_, Arc<Mutex<crate::AppState>>>) 
     tauri::async_runtime::spawn_blocking(move || plugins_in(&win64)).await.map_err(|e| e.to_string())?
 }
 
-/// Moves a plugin the scan lists (never the bundled bypass) to %APPDATA%\Repak-X\removed-plugins\<unix secs>, so it
+/// Moves a plugin the scan lists (never the bundled bypass) to %APPDATA%\repakxtra\removed-plugins\<unix secs>, so it
 /// can be put back by hand (quarantine, never a delete), then scans again to verify it is gone.
 #[tauri::command]
 pub async fn xtra_safety_remove_plugin(name: String, place: String, state: State<'_, Arc<Mutex<crate::AppState>>>) -> Result<Vec<Plugin>, String> {

@@ -28,7 +28,7 @@ fn read_sessions() -> Vec<Session> {
 }
 
 fn sessions_store() -> std::path::PathBuf {
-    dirs::config_dir().unwrap_or_else(|| std::path::PathBuf::from(".")).join("Repak-X").join("repakxtra-game-sessions.json")
+    crate::app_dir().join("repakxtra-game-sessions.json")
 }
 
 /** A mod's key on or off: its path without .pak, .bak_repak, .utoc or .ucas, forward slashes, lowercase (setupReport.ts onKey). */

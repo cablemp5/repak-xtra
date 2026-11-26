@@ -50,7 +50,7 @@ struct Store {
 }
 
 fn store_path() -> PathBuf {
-    dirs::config_dir().unwrap_or_else(|| PathBuf::from(".")).join("Repak-X").join("repakxtra-activity.json")
+    crate::app_dir().join("repakxtra-activity.json")
 }
 
 /// The store in memory: None until first read. `Err` when the file exists but could not be read: nothing is written then.

@@ -34,6 +34,7 @@ mod xtra_export; // repakxtra: export a loadout as a zip
 mod xtra_shortcut; // repakxtra: desktop shortcut
 mod xtra_trust; // repakxtra: Settings > Is it safe? (this exe's SHA-256)
 mod xtra_identity; // repakxtra: its own app identifier, beside Repak X
+mod xtra_datadir; // repakxtra: its own data folder, %APPDATA%\repakxtra
 mod xtra_crash; // repakxtra: crash facts for the setup report, crash suspects
 mod xtra_crash_log; // repakxtra: the game's engine log in a crash folder, decrypted for Settings > Crash reports
 mod xtra_broken; // repakxtra: mods that will not work in the installed game version
@@ -6359,9 +6360,7 @@ async fn get_app_version() -> Result<String, String> {
 /// rest of the app uses persists fine for them. It is also plain text, so a user
 /// with no devtools can read and report it.
 fn last_seen_version_path() -> PathBuf {
-    let app_dir = dirs::config_dir()
-        .unwrap_or_else(|| PathBuf::from("."))
-        .join("Repak-X");
+    let app_dir = app_dir(); // repakxtra: its own folder
     let _ = std::fs::create_dir_all(&app_dir);
     // repakxtra: its own marker. Repak X writes its version to last_seen_version.txt in the same folder, so sharing it
     // re-showed What's new on every launch after either app had run
@@ -7492,9 +7491,7 @@ async fn identify_mod_character(
 // ============================================================================
 
 fn app_dir() -> PathBuf {
-    dirs::config_dir()
-        .unwrap_or_else(|| PathBuf::from("."))
-        .join("Repak-X")
+    xtra_datadir::dir() // repakxtra: its own folder, no longer %APPDATA%\Repak-X (shared with Repak X)
 }
 
 /// Directory for log files - placed next to the executable for easy access
@@ -7522,14 +7519,17 @@ fn save_state(state: &AppState) -> std::io::Result<()> {
 }
 
 fn load_state() -> AppState {
-    // repakxtra: its own state file; the first start reads Repak X's state.json (shared until now) as its starting point
-    let own = app_dir().join("repakxtra-state.json");
-    let path = if own.exists() { own } else { app_dir().join("state.json") };
+    // repakxtra: its own state file. Until it is in the new folder (it was in use when the folder moved), the old one.
+    // A new user's first start reads Repak X's state.json as its starting point
+    let old = xtra_datadir::old_dir();
+    let path = [app_dir().join("repakxtra-state.json"), old.join("repakxtra-state.json"), old.join("state.json")]
+        .into_iter().find(|p| p.exists()).unwrap_or_else(|| app_dir().join("repakxtra-state.json"));
     let mut state = if let Ok(file) = File::open(&path) {
         serde_json::from_reader(file).unwrap_or_else(|e| {
             // Keep the unreadable file: the next save would otherwise overwrite it
             error!("{} is unreadable ({}), starting with defaults", path.display(), e);
-            let _ = std::fs::copy(&path, path.with_extension("json.bad"));
+            // repakxtra: beside its own state, never into Repak X's folder
+            let _ = std::fs::copy(&path, app_dir().join(format!("{}.bad", path.file_name().unwrap_or_default().to_string_lossy())));
             AppState::default()
         })
     } else {
@@ -8659,6 +8659,7 @@ fn main() {
         xtra_updater::Recovery::Nothing => None,
     };
     xtra_vfx::tune_dotnet_gc(); // repakxtra: before UAssetTool loads, while no other thread runs
+    let moved = xtra_datadir::move_out(); // repakxtra: its data out of Repak X's folder, before anything reads it
     xtra_identity::carry_over_webview_storage(); // repakxtra: before the window opens
     xtra_cleanup::on_start(); // repakxtra: Settings > Storage sections marked to clear at the next start
     xtra_vfx::retire_stale_vfx(); // repakxtra: stale VFX caches renamed out of use before any command can pick one
@@ -8693,6 +8694,7 @@ fn main() {
 
     setup_logging();
     info!("Starting RepakX v{}", env!("CARGO_PKG_VERSION"));
+    if let Some(line) = moved { info!("{line}") } // repakxtra
 
     // Register protocol handler for portable app support (self-healing registry)
     if let Err(e) = register_protocol_handler() {

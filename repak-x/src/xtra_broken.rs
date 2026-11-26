@@ -724,7 +724,7 @@ struct Checked {
 }
 
 fn checked_store() -> PathBuf {
-    dirs::config_dir().unwrap_or_else(|| PathBuf::from(".")).join("Repak-X").join("repakxtra-vfx-checked.json")
+    crate::app_dir().join("repakxtra-vfx-checked.json")
 }
 
 fn load_checked(store: &Path) -> HashMap<String, Checked> {
@@ -889,7 +889,7 @@ pub struct Outcome {
 }
 
 fn outcome_store() -> PathBuf {
-    dirs::config_dir().unwrap_or_else(|| PathBuf::from(".")).join("Repak-X").join("repakxtra-vfx-outcomes.json")
+    crate::app_dir().join("repakxtra-vfx-outcomes.json")
 }
 
 fn load_outcomes(store: &Path) -> HashMap<String, Outcome> {

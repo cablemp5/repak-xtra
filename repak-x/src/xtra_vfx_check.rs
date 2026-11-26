@@ -237,7 +237,7 @@ type Found = HashMap<String, HashMap<String, Option<u64>>>;
 static FOUND: Mutex<Option<Found>> = Mutex::new(None);
 
 fn found_store() -> PathBuf {
-    dirs::config_dir().unwrap_or_else(|| PathBuf::from(".")).join("Repak-X").join("repakxtra-deep-found.json")
+    crate::app_dir().join("repakxtra-deep-found.json")
 }
 
 /// This container as the decoder reads it with this USMAP: its file, size and time, the decoder and the USMAP.
@@ -452,7 +452,7 @@ pub async fn xtra_vfx_check(mod_path: String, usmap_path: String, state: State<'
 // for an older version gets its Needs VFX update flag, so the VFX Updater's one Update covers it too.
 
 pub(crate) fn scan_store() -> PathBuf {
-    dirs::config_dir().unwrap_or_else(|| PathBuf::from(".")).join("Repak-X").join("repakxtra-vfx-check-scan-v2.json") // v2: reads the layout too, so every mod is looked at again once
+    crate::app_dir().join("repakxtra-vfx-check-scan-v2.json") // v2: reads the layout too, so every mod is looked at again once
 }
 
 /// Mods the background check has looked at: their .utoc (checked_key) -> (size, time written, game's last update then).
