@@ -187,7 +187,8 @@ fn move_trash(from: &Path, to: &Path, since: Option<SystemTime>) -> bool {
             }
             let file = from.join(payload);
             done &= (gone(&file) || move_entry(&file, &to.join(payload), since)) && move_entry(&path, &dest, since);
-        } else if to.join(format!("{name}.from")).exists() {
+        } else if to.join(format!("{name}.from")).exists() && gone(&from.join(format!("{name}.from"))) {
+            // a file whose record moved before (its own record still here means it is that record's, handled above)
             done &= move_entry(&path, &dest, since);
         }
     }
@@ -229,8 +230,8 @@ fn rename_whole(from: &Path, to: &Path) -> bool {
     }
 }
 
-/// Deletes the parts of `from` whose copy is in `to` (same size), never a file written since the copy. True when
-/// `from` is gone.
+/// Deletes the parts of `from` whose copy is in `to` (same size and time, fs::copy keeps the time), never a file
+/// written since the copy. True when `from` is gone.
 fn remove_copied(from: &Path, to: &Path) -> bool {
     let Ok(meta) = fs::symlink_metadata(from) else { return true };
     if meta.is_dir() && !meta.file_type().is_symlink() {
@@ -239,12 +240,31 @@ fn remove_copied(from: &Path, to: &Path) -> bool {
         }
         return fs::remove_dir(from).is_ok();
     }
-    fs::metadata(to).is_ok_and(|m| m.is_file() && m.len() == meta.len()) && fs::remove_file(from).is_ok()
+    fs::metadata(to).is_ok_and(|m| m.is_file() && m.len() == meta.len() && m.modified().ok() == meta.modified().ok())
+        && fs::remove_file(from).is_ok()
 }
 
+/// Compared a block at a time, so a large mod never sits in memory twice.
 fn same_content(a: &Path, b: &Path) -> bool {
+    use std::io::Read;
     let len = |p: &Path| fs::metadata(p).map(|m| m.len()).ok();
-    len(a).is_some() && len(a) == len(b) && fs::read(a).ok().is_some_and(|x| fs::read(b).is_ok_and(|y| x == y))
+    if len(a).is_none() || len(a) != len(b) {
+        return false;
+    }
+    let (Ok(mut x), Ok(mut y)) = (fs::File::open(a), fs::File::open(b)) else { return false };
+    let (mut bx, mut by) = (vec![0u8; 1 << 16], vec![0u8; 1 << 16]);
+    loop {
+        let n = match x.read(&mut bx) {
+            Ok(n) => n,
+            Err(_) => return false,
+        };
+        if n == 0 {
+            return true;
+        }
+        if y.read_exact(&mut by[..n]).is_err() || bx[..n] != by[..n] {
+            return false;
+        }
+    }
 }
 
 fn remove_any(p: &Path) -> io::Result<()> {
