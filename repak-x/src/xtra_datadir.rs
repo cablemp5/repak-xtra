@@ -172,6 +172,9 @@ fn move_trash(from: &Path, to: &Path, since: Option<SystemTime>) -> bool {
                 done &= move_entry(&path, &dest, since);
             }
         } else if let Some(payload) = name.strip_suffix(".from") {
+            if late(&meta, since) {
+                continue; // an older build's deletion: its record is new, its file keeps the mod's old date, both stay
+            }
             let file = from.join(payload);
             done &= (gone(&file) || move_entry(&file, &to.join(payload), since)) && move_entry(&path, &dest, since);
         } else if to.join(format!("{name}.from")).exists() {
@@ -215,6 +218,11 @@ fn rename_whole(from: &Path, to: &Path) -> bool {
     }
 }
 
+fn same_content(a: &Path, b: &Path) -> bool {
+    let len = |p: &Path| fs::metadata(p).map(|m| m.len()).ok();
+    len(a).is_some() && len(a) == len(b) && fs::read(a).ok().is_some_and(|x| fs::read(b).is_ok_and(|y| x == y))
+}
+
 fn remove_any(p: &Path) -> io::Result<()> {
     if fs::symlink_metadata(p)?.is_dir() { fs::remove_dir_all(p) } else { fs::remove_file(p) }
 }
@@ -241,6 +249,9 @@ fn move_over(from: &Path, to: &Path, since: Option<SystemTime>, top: bool) -> bo
             return false;
         }
     } else if !folder {
+        if !meta.file_type().is_symlink() && same_content(from, to) {
+            return fs::remove_file(from).is_ok(); // a copy across drives that could not delete its original
+        }
         let beside = to.with_file_name(format!("{}.from-Repak-X", to.file_name().unwrap_or_default().to_string_lossy()));
         return !top || meta.file_type().is_symlink() || fs::symlink_metadata(&beside).is_ok() || rename_whole(from, &beside);
     } else if !to.is_dir() {
@@ -304,10 +315,10 @@ fn rewrite_paths(old: &Path, new: &Path, name: &str) -> bool {
                 continue;
             }
         };
-        // a swap journal whose trash entry is still in the old folder keeps naming it there: recover() puts its files
-        // back from that entry, so it waits for the entry to move
-        let entry = serde_json::from_str::<serde_json::Value>(&text).ok().and_then(|v| v.get("trash")?.as_str().map(PathBuf::from));
-        if name == "swap-journal" && entry.is_some_and(|t| !gone(&t) && t.to_string_lossy().to_ascii_lowercase().starts_with(&old.to_string_lossy().to_ascii_lowercase())) {
+        // a swap journal names its trash entry, which recover() puts files back from: it points at the new folder once
+        // the entry is there, and until then keeps naming the old one
+        let entry = serde_json::from_str::<serde_json::Value>(&text).ok().and_then(|v| v.get("trash")?.as_str().map(str::to_string));
+        if name == "swap-journal" && entry.is_some_and(|t| !gone(Path::new(&t)) && moved_to(&t, old, new).is_some_and(|n| !n.exists())) {
             done = false;
             continue;
         }
@@ -315,6 +326,13 @@ fn rewrite_paths(old: &Path, new: &Path, name: &str) -> bool {
         done &= fixed == text || write_atomic(f, &fixed).is_ok();
     }
     done
+}
+
+/// Where a path under the old folder is in the new one (None for a path outside it).
+fn moved_to(path: &str, old: &Path, new: &Path) -> Option<PathBuf> {
+    let o = old.to_string_lossy();
+    let rest = path.get(o.len()..).filter(|_| path.len() > o.len() && path[..o.len()].eq_ignore_ascii_case(&o))?;
+    rest.strip_prefix(&['\\', '/'][..]).map(|r| new.join(r))
 }
 
 /// The old folder as JSON stores it (each backslash doubled) or written with forward slashes, in any case, only where a
@@ -375,10 +393,10 @@ mod tests {
 
     /// A marker as a run that stopped midway leaves it, started now: every old file made before this call predates it.
     fn marker(new: &Path, pending: &[&str]) {
-        std::thread::sleep(Duration::from_millis(20));
+        std::thread::sleep(Duration::from_millis(100)); // file times trail the clock by up to a timer tick (15.6 ms)
         let started = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis() as u64;
         put(&new.join(MARKER), &serde_json::to_string(&Marker { started, pending: pending.iter().map(|s| s.to_string()).collect() }).unwrap());
-        std::thread::sleep(Duration::from_millis(20));
+        std::thread::sleep(Duration::from_millis(100));
     }
 
     fn pending(new: &Path) -> Vec<String> {
@@ -447,6 +465,7 @@ mod tests {
         put(&old.join(r"previews\b.png"), "old b");
         put(&old.join("labels.json"), "labels");
         put(&old.join("installed_sources.json"), "every source");
+        put(&new.join("labels.json"), "labels");
         // a run listed the names, then stopped (one had moved), and a session after it made its own files
         marker(&new, &["moved-before.json", "previews", "labels.json", "installed_sources.json"]);
         put(&new.join("moved-before.json"), "x");
@@ -459,6 +478,8 @@ mod tests {
         // a top-level file never vanishes: the session's stays in use, the old one is kept beside it
         assert_eq!(read(&new.join("installed_sources.json")), "one source");
         assert_eq!(read(&new.join("installed_sources.json.from-Repak-X")), "every source");
+        // the same file already in place (a copy that could not delete its original) is not kept twice
+        assert!(!old.join("labels.json").exists() && !new.join("labels.json.from-Repak-X").exists());
     }
 
     #[test]
@@ -472,12 +493,14 @@ mod tests {
         put(&old.join(r"previews\after.3d\model.glb"), "an old build's folder");
         put(&old.join(r"trash\later\b.pak"), "an old build's deletion");
         put(&old.join(r"trash\later\b.pak.from"), r"C:\mods\b.pak");
+        put(&old.join(r"trash\flat_late.pak.from"), r"C:\mods\flat_late.pak");
         put(&new.join(r"previews\x.png"), "made since");
         assert_eq!(move_between(&old, &new).unwrap(), Some(vec![]));
         assert!(new.join(r"previews\before.png").exists() && new.join(r"trash\held\a.pak").exists());
         assert!(!new.join(r"previews\after.png").exists() && old.join(r"previews\after.png").exists());
         assert!(!new.join(r"previews\after.3d").exists() && old.join(r"previews\after.3d\model.glb").exists());
         assert!(!new.join(r"trash\later").exists() && old.join(r"trash\later\b.pak").exists());
+        assert!(!new.join(r"trash\flat_late.pak.from").exists() && old.join(r"trash\flat_late.pak.from").exists());
     }
 
     #[test]
@@ -564,6 +587,9 @@ mod tests {
     #[test]
     fn only_whole_folder_names_are_rewritten_in_any_case() {
         let (old, new) = (Path::new(r"C:\U\Roaming\Repak-X"), Path::new(r"C:\U\Roaming\repakxtra"));
+        assert_eq!(moved_to(r"c:\u\roaming\repak-x\trash\E", old, new), Some(PathBuf::from(r"C:\U\Roaming\repakxtra\trash\E")));
+        assert_eq!(moved_to(r"C:\U\Roaming\Repak-Xtra\trash", old, new), None);
+        assert_eq!(moved_to(r"C:\mods\a.pak", old, new), None);
         let text = r#"{"a": "C:\\U\\Roaming\\Repak-X\\usmap\\m", "b": "C:\\U\\Roaming\\Repak-Xtra\\c", "c": "c:/u/roaming/repak-x/d", "d": "C:\\U\\ROAMING\\REPAK-X\\e"}"#;
         assert_eq!(rewrite(text, old, new), r#"{"a": "C:\\U\\Roaming\\repakxtra\\usmap\\m", "b": "C:\\U\\Roaming\\Repak-Xtra\\c", "c": "C:/U/Roaming/repakxtra/d", "d": "C:\\U\\Roaming\\repakxtra\\e"}"#);
     }
