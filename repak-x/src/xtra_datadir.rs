@@ -110,16 +110,26 @@ fn move_between(old: &Path, new: &Path) -> io::Result<Option<Vec<String>>> {
     }
     // only a retry skips late files: on the first run nothing is late (a file dated ahead still moves)
     let since = (!first).then(|| UNIX_EPOCH + Duration::from_millis(m.started));
-    m.pending.retain(|n| !move_name(old, new, n, since));
+    // the trash first: the swap journal's paths into it are rewritten only once its entries are in the new folder
+    m.pending.sort_by_key(|n| !n.eq_ignore_ascii_case("trash"));
+    let mut left: Vec<String> = Vec::new();
+    for name in std::mem::take(&mut m.pending) {
+        let trash_left = left.iter().any(|n| n.eq_ignore_ascii_case("trash"));
+        if !move_name(old, new, &name, since, trash_left) {
+            left.push(name);
+        }
+    }
+    m.pending = left;
     write_atomic(&marker, &serde_json::to_string(&m)?)?;
     Ok(Some(m.pending))
 }
 
-/// True when nothing of `name` is left to move and the paths it stores point at the new folder.
-fn move_name(old: &Path, new: &Path, name: &str, since: Option<SystemTime>) -> bool {
+/// True when nothing of `name` is left to move and the paths it stores point at the new folder. While the trash is
+/// still in the old folder, the swap journal keeps its old paths (they are where its files still are).
+fn move_name(old: &Path, new: &Path, name: &str, since: Option<SystemTime>, trash_left: bool) -> bool {
     let (from, to) = (old.join(name), new.join(name));
     let lower = name.to_ascii_lowercase();
-    let moved = if fs::symlink_metadata(&from).is_err() {
+    let moved = if gone(&from) {
         true // moved by a run cut off before it saved the marker, or deleted since
     } else if lower == "trash" {
         move_trash(&from, &to, since)
@@ -130,7 +140,12 @@ fn move_name(old: &Path, new: &Path, name: &str, since: Option<SystemTime>) -> b
     } else {
         move_over(&from, &to, since, true)
     };
-    moved && rewrite_paths(old, new, &lower)
+    moved && !(lower == "swap-journal" && trash_left) && rewrite_paths(old, new, &lower)
+}
+
+/// Not there at all: any other error (denied, in use) is not "moved".
+fn gone(p: &Path) -> bool {
+    fs::symlink_metadata(p).is_err_and(|e| e.kind() == io::ErrorKind::NotFound)
 }
 
 /// Only repakxtra's entries, each whole: folders with .from records and no meta.json (Repak X's), and the older flat
@@ -155,7 +170,7 @@ fn move_trash(from: &Path, to: &Path, since: Option<SystemTime>) -> bool {
             }
         } else if let Some(payload) = name.strip_suffix(".from") {
             let file = from.join(payload);
-            done &= (fs::symlink_metadata(&file).is_err() || move_entry(&file, &to.join(payload), since)) && move_entry(&path, &dest, since);
+            done &= (gone(&file) || move_entry(&file, &to.join(payload), since)) && move_entry(&path, &dest, since);
         } else if to.join(format!("{name}.from")).exists() {
             done &= move_entry(&path, &dest, since);
         }
@@ -185,7 +200,10 @@ fn rename_whole(from: &Path, to: &Path) -> bool {
 /// are moved, never walked. Files written after the move started are an older build's and stay. True when nothing of
 /// `from` is left to move.
 fn move_over(from: &Path, to: &Path, since: Option<SystemTime>, top: bool) -> bool {
-    let Ok(meta) = fs::symlink_metadata(from) else { return true };
+    let meta = match fs::symlink_metadata(from) {
+        Ok(meta) => meta,
+        Err(e) => return e.kind() == io::ErrorKind::NotFound,
+    };
     let folder = meta.is_dir() && !meta.file_type().is_symlink();
     if !folder && since.is_some_and(|s| meta.modified().is_ok_and(|t| t > s)) {
         return true;
@@ -284,10 +302,17 @@ fn replace_ci(text: &str, pat: &str, rep: &str) -> String {
     out
 }
 
+/// Written whole to a temporary file and synced first, so a crash never leaves half a marker (read as nothing to move).
 fn write_atomic(path: &Path, text: &str) -> io::Result<()> {
+    use std::io::Write;
     let tmp = path.with_file_name(format!("{}.tmp", path.file_name().unwrap_or_default().to_string_lossy()));
-    fs::write(&tmp, text)?;
-    fs::rename(&tmp, path)
+    let mut f = fs::File::create(&tmp)?;
+    f.write_all(text.as_bytes())?;
+    f.sync_all()?;
+    drop(f);
+    fs::rename(&tmp, path).inspect_err(|_| {
+        let _ = fs::remove_file(&tmp);
+    })
 }
 
 #[cfg(test)]
@@ -448,7 +473,7 @@ mod tests {
         put(&old.join(r"trash\held\a.pak.from"), r"C:\mods\a.pak");
         let open = |p: &str| fs::OpenOptions::new().read(true).share_mode(0).open(old.join(p)).unwrap();
         let held = (open(r"previews\busy.webp"), open(r"preview-kit\python\python.exe"), open(r"trash\held\a.pak"));
-        assert_eq!(move_between(&old, &new).unwrap(), Some(vec!["preview-kit".to_string(), "previews".to_string(), "trash".to_string()]));
+        assert_eq!(move_between(&old, &new).unwrap(), Some(vec!["trash".to_string(), "preview-kit".to_string(), "previews".to_string()]));
         // what was free moved now, so the app runs on it, and a program folder or trash entry never moves in part
         assert_eq!(read(&new.join(r"previews\free.png")), "free");
         assert!(new.join("repakxtra-state.json").exists());
@@ -474,6 +499,26 @@ mod tests {
         put(&new.join(r"previews\x.png"), "made since"); // the target exists, so this is a merge
         assert_eq!(move_between(&old, &new).unwrap(), Some(vec![]));
         assert!(shared.join("keep.png").exists() && !new.join(r"previews\keep.png").exists());
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn the_swap_journal_keeps_its_trash_paths_until_the_trash_moved() {
+        use std::os::windows::fs::OpenOptionsExt;
+        let (_t, old, new) = dirs();
+        let old_json = old.to_string_lossy().replace('\\', r"\\");
+        put(&old.join(r"trash\swap\a.pak"), "mod");
+        put(&old.join(r"trash\swap\a.pak.from"), r"C:\mods\a.pak");
+        put(&old.join(r"swap-journal\j.json"), &format!(r#"{{"trash": "{old_json}\\trash\\swap"}}"#));
+        let held = fs::OpenOptions::new().read(true).share_mode(0).open(old.join(r"trash\swap\a.pak")).unwrap();
+        assert_eq!(move_between(&old, &new).unwrap(), Some(vec!["trash".to_string(), "swap-journal".to_string()]));
+        // the journal moved, but still names the old trash, where its files are
+        assert!(read(&new.join(r"swap-journal\j.json")).contains(&format!(r"{old_json}\\trash")));
+        drop(held);
+        assert_eq!(move_between(&old, &new).unwrap(), Some(vec![]));
+        let new_json = new.to_string_lossy().replace('\\', r"\\");
+        assert!(read(&new.join(r"swap-journal\j.json")).contains(&format!(r"{new_json}\\trash\\swap")));
+        assert!(new.join(r"trash\swap\a.pak").exists());
     }
 
     #[test]

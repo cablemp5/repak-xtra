@@ -7528,7 +7528,8 @@ fn load_state() -> AppState {
         serde_json::from_reader(file).unwrap_or_else(|e| {
             // Keep the unreadable file: the next save would otherwise overwrite it
             error!("{} is unreadable ({}), starting with defaults", path.display(), e);
-            let _ = std::fs::copy(&path, path.with_extension("json.bad"));
+            // repakxtra: beside its own state, never into Repak X's folder
+            let _ = std::fs::copy(&path, app_dir().join(format!("{}.bad", path.file_name().unwrap_or_default().to_string_lossy())));
             AppState::default()
         })
     } else {
