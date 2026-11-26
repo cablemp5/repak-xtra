@@ -132,7 +132,9 @@ fn move_name(old: &Path, new: &Path, name: &str, since: Option<SystemTime>) -> b
     } else {
         move_over(&from, &to, since, true)
     };
-    moved && rewrite_paths(old, new, &lower)
+    // also after a part moved: the files that did are rewritten now (a journal that moved must name the new trash)
+    let rewritten = rewrite_paths(old, new, &lower);
+    moved && rewritten
 }
 
 /// Not there at all: any other error (denied, in use) is not "moved".
@@ -168,7 +170,15 @@ fn move_trash(from: &Path, to: &Path, since: Option<SystemTime>) -> bool {
                 continue;
             };
             let has_record = files.flatten().any(|f| f.file_name().to_string_lossy().ends_with(".from"));
-            if !path.join("meta.json").exists() && (has_record || dest.exists()) {
+            let theirs = match fs::symlink_metadata(path.join("meta.json")) {
+                Ok(_) => true,
+                Err(e) if e.kind() == io::ErrorKind::NotFound => false,
+                Err(_) => {
+                    done = false; // cannot tell whose it is now
+                    continue;
+                }
+            };
+            if !theirs && (has_record || dest.exists()) {
                 done &= move_entry(&path, &dest, since);
             }
         } else if let Some(payload) = name.strip_suffix(".from") {
@@ -206,16 +216,30 @@ fn rename_whole(from: &Path, to: &Path) -> bool {
     match fs::rename(from, to) {
         Ok(()) => true,
         Err(e) if e.raw_os_error() == Some(ERROR_NOT_SAME_DEVICE) => {
-            let stage = to.with_file_name(format!("{}.repakxtra-copying", to.file_name().unwrap_or_default().to_string_lossy()));
+            let name = to.file_name().unwrap_or_default().to_string_lossy();
+            let stage = to.with_file_name(format!("{name}.{}.repakxtra-copying", std::process::id()));
             let _ = remove_any(&stage);
             if copy_over(from, &stage).is_err() || fs::rename(&stage, to).is_err() {
                 let _ = remove_any(&stage);
                 return false;
             }
-            remove_any(from).is_ok() // if it cannot go now, a retry finds `to` and leaves it
+            remove_copied(from, to) // what was written since the copy stays, and a retry finds `to` and leaves it
         }
         Err(_) => false,
     }
+}
+
+/// Deletes the parts of `from` whose copy is in `to` (same size), never a file written since the copy. True when
+/// `from` is gone.
+fn remove_copied(from: &Path, to: &Path) -> bool {
+    let Ok(meta) = fs::symlink_metadata(from) else { return true };
+    if meta.is_dir() && !meta.file_type().is_symlink() {
+        for e in fs::read_dir(from).into_iter().flatten().flatten() {
+            remove_copied(&e.path(), &to.join(e.file_name()));
+        }
+        return fs::remove_dir(from).is_ok();
+    }
+    fs::metadata(to).is_ok_and(|m| m.is_file() && m.len() == meta.len()) && fs::remove_file(from).is_ok()
 }
 
 fn same_content(a: &Path, b: &Path) -> bool {
@@ -242,7 +266,8 @@ fn move_over(from: &Path, to: &Path, since: Option<SystemTime>, top: bool) -> bo
         return true;
     }
     if fs::symlink_metadata(to).is_err() {
-        if rename_whole(from, to) {
+        // a retry walks folders instead of renaming them whole, so what an older build wrote into one since stays
+        if !(folder && since.is_some()) && rename_whole(from, to) {
             return true;
         }
         if !folder || fs::create_dir_all(to).is_err() {
@@ -488,7 +513,9 @@ mod tests {
         put(&old.join(r"previews\before.png"), "before");
         put(&old.join(r"trash\held\a.pak"), "mod");
         put(&old.join(r"trash\held\a.pak.from"), r"C:\mods\a.pak");
-        marker(&new, &["previews", "trash"]);
+        put(&old.join(r"sounds\mine.wav"), "mine");
+        marker(&new, &["previews", "trash", "sounds"]);
+        put(&old.join(r"sounds\theirs.wav"), "an old build's sound");
         put(&old.join(r"previews\after.png"), "an old build's render");
         put(&old.join(r"previews\after.3d\model.glb"), "an old build's folder");
         put(&old.join(r"trash\later\b.pak"), "an old build's deletion");
@@ -501,6 +528,8 @@ mod tests {
         assert!(!new.join(r"previews\after.3d").exists() && old.join(r"previews\after.3d\model.glb").exists());
         assert!(!new.join(r"trash\later").exists() && old.join(r"trash\later\b.pak").exists());
         assert!(!new.join(r"trash\flat_late.pak.from").exists() && old.join(r"trash\flat_late.pak.from").exists());
+        // a folder the cut-off run never reached is walked on the retry, not renamed whole
+        assert!(new.join(r"sounds\mine.wav").exists() && !new.join(r"sounds\theirs.wav").exists() && old.join(r"sounds\theirs.wav").exists());
     }
 
     #[test]
