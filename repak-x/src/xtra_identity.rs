@@ -68,7 +68,7 @@ pub fn xtra_upstream_running() -> bool {
 /// What carrying the old storage over says when it cannot finish now. Yes: start without it this time; No: quit.
 /// Either way the next start tries again.
 #[cfg(windows)]
-fn ask_continue(text: &str) -> bool {
+pub(crate) fn ask_continue(text: &str) -> bool {
     const MB_YESNO: u32 = 0x4;
     const MB_ICONWARNING: u32 = 0x30;
     const IDYES: i32 = 6;

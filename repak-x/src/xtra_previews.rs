@@ -1,6 +1,6 @@
 //! repakxtra: generated mod previews. The generator (`mod_previews.py`, with Cue4Export and Blender) comes from the
 //! preview kit (xtra_kit.rs), on every PC, and writes one image per mod to
-//! %APPDATA%\Repak-X\previews\<mod key>.png (an animated <mod key>.webp for animation mods). This module serves those
+//! %APPDATA%\repakxtra\previews\<mod key>.png (an animated <mod key>.webp for animation mods). This module serves those
 //! files and runs the generator for the mods you pick (details panel button, the selection bar's Previews button, a
 //! loadout's Generate previews).
 

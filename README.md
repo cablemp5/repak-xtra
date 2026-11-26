@@ -244,7 +244,7 @@ Build:
 There is no plain stable build: an installed copy updates itself from the releases (**Settings > Updates**).
 
 > [!NOTE]
-> The app runs one copy at a time and both builds share `%APPDATA%\Repak-X`: close the stable repakxtra before opening the test one.
+> The app runs one copy at a time and both builds share `%APPDATA%\repakxtra`: close the stable repakxtra before opening the test one.
 
 <details>
 <summary>What <code>build.ps1</code> runs</summary>

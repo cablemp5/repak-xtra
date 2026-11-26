@@ -12,7 +12,7 @@ static LOADED: std::sync::OnceLock<String> = std::sync::OnceLock::new();
 static CHANGED: AtomicBool = AtomicBool::new(false);
 
 fn file() -> PathBuf {
-    dirs::config_dir().unwrap_or_else(|| PathBuf::from(".")).join("Repak-X").join("repakxtra-details-cache.json")
+    crate::app_dir().join("repakxtra-details-cache.json")
 }
 
 /// A change to the code that works out details (REPAKXTRA_DETAILS_LOGIC, a fingerprint of it from build_xtra.rs) or

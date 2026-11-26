@@ -1,5 +1,5 @@
 //! repakxtra: the preview kit, what another PC needs to generate mod previews (Python, the generator, Cue4Export,
-//! UAssetTool, repak, mappings; built by the modding tools' previews\build_kit.py). It lives in %APPDATA%\Repak-X\preview-kit,
+//! UAssetTool, repak, mappings; built by the modding tools' previews\build_kit.py). It lives in %APPDATA%\repakxtra\preview-kit,
 //! comes from a GitHub release (tag preview-kit-v<N>, a repakxtra-preview-kit*.zip asset) or a zip picked by hand (its
 //! source.json says which), and needs Blender (installed from Setup with winget, found in Program Files, or picked once).
 

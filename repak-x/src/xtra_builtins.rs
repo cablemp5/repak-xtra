@@ -153,7 +153,7 @@ pub struct BuiltinView {
 }
 
 fn store_path() -> PathBuf {
-    dirs::config_dir().unwrap_or_else(|| PathBuf::from(".")).join("Repak-X").join("repakxtra-builtins.json")
+    crate::app_dir().join("repakxtra-builtins.json")
 }
 
 fn load() -> HashMap<String, Saved> {

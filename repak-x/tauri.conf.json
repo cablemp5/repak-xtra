@@ -50,7 +50,7 @@
       "assetProtocol": {
         "enable": true,
         "scope": {
-          "allow": ["$CONFIG/Repak-X/previews/*", "$CONFIG/Repak-X/hero/*"],
+          "allow": ["$CONFIG/repakxtra/previews/*", "$CONFIG/repakxtra/hero/*"],
           "requireLiteralLeadingDot": false
         }
       },

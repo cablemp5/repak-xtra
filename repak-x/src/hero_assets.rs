@@ -2,7 +2,7 @@
 //!
 //! These used to be bundled into the binary via `import.meta.glob`, which meant
 //! shipping a new build every time a hero was added. Instead the app now keeps
-//! them in `%APPDATA%/Repak-X/hero` and reconciles that folder against
+//! them in `%APPDATA%/repakxtra/hero` and reconciles that folder against
 //! <https://github.com/SpaceDepot/rivals-resources> on startup: the first run
 //! downloads the set, later runs only pull portraits that are new (or that
 //! changed upstream).
@@ -21,11 +21,9 @@ use tauri::{AppHandle, Emitter};
 const HERO_REPO_API: &str =
     "https://api.github.com/repos/SpaceDepot/rivals-resources/contents/hero?ref=main";
 
-/// App data directory matching the rest of Repak-X: %APPDATA%/Repak-X
+/// App data directory matching the rest of the app
 fn app_dir() -> PathBuf {
-    dirs::config_dir()
-        .unwrap_or_else(|| PathBuf::from("."))
-        .join("Repak-X")
+    crate::app_dir() // repakxtra: one data folder for every path
 }
 
 fn hero_cache_dir() -> PathBuf {

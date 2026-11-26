@@ -14,7 +14,7 @@ static READING: Mutex<()> = Mutex::new(());
 static SKIPPED: Mutex<Option<HashMap<String, (String, String)>>> = Mutex::new(None);
 
 fn dir() -> PathBuf {
-    dirs::config_dir().unwrap_or_else(|| PathBuf::from(".")).join("Repak-X")
+    crate::app_dir()
 }
 
 fn key(path: &Path) -> String {

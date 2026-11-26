@@ -23,11 +23,9 @@ use super::uasset_tool::{
 };
 use serde::Serialize;
 
-/// App data directory matching the rest of Repak-X: %APPDATA%/Repak-X
+/// App data directory matching the rest of the app
 fn vfx_app_dir() -> PathBuf {
-    dirs::config_dir()
-        .unwrap_or_else(|| PathBuf::from("."))
-        .join("Repak-X")
+    crate::app_dir() // repakxtra: one data folder for every path
 }
 
 // ============================================================================
@@ -498,7 +496,7 @@ fn is_in_managed_dir(path: &str) -> bool {
 /// - Uses GitHub Contents API with conditional `If-None-Match` (ETag) so a
 ///   cheap 304 response is the typical case after the first call.
 /// - Picks the depot file with the highest changelist number as "latest".
-/// - Downloads into `%APPDATA%/Repak-X/usmap/<filename>` and updates
+/// - Downloads into `%APPDATA%/repakxtra/usmap/<filename>` and updates
 ///   `VfxSettings` (path/sha/etag/filename) on success.
 /// - On an automatic check (`force = false`) a custom file the user picked
 ///   outside the managed directory is left alone — availability is only

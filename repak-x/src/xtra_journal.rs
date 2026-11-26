@@ -57,7 +57,7 @@ fn id(p: &Path) -> Option<(u64, u64)> {
 }
 
 fn dir() -> PathBuf {
-    dirs::config_dir().unwrap_or_else(|| PathBuf::from(".")).join("Repak-X").join("swap-journal")
+    crate::app_dir().join("swap-journal")
 }
 
 /// The plan on disk while a swap runs: dropped (the file removed) when the swap finished or undid itself.

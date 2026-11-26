@@ -687,7 +687,7 @@ pub(crate) async fn game_copies(game_paks: &str, usmap: &str, rels: &[String], w
 // file and USMAP, so a mod is decoded once.
 
 pub(crate) fn layout_store() -> PathBuf {
-    dirs::config_dir().unwrap_or_else(|| PathBuf::from(".")).join("Repak-X").join("repakxtra-vfx-layout.json")
+    crate::app_dir().join("repakxtra-vfx-layout.json")
 }
 
 /// The mod file, game build, mappings, and parser must all match before reusing a layout verdict.

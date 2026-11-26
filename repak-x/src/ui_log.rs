@@ -157,9 +157,7 @@ fn log_dir() -> std::path::PathBuf {
             return exe_dir.join("Logs");
         }
     }
-    dirs::config_dir()
-        .unwrap_or_else(|| std::path::PathBuf::from("."))
-        .join("Repak-X")
+    crate::app_dir() // repakxtra: one data folder for every path
 }
 
 /// Full path of the rolling application log, so the UI can offer to open it.

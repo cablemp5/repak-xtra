@@ -1,4 +1,4 @@
-//! repakxtra: Settings > Storage (custom/StorageCleanup.tsx). Frees the disk space repakxtra uses in %APPDATA%\Repak-X,
+//! repakxtra: Settings > Storage (custom/StorageCleanup.tsx). Frees the disk space repakxtra uses in %APPDATA%\repakxtra,
 //! one section at a time, picked by the player and confirmed. Only what repakxtra itself writes is listed: Repak X keeps
 //! its own files in the same folder, and settings, loadouts, and check results that remember a choice (safe off,
 //! Nothing to update) are never part of it. Two sections live elsewhere and may be in use while the app runs (the VFX
@@ -10,7 +10,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use walkdir::WalkDir;
 
-/// (id, folders and files under %APPDATA%\Repak-X). The frontend holds each one's name and warning.
+/// (id, folders and files under %APPDATA%\repakxtra). The frontend holds each one's name and warning.
 const SECTIONS: &[(&str, &[&str])] = &[
     ("previews", &["previews"]), // without previews\work, its own section (part_paths)
     ("preview-work", &["previews/work"]),

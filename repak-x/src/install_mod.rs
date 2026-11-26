@@ -403,8 +403,8 @@ fn find_mods_from_archive(path: &str) -> Vec<InstallableMod> {
 }
 
 pub fn write_install_debug(msg: &str) {
-    if let Some(config_dir) = dirs::config_dir() {
-        let debug_log = config_dir.join("Repak-X").join("install_debug.log");
+    {
+        let debug_log = crate::app_dir().join("install_debug.log"); // repakxtra: one data folder for every path
         let _ = std::fs::create_dir_all(debug_log.parent().unwrap());
         use std::io::Write;
         if let Ok(mut f) = std::fs::OpenOptions::new()
@@ -419,8 +419,8 @@ pub fn write_install_debug(msg: &str) {
 
 fn map_to_mods_internal(paths: &[PathBuf]) -> Vec<InstallableMod> {
     // Clear debug log
-    if let Some(config_dir) = dirs::config_dir() {
-        let debug_log = config_dir.join("Repak-X").join("install_debug.log");
+    {
+        let debug_log = crate::app_dir().join("install_debug.log"); // repakxtra: one data folder for every path
         let _ = std::fs::write(&debug_log, "");
     }
     write_install_debug(&format!(

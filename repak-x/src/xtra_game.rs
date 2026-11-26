@@ -1,6 +1,6 @@
 //! repakxtra: notices a game update while repakxtra is open or since it last ran (custom/gameUpdate.ts shows the toast).
 //! The game's newest container time (xtra_broken::game_updated) is compared with the last one the app showed, kept in
-//! %APPDATA%\Repak-X\repakxtra-game.json. The first run only stores it, so a fresh install shows no notice.
+//! %APPDATA%\repakxtra\repakxtra-game.json. The first run only stores it, so a fresh install shows no notice.
 
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
@@ -23,7 +23,7 @@ struct Seen {
 }
 
 fn store() -> PathBuf {
-    dirs::config_dir().unwrap_or_else(|| PathBuf::from(".")).join("Repak-X").join("repakxtra-game.json")
+    crate::app_dir().join("repakxtra-game.json")
 }
 
 fn load(store: &Path) -> Option<u64> {

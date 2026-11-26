@@ -1,6 +1,6 @@
 // repakxtra: loadouts and settings shared between the stable/test copies and the dev copy (dev.ps1). They run from
 // different addresses (the app's own, and http://localhost:5180), so each has its own localStorage; every repakxtra.*
-// entry also lives in %APPDATA%\Repak-X\webview-storage.json (xtra_storage.rs), and the newest save wins.
+// entry also lives in %APPDATA%\repakxtra\webview-storage.json (xtra_storage.rs), and the newest save wins.
 //   At start (once per session): a newer file replaces this copy's entries (the old ones go to webview-storage.backup.json
 //   first) and the window reloads once so every module reads them. While running: a change here is written to the file.
 //   A copy that starts empty with no file to load never writes, so it can't wipe another copy's loadouts.

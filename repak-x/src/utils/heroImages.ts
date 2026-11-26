@@ -2,7 +2,7 @@
  * Hero portrait store.
  *
  * Portraits are no longer bundled with the app — they live in the
- * rivals-resources repo and are cached in %APPDATA%/Repak-X/hero. This module
+ * rivals-resources repo and are cached in %APPDATA%/repakxtra/hero. This module
  * loads that cache once, keeps it in memory as `id -> file URL`, and lets
  * components read it synchronously the way the old `import.meta.glob` map did.
  *

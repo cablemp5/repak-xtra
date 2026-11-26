@@ -1,5 +1,5 @@
 //! repakxtra: repakxtra's saved webview data (its `repakxtra.*` localStorage keys: loadouts, groups, view settings),
-//! shared between the stable/test copies and the dev copy (dev.ps1) through %APPDATA%\Repak-X\webview-storage.json.
+//! shared between the stable/test copies and the dev copy (dev.ps1) through %APPDATA%\repakxtra\webview-storage.json.
 //! They run from different addresses, so each has its own localStorage; the newest save wins (custom/devStorage.ts).
 //! The file is `{"at": <ms>, "data": {...}}`; the first version wrote the bare `data` object, which still reads (at 1).
 //! Before a copy's own entries are replaced, they are kept in webview-storage.backup.json.

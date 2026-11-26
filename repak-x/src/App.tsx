@@ -1772,7 +1772,7 @@ function App() {
       // loadInitialData — left the old version stored and re-showed the
       // changelog on every launch, forever. Failing closed costs at most one
       // missed changelog, which is still reachable from Settings.
-      // The marker lives on disk (config_dir/Repak-X/last_seen_version.txt), not
+      // The marker lives on disk (config_dir/repakxtra/repakxtra_last_seen_version.txt), not
       // in localStorage. localStorage did not survive restarts for at least one
       // user, which re-armed this check on every launch; the on-disk config the
       // rest of the app uses persists for them.
