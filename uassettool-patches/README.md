@@ -10,9 +10,15 @@ take them out again (`apply.ps1`), so the submodule itself is never changed or f
 | `0002-faster-batch-json-and-detect.patch` | `batch_to_json` (only the VFX Updater calls it) writes unindented JSON straight into the file instead of building an indented string first. `detect_type` reads a batch's assets in parallel (as `batch_to_json` does), results in the same order. | 89 Niagara files: 17.2 s to 12.6 s, peak memory 1.9 GB to 0.7 GB, same values |
 | `0003-serve-keeps-game-containers-loaded.patch` | `serve`: the command line stays running and takes `extract_iostore_legacy` requests on stdin, keeping the game's 23 containers loaded while their files are unchanged (each request works on its own copy of the index, and no game file stays open between requests). Exits after 90 s idle. `xtra_uat_cli.rs` drives it. | A one-file extract 4.5 s to 0.2 s, a mod extract 5.2 s to 0.9 s, files byte for byte the same |
 
-0004 (one shared JSON contract resolver) and 0005 (`detect_type` reads headers only) were dropped with the move to
-upstream `06be1e6`, which has the same fixes (`342eac5`, `06be1e6`). 0002 now runs upstream's header-only read in
+0004 (one shared JSON contract resolver) and an earlier 0005 (`detect_type` reads headers only) were dropped with the
+move to upstream `06be1e6`, which has the same fixes (`342eac5`, `06be1e6`). 0002 now runs upstream's header-only read in
 its parallel loop.
+
+`0005-encrypted-output-stays.patch`: upstream `df7bf64` (in `f893e63`) took the `obfuscate` option out of
+`create_mod_iostore`, so its output is never encrypted. The install panel's Encrypt option sends it, and would have
+installed plain mods without a word. The JSON request takes `obfuscate` again and encrypts the IoStore with the game's
+key (upstream's own `IoStoreDeobfuscator.DefaultAesKey`, so the patch adds no copy of it), as before `f893e63`. The
+command line's `--obfuscate` stays removed (the app never packs through it).
 
 | `0006-faster-niagara-parse-and-json-members.patch` | Each element of a property array looked its type up again in the USMAP through the array's name and ancestry, which is the lookup the array itself just made: the array now hands its answer to its elements (`Usmap.ArrayHintName/Data`, thread-local, restored around nested arrays). And typed getters and setters for the members every property element carries (`UAssetContractResolver.CreateProperty`), which Newtonsoft otherwise reaches by reflection under NativeAOT. | 89 Niagara files in the app: 11.6 s to 9.6 s, then writing their JSON 33.7 to 25.7 CPU-seconds. JSON and rebuilt assets byte for byte the same |
 | `0007-serve-never-answers-from-a-half-loaded-game.patch` | A `serve` load that came back incomplete (a container's name map or the script objects could not be read) was not kept, but still answered the request it was loaded for, and without the script objects every class reads `__ScriptImport_<hash>__`. That request now loads its own, as a one-shot run does. The two reads that failed silently say why on stderr (`xtra_uat_cli.rs` logs them). | Found by review (2026-10-24), not reproduced |
@@ -21,11 +27,10 @@ its parallel loop.
 
 | `0011-cli-to-json-streams-unindented.patch` | The command line's `to_json` writes unindented JSON straight into the file, as `batch_to_json` does since 0002, instead of building an indented string first (a Niagara system's is up to 30 MB). The effect built-ins decode through it, one process per file, several at once. Same values, whitespace only. | 16 Niagara files, 8 one after another 8.0 s to 7.0 s, 8 at once 3.5 s to 2.8 s. The three effect built-ins built from it come out byte for byte the same |
 
-`0013-no-chunknames.patch`: companion PAKs no longer carry a `chunknames` entry. The game loads a mod with or without one
-(tested on a library with about 210 of them), and the empty companion PAK is the same 416 bytes RivalsFPS's Fix Mods writes,
-so new mods carry nothing an anti-cheat could object to. 0012's stripped-directory recovery also matches the companion's own
-`chunknames` and `patched_files` entries, which no game PAK lists, so such a mod reads unless it also carries its own loose files
-that no game PAK has (0012's existing limit).
+`0013-no-chunknames.patch`: upstream `f893e63` stopped writing the companion PAK's `chunknames` entry itself
+(`CompanionPakWriter`), which is what this patch used to do. What is left: 0012's stripped-directory recovery also matches
+the companion's own `chunknames` and `patched_files` entries, which no game PAK lists, so an older mod that carries them
+reads unless it also carries its own loose files that no game PAK has (0012's existing limit).
 
 `0014-malformed-files-fail-safely.patch`: a crafted or damaged mod file fails with an error instead of writing outside the
 output folder, closing the app, freezing it, or eating memory. Every pak and IoStore extract (the library's `extract_pak_all`,
@@ -82,12 +87,19 @@ still gets its own copy.
 
 ## Refreshing a patch
 
-When `build.ps1` says a patch no longer applies (the submodule moved to a newer upstream commit):
+When `build.ps1` says a patch no longer applies (the submodule moved to a newer upstream commit). `git apply --3way`
+alone fails here ("lacks the necessary blob"): a patch's base is the old pin plus the patches before it, which no commit
+holds. So rebuild that base as commits and let git rebase do the three-way merges:
 
-1. Apply what still applies by hand: `git -C UAssetToolRivals apply --3way uassettool-patches\<name>.patch`
-2. Fix the conflict in the submodule's files, then write the patch again from the submodule:
-   `git -C UAssetToolRivals diff -- <the files it touches> > uassettool-patches\<name>.patch`
-3. Take it out again: `git -C UAssetToolRivals apply --reverse uassettool-patches\<name>.patch`
+1. In `UAssetToolRivals`, on a temporary branch from the old pin, apply each patch in name order and commit it with the
+   patch's file name as the message.
+2. `git rebase --onto <new pin> <old pin> <that branch>`. Fix each conflict in the submodule's files, then
+   `git rebase --continue`.
+3. For each rebased commit whose old patch no longer applies on the commit before it, write the patch again:
+   `git diff <commit>~1 <commit> > ..\uassettool-patches\<name>.patch`. Leave the others as they are.
+4. Check the whole stack on a clean new pin (apply every patch in order), then switch the submodule back to the pin and
+   delete the temporary branches. `sync-upstream.ps1` runs `Test-UatBuild` (apply.ps1), which applies every patch and
+   builds both tools before it pushes.
 
 ## The command line's build flags
 

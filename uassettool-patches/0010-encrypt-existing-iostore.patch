@@ -1,14 +1,6 @@
---- a/src/UAssetTool/Program.cs
-+++ b/src/UAssetTool/Program.cs
-@@ -2793,6 +2793,8 @@
-                 "is_iostore_compressed" => IsIoStoreCompressed(request.FilePath),
-                 "is_iostore_encrypted" => IsIoStoreEncrypted(request.FilePath),
-                 "recompress_iostore" => RecompressIoStore(request.FilePath),
-+                "encrypt_iostore" => EncryptIoStore(request.FilePath, request.OutputPath),
-+                "encrypt_pak" => EncryptPak(request.FilePath, request.OutputPath),
-                 "extract_iostore" => ExtractIoStoreJson(request.FilePath, request.OutputPath, request.AesKey),
-                 "extract_iostore_legacy" => ExtractIoStoreLegacyJson(request.GamePaks, request.ModPath, request.OutputPath, request.FilterPatterns, request.AesKey, request.WithDeps),
-                 "extract_script_objects" => ExtractScriptObjectsJson(request.FilePath, request.OutputPath),
+diff --git a/src/UAssetTool/Encryption.cs b/src/UAssetTool/Encryption.cs
+new file mode 100644
+index 0000000..dc3637f
 --- /dev/null
 +++ b/src/UAssetTool/Encryption.cs
 @@ -0,0 +1,86 @@
@@ -98,9 +90,11 @@
 +        catch (Exception e) { return new UAssetResponse { Success = false, Message = e.Message }; }
 +    }
 +}
+diff --git a/src/UAssetTool/IoStore/IoStoreReader.cs b/src/UAssetTool/IoStore/IoStoreReader.cs
+index a26b73d..9664c72 100644
 --- a/src/UAssetTool/IoStore/IoStoreReader.cs
 +++ b/src/UAssetTool/IoStore/IoStoreReader.cs
-@@ -519,6 +519,7 @@
+@@ -519,6 +519,7 @@ public class IoStoreToc
  {
      public EIoStoreTocVersion Version { get; set; }
      public EIoContainerFlags ContainerFlags { get; set; }
@@ -108,7 +102,7 @@
      public uint CompressionBlockSize { get; set; }
      public List<FIoChunkId> Chunks { get; set; } = new();
      public List<FIoOffsetAndLengthReadable> ChunkOffsetLengths { get; set; } = new();
-@@ -589,6 +590,7 @@
+@@ -589,6 +590,7 @@ public class IoStoreToc
          toc.CompressionBlockSize = reader.ReadUInt32();
          uint directoryIndexSize = reader.ReadUInt32();
          uint partitionCount = reader.ReadUInt32();
@@ -116,3 +110,16 @@
          ulong containerId = reader.ReadUInt64();
          toc.ContainerId = new FIoContainerId(containerId);
          byte[] encryptionKeyGuid = reader.ReadBytes(16);
+diff --git a/src/UAssetTool/Program.cs b/src/UAssetTool/Program.cs
+index 0e827b2..ab1b8c5 100644
+--- a/src/UAssetTool/Program.cs
++++ b/src/UAssetTool/Program.cs
+@@ -3000,6 +3000,8 @@ public partial class Program
+                 "is_iostore_encrypted" => IsIoStoreEncrypted(request.FilePath),
+                 "deobfuscate_iostore" => DeobfuscateIoStoreJson(request.FilePath, request.OutputPath, request.AesKey),
+                 "recompress_iostore" => RecompressIoStore(request.FilePath),
++                "encrypt_iostore" => EncryptIoStore(request.FilePath, request.OutputPath),
++                "encrypt_pak" => EncryptPak(request.FilePath, request.OutputPath),
+                 "extract_iostore" => ExtractIoStoreJson(request.FilePath, request.OutputPath, request.AesKey),
+                 "extract_iostore_legacy" => ExtractIoStoreLegacyJson(request.GamePaks, request.ModPath, request.OutputPath, request.FilterPatterns, request.AesKey, request.WithDeps),
+                 "extract_script_objects" => ExtractScriptObjectsJson(request.FilePath, request.OutputPath),

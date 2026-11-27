@@ -1,0 +1,62 @@
+diff --git a/src/UAssetTool/Program.cs b/src/UAssetTool/Program.cs
+index 82d311a..d911e3a 100644
+--- a/src/UAssetTool/Program.cs
++++ b/src/UAssetTool/Program.cs
+@@ -2992,7 +2992,7 @@ public partial class Program
+                 "extract_iostore" => ExtractIoStoreJson(request.FilePath, request.OutputPath, request.AesKey),
+                 "extract_iostore_legacy" => ExtractIoStoreLegacyJson(request.GamePaks, request.ModPath, request.OutputPath, request.FilterPatterns, request.AesKey, request.WithDeps),
+                 "extract_script_objects" => ExtractScriptObjectsJson(request.FilePath, request.OutputPath),
+-                "create_mod_iostore" => CreateModIoStoreJson(request.OutputPath, request.InputDir, request.InputPak, request.MountPoint, request.Compress, request.AesKey, request.Parallel, request.Hybrid),
++                "create_mod_iostore" => CreateModIoStoreJson(request.OutputPath, request.InputDir, request.InputPak, request.MountPoint, request.Compress, request.AesKey, request.Parallel, request.Obfuscate, request.Hybrid),
+                 
+                 // Additional CLI-equivalent operations for parity
+                 "dump" => DumpAssetJson(request.FilePath, request.UsmapPath),
+@@ -7287,13 +7287,15 @@ public partial class Program
+     /// Converts .uasset/.uexp files to Zen format and creates .utoc/.ucas/.pak bundle.
+     /// Supports direct .pak file input (input_pak) as an alternative to input_dir.
+     /// </summary>
+-    public static UAssetResponse CreateModIoStoreJson(string? outputPath, string? inputDir, string? inputPak, string? mountPoint, bool compress, string? aesKey, bool parallel, bool hybrid = false)
++    public static UAssetResponse CreateModIoStoreJson(string? outputPath, string? inputDir, string? inputPak, string? mountPoint, bool compress, string? aesKey, bool parallel, bool obfuscate, bool hybrid = false)
+     {
+         if (string.IsNullOrEmpty(outputPath))
+             return new UAssetResponse { Success = false, Message = "Output path is required" };
+ 
+-        // aesKey only ever decrypts an encrypted input PAK. Output is never encrypted.
++        // aesKey only ever decrypts an encrypted input PAK. repakxtra: the output is encrypted with the game's key only
++        // when obfuscate asks for it (the install panel's Encrypt option), as before upstream dropped the option.
+         string? inputPakAesKey = aesKey;
++        string? outputEncryptionKey = obfuscate ? IoStore.IoStoreDeobfuscator.DefaultAesKey : null;
+ 
+         string? effectiveInputDir = inputDir;
+         string? tempExtractDir = null;
+@@ -7453,13 +7455,15 @@ public partial class Program
+             Console.Error.WriteLine($"[CreateModIoStore] Parallel conversion done. Writing IoStore...");
+             Console.Error.Flush();
+             
+-            // Phase 2: Sequential write to IoStore. Output is never encrypted.
++            // Phase 2: Sequential write to IoStore, encrypted only when obfuscate asks for it.
+             using var ioStoreWriter = new IoStore.IoStoreWriter(
+                 utocPath,
+                 IoStore.EIoStoreTocVersion.PerfectHashWithOverflow,
+                 IoStore.EIoContainerHeaderVersion.NoExportInfo,
+                 mount,
+-                compress);
++                compress,
++                obfuscate,
++                outputEncryptionKey);
+             
+             var filePaths = new List<string>();
+             int converted = 0;
+@@ -7850,6 +7854,12 @@ public class UAssetRequest
+     public bool Parallel { get; set; } = false;
+     
+ 
++    /// <summary>
++    /// repakxtra: encrypt the output IoStore with the game's AES key (blocks extraction tools like FModel)
++    /// </summary>
++    [JsonPropertyName("obfuscate")]
++    public bool Obfuscate { get; set; } = false;
++
+     /// <summary>
+     /// Hybrid bundle: route Unreal assets into the IoStore (.ucas) as usual, but embed any
+     /// non-Unreal files (e.g. .bnk/.wem audio, raw .png, .bin) as loose entries in the
