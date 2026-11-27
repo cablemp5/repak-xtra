@@ -21,7 +21,18 @@ pub fn edit() -> Result<OwnedRwLockReadGuard<()>, String> {
 
 /// Every other mod change waits while `what` (a snapshot, a restore, a storage cleanup) runs, and it waits for them.
 pub fn alone(what: &str) -> Result<OwnedRwLockWriteGuard<()>, String> {
-    gate().try_write_owned().map_err(|_| format!("A mod change is still running. Try {what} again when it is done."))
+    let g = gate().try_write_owned().map_err(|_| format!("A mod change is still running. Try {what} again when it is done."))?;
+    STARTED.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+    Ok(g)
+}
+
+static STARTED: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+/// None while a snapshot, restore, or storage cleanup runs, else a number that changes whenever one starts: equal before
+/// and after a folder walk, the walk saw no such change (xtra_respace.rs).
+pub fn era() -> Option<u64> {
+    let g = gate();
+    let read = g.try_read(); // held while reading the count, so none can start in between
+    read.ok().map(|_held| STARTED.load(std::sync::atomic::Ordering::SeqCst))
 }
 
 #[cfg(test)]
@@ -37,5 +48,14 @@ mod tests {
         assert!(g.clone().try_read_owned().is_err());
         drop(encryption);
         assert!(g.try_read_owned().is_ok());
+    }
+
+    #[test]
+    fn era_is_none_during_a_restore_and_moves_on_after() {
+        let before = era().unwrap();
+        let restore = alone("a restore").unwrap();
+        assert_eq!(era(), None);
+        drop(restore);
+        assert!(era().unwrap() > before, "a walk that spanned the restore must not match");
     }
 }

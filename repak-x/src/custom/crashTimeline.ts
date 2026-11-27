@@ -64,7 +64,9 @@ export function timelineRows(t: Timeline): TimelineRow[] {
     // one scan relinks in two places (tags and previews in Rust, loadouts here): one row, each name once
     if (last && e.kind === 'relink' && last.kind === 'relink' && e.t - last.t <= 60) {
       const ok = [...new Set([...last.ok, ...e.ok])]
-      merged[merged.length - 1] = { ...last, t: e.t, ok, n_ok: Math.max(last.n_ok ?? 0, e.n_ok ?? 0, ok.length) } // ok holds at most 50 names
+      // each side names at most 50 but counts them all: both counts, less the names both name
+      const both = last.ok.filter(n => e.ok.includes(n)).length
+      merged[merged.length - 1] = { ...last, t: e.t, ok, n_ok: Math.max(last.n_ok ?? 0, last.ok.length) + Math.max(e.n_ok ?? 0, e.ok.length) - both }
       continue
     }
     if (last && (e.kind === 'enable' || e.kind === 'disable' || e.kind === 'delete') && last.kind === e.kind && e.t - last.t <= 60) {

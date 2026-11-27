@@ -36,11 +36,15 @@ pub fn pairs<'a>(stored: impl IntoIterator<Item = &'a String>, installed: &[Stri
     out
 }
 
-/// After a full scan of `root` found `paths`: tags, previews, and install records follow mods renamed this way. The
+/// After a full scan of `root` found `paths` (`era`: xtra_mutation::era before the walk): tags, previews, and install records follow mods renamed this way. The
 /// mods whose tags or previews followed go in the activity log (install records are not shown anywhere).
-pub fn relink(root: &Path, paths: &[PathBuf], state: &Mutex<crate::AppState>) {
-    // a backup restore or storage cleanup changes the folder under the scan: the next scan relinks
+pub fn relink(root: &Path, paths: &[PathBuf], state: &Mutex<crate::AppState>, era: Option<u64>) {
+    // a snapshot restore or storage cleanup that ran during the walk (`era` is from before it) or runs now changes the
+    // folder under the scan: the next scan relinks
     let Ok(_editing) = crate::xtra_mutation::edit() else { return };
+    if era.is_none() || crate::xtra_mutation::era() != era {
+        return;
+    }
     let keys = |key: fn(&Path) -> String| paths.iter().map(|p| key(p)).collect::<Vec<String>>();
 
     let tag_keys = keys(crate::get_mod_key);
@@ -59,13 +63,13 @@ pub fn relink(root: &Path, paths: &[PathBuf], state: &Mutex<crate::AppState>) {
     };
 
     let preview_keys = keys(crate::xtra_previews::mod_key);
-    // a key's other forms ("<key>@2") move with it: never while a mod named like one is installed
+    // a key's other forms ("<key>@2") move with it: never while a mod named like one of the old or new forms is installed
     let form = |k: &str| k.rsplit_once('@').is_some_and(|(_, n)| !n.is_empty() && n.bytes().all(|c| c.is_ascii_digit()));
     let wanted = || -> Vec<(String, String)> {
         let stored: Vec<String> = crate::xtra_previews::list_mod_previews().into_iter().filter(|k| !form(k)).collect();
         pairs(&stored, &preview_keys)
             .into_iter()
-            .filter(|(old, _)| !preview_keys.iter().any(|k| k.strip_prefix(old.as_str()).is_some_and(|r| r.starts_with('@') && form(r))))
+            .filter(|(old, new)| !preview_keys.iter().any(|k| [old, new].iter().any(|o| k.strip_prefix(o.as_str()).is_some_and(|r| r.starts_with('@') && form(r)))))
             .collect()
     };
     let mut previews = Vec::new();
