@@ -84,23 +84,33 @@ type Members = { on: string[]; scope: string[] }
 /** One loadout's keys brought up to date: member keys normalized and moved ones followed, legacy names with exactly one
  *  installed match turned into its member key. A member no installed mod has follows the one mod Repak X renamed it to
  *  (its spaces as "_", same folder; xtra_respace.rs does tags and previews), and that mod's name goes in
- *  `relinked`. Ambiguous and missing ones stay as they are (shown, never dropped, never matched). Returns the same
- *  object when nothing changes, so a second run is a no-op. Pure, apart from filling `relinked`. */
+ *  `relinked`. Two members that would become one mod relink neither. Ambiguous and missing ones stay as they are
+ *  (shown, never dropped, never matched). Returns the same object when nothing changes, so a second run is a no-op.
+ *  Pure, apart from filling `relinked`. */
 export function resolveKeys<T extends Members>(l: T, byName: Map<string, string[]>, moved = new Map<string, string>(), relinked?: Set<string>): T {
   const installed = (key: string) => byName.get(memberName(key))?.includes(key) ?? false
-  const fix = (k: string) => {
+  const current = (k: string) => moved.get(memberKey(k)) ?? memberKey(k)
+  // the one installed mod a gone member was renamed to, its spaces as "_" (in its own folder for a member key)
+  const renamedTo = (k: string) => {
     if (isMemberKey(k)) {
-      const c = moved.get(memberKey(k)) ?? memberKey(k), name = memberName(c), to = `${memberFolder(c)}${SEP}${respaced(name)}`
-      if (to === c || installed(c) || !installed(to)) return c
-      relinked?.add(respaced(name))
-      return to
+      const c = current(k), to = `${memberFolder(c)}${SEP}${respaced(memberName(c))}`
+      return to !== c && !installed(c) && installed(to) ? to : undefined
     }
+    if (byName.has(bare(k))) return undefined
+    const hits = byName.get(respaced(bare(k))) ?? []
+    return hits.length === 1 ? hits[0] : undefined
+  }
+  const claims = new Map<string, Set<string>>()
+  for (const k of new Set([...l.on, ...l.scope])) {
+    const to = renamedTo(k)
+    if (to) claims.set(to, (claims.get(to) ?? new Set()).add(canonKey(k)))
+  }
+  const fix = (k: string) => {
+    const to = renamedTo(k)
+    if (to && claims.get(to)?.size === 1) { relinked?.add(memberName(to)); return to }
+    if (isMemberKey(k)) return current(k)
     const hits = byName.get(bare(k)) ?? []
-    if (hits.length) return hits.length === 1 ? hits[0] : k
-    const renamed = byName.get(respaced(bare(k))) ?? []
-    if (renamed.length !== 1) return k
-    relinked?.add(respaced(bare(k)))
-    return renamed[0]
+    return hits.length === 1 ? hits[0] : k
   }
   const swap = (keys: string[]) => [...new Set(keys.map(fix))]
   const on = swap(l.on), scope = swap(l.scope)
@@ -141,5 +151,6 @@ if (import.meta.env.DEV) {
   console.assert(resolveKeys(L(['a|My Mod', 'b|My Mod']), ren, undefined, got).on.join() === 'a|My_Mod,b|My Mod' && [...got].join() === 'My_Mod', 'a renamed member follows in its folder, not into another')
   console.assert(resolveKeys(L(['Two Up']), ren).on.join() === 'Two Up' && resolveKeys(L(['My Mod']), ren).on.join() === 'a|My_Mod', 'a legacy name: one match relinks, two leave it')
   console.assert(resolveKeys(L(['|Kept', '|Kept ']), ren).on.join() === '|Kept,|Kept_' && respaced('a\tb c') === 'a_b_c', 'an installed member stays, tabs count')
+  console.assert(resolveKeys(L(['|Dup One', '|Dup One']), keysByName(['|Dup_One'])).on.join() === '|Dup One,|Dup One', 'two members that would become one mod both stay')
   console.assert(movesBetween(['a|Skin', 'b|Skin'], ['c|Skin', 'd|Skin']).size === 0 && movesBetween(['a|Skin'], []).size === 0, 'two same-named moves, or a delete, are not followed')
 }

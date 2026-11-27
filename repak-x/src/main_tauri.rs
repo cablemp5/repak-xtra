@@ -709,7 +709,8 @@ async fn get_pak_files(state: State<'_, Arc<Mutex<AppState>>>) -> Result<Vec<Mod
     let mut mods = Vec::new();
 
     // Scan root ~mods directory and all subdirectories recursively (no depth limit)
-    for entry in WalkDir::new(&game_path).into_iter().filter_entry(crate::xtra_bundle::library_walk) /* repakxtra */.filter_map(|e| e.ok()) {
+    let mut walk_failed = false; // repakxtra: a folder it could not read hides mods, so nothing relinks then
+    for entry in WalkDir::new(&game_path).into_iter().filter_entry(crate::xtra_bundle::library_walk) /* repakxtra */.filter_map(|e| e.map_err(|_| walk_failed = true).ok()) {
         // repakxtra: a .pak.off set (RivalsFPS's off state) becomes this app's off state here, so every feature knows it
         let adopted = entry.file_type().is_file().then(|| crate::xtra_offfiles::adopt(entry.path())).flatten();
         let path = adopted.as_deref().unwrap_or(entry.path());
@@ -798,8 +799,10 @@ async fn get_pak_files(state: State<'_, Arc<Mutex<AppState>>>) -> Result<Vec<Mod
     }
 
     // repakxtra: tags, previews, and install records follow mods Repak X renamed with "_" for spaces
-    let paths: Vec<PathBuf> = mods.iter().map(|m| m.path.clone()).collect();
-    if crate::xtra_respace::relink(game_path, &paths, state.inner()) {
+    if !walk_failed {
+        let paths: Vec<PathBuf> = mods.iter().map(|m| m.path.clone()).collect();
+        crate::xtra_respace::relink(game_path, &paths, state.inner());
+        // tags as they are now: this scan or another one running beside it (VFX Updater, Galacta) may have moved some
         let s = state.lock().unwrap();
         for m in &mut mods {
             m.custom_tags = s.mod_tags.get(&get_mod_key(&m.path)).cloned().unwrap_or_default();

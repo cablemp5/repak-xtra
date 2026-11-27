@@ -37,7 +37,7 @@ function words(e: ActivityEvent): string {
     case 'update': return `${e.detail === 'partial' ? 'Partly updated' : e.detail === 'decrypted' ? 'Decrypted' : 'Updated'} ${subject(e.ok, nOk)} in the Mod Updater`
     case 'update_failed': return `Mod Updater could not update ${subject(e.failed, nFailed)}, which stayed as ${nFailed === 1 ? 'it was' : 'they were'}`
     case 'loadout': return nOk ? `Turned ${e.detail || 'a loadout'} (${count(nOk, 'mod')} switched)${failedPart}` : `Could not turn ${e.detail || 'a loadout'}${failedPart}`
-    case 'relink': return `Kept what was saved for ${subject(e.ok, nOk)} (tags, loadouts, or previews) after the spaces in ${nOk === 1 ? 'its name' : 'their names'} were changed to "_"`
+    case 'relink': return `Kept the tags, loadouts, or previews of ${subject(e.ok, nOk)} after the spaces in ${nOk === 1 ? 'its name' : 'their names'} were changed to "_"`
     case 'app_update': return `${APP_NAME} updated to ${e.detail}`
     case 'game_update': return `The game updated${e.detail ? ` (build ${e.detail})` : ''}`
     default: return e.kind
@@ -64,7 +64,7 @@ export function timelineRows(t: Timeline): TimelineRow[] {
     // one scan relinks in two places (tags and previews in Rust, loadouts here): one row, each name once
     if (last && e.kind === 'relink' && last.kind === 'relink' && e.t - last.t <= 60) {
       const ok = [...new Set([...last.ok, ...e.ok])]
-      merged[merged.length - 1] = { ...last, t: e.t, ok, n_ok: ok.length }
+      merged[merged.length - 1] = { ...last, t: e.t, ok, n_ok: Math.max(last.n_ok ?? 0, e.n_ok ?? 0, ok.length) } // ok holds at most 50 names
       continue
     }
     if (last && (e.kind === 'enable' || e.kind === 'disable' || e.kind === 'delete') && last.kind === e.kind && e.t - last.t <= 60) {

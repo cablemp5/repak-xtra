@@ -36,9 +36,9 @@ pub fn pairs<'a>(stored: impl IntoIterator<Item = &'a String>, installed: &[Stri
     out
 }
 
-/// After a scan of `root` found `paths`: tags, previews, and install records follow mods renamed this way. Returns
-/// whether tags moved (the scan's rows then read them again). Records each relinked mod in the activity log.
-pub fn relink(root: &Path, paths: &[PathBuf], state: &Mutex<crate::AppState>) -> bool {
+/// After a full scan of `root` found `paths`: tags, previews, and install records follow mods renamed this way. The
+/// mods whose tags or previews followed go in the activity log (install records are not shown anywhere).
+pub fn relink(root: &Path, paths: &[PathBuf], state: &Mutex<crate::AppState>) {
     let keys = |key: fn(&Path) -> String| paths.iter().map(|p| key(p)).collect::<Vec<String>>();
 
     let tag_keys = keys(crate::get_mod_key);
@@ -59,7 +59,11 @@ pub fn relink(root: &Path, paths: &[PathBuf], state: &Mutex<crate::AppState>) ->
     let preview_keys = keys(crate::xtra_previews::mod_key);
     let stored: Vec<String> = crate::xtra_previews::list_mod_previews().into_iter().filter(|k| !k.contains('@')).collect();
     let mut previews = Vec::new();
-    let wanted = pairs(&stored, &preview_keys);
+    // a key's other forms move with it (<key>@2): never while a mod of that name is installed
+    let wanted: Vec<(String, String)> = pairs(&stored, &preview_keys)
+        .into_iter()
+        .filter(|(old, _)| !preview_keys.iter().any(|k| k.strip_prefix(old.as_str()).is_some_and(|r| r.starts_with('@'))))
+        .collect();
     // a preview run holds the folder: these wait for the next scan
     if let (false, Ok(hold)) = (wanted.is_empty(), crate::xtra_previews::reserve_rename()) {
         for (old, new) in wanted {
@@ -74,23 +78,26 @@ pub fn relink(root: &Path, paths: &[PathBuf], state: &Mutex<crate::AppState>) ->
         crate::ui_log::send("repakxtra-previews-relinked", &previews); // previews.tsx reloads those keys
     }
 
-    let sources: HashSet<String> = crate::xtra_dupes::relink(root, paths).into_iter().collect();
+    let sources = crate::xtra_dupes::relink(root, paths).len();
 
     let (tags_to, previews_to): (HashSet<&str>, HashSet<&str>) =
         (tags.iter().map(|p| p.1.as_str()).collect(), previews.iter().map(|p| p.1.as_str()).collect());
     let mut names: Vec<String> = paths
         .iter()
         .enumerate()
-        .filter(|(i, p)| tags_to.contains(tag_keys[*i].as_str()) || previews_to.contains(preview_keys[*i].as_str()) || sources.contains(&crate::xtra_dupes::key(root, p)))
+        .filter(|(i, _)| tags_to.contains(tag_keys[*i].as_str()) || previews_to.contains(preview_keys[*i].as_str()))
         .map(|(_, p)| crate::xtra_dupes::bare_name(p))
         .collect();
     names.sort();
     names.dedup();
+    if !names.is_empty() || sources > 0 {
+        let shown = names.iter().take(20).cloned().collect::<Vec<_>>().join(", ");
+        let more = if names.len() > 20 { format!(" and {} more", names.len() - 20) } else { String::new() };
+        crate::ui_log::info("Mods", format!("Relinked {} mod(s) and {sources} install record(s) renamed outside the app with \"_\" for spaces: {shown}{more}", names.len()));
+    }
     if !names.is_empty() {
-        crate::ui_log::info("Mods", format!("Relinked {} mod(s) whose spaces became \"_\" outside the app: {}", names.len(), names.join(", ")));
         crate::xtra_activity::record("relink", &names, &[], "");
     }
-    !tags.is_empty()
 }
 
 #[cfg(test)]
