@@ -39,6 +39,8 @@ pub fn pairs<'a>(stored: impl IntoIterator<Item = &'a String>, installed: &[Stri
 /// After a full scan of `root` found `paths`: tags, previews, and install records follow mods renamed this way. The
 /// mods whose tags or previews followed go in the activity log (install records are not shown anywhere).
 pub fn relink(root: &Path, paths: &[PathBuf], state: &Mutex<crate::AppState>) {
+    // a backup restore or storage cleanup changes the folder under the scan: the next scan relinks
+    let Ok(_editing) = crate::xtra_mutation::edit() else { return };
     let keys = |key: fn(&Path) -> String| paths.iter().map(|p| key(p)).collect::<Vec<String>>();
 
     let tag_keys = keys(crate::get_mod_key);
@@ -57,16 +59,21 @@ pub fn relink(root: &Path, paths: &[PathBuf], state: &Mutex<crate::AppState>) {
     };
 
     let preview_keys = keys(crate::xtra_previews::mod_key);
-    let stored: Vec<String> = crate::xtra_previews::list_mod_previews().into_iter().filter(|k| !k.contains('@')).collect();
+    // a key's other forms ("<key>@2") move with it: never while a mod named like one is installed
+    let form = |k: &str| k.rsplit_once('@').is_some_and(|(_, n)| !n.is_empty() && n.bytes().all(|c| c.is_ascii_digit()));
+    let wanted = || -> Vec<(String, String)> {
+        let stored: Vec<String> = crate::xtra_previews::list_mod_previews().into_iter().filter(|k| !form(k)).collect();
+        pairs(&stored, &preview_keys)
+            .into_iter()
+            .filter(|(old, _)| !preview_keys.iter().any(|k| k.strip_prefix(old.as_str()).is_some_and(|r| r.starts_with('@') && form(r))))
+            .collect()
+    };
     let mut previews = Vec::new();
-    // a key's other forms move with it (<key>@2): never while a mod of that name is installed
-    let wanted: Vec<(String, String)> = pairs(&stored, &preview_keys)
-        .into_iter()
-        .filter(|(old, _)| !preview_keys.iter().any(|k| k.strip_prefix(old.as_str()).is_some_and(|r| r.starts_with('@'))))
-        .collect();
-    // a preview run holds the folder: these wait for the next scan
-    if let (false, Ok(hold)) = (wanted.is_empty(), crate::xtra_previews::reserve_rename()) {
-        for (old, new) in wanted {
+    // looked at again under the hold, so a scan beside this one never moves the same previews twice; a preview run
+    // holds the folder, and these wait for the next scan
+    let hold = if wanted().is_empty() { None } else { crate::xtra_previews::reserve_rename().ok() };
+    if let Some(hold) = hold {
+        for (old, new) in wanted() {
             match crate::xtra_previews::migrate_key_with_hold(&hold, &old, &new, false) {
                 Ok(Some(_)) => previews.push((old, new)),
                 Ok(None) => {}

@@ -100,8 +100,10 @@ export function resolveKeys<T extends Members>(l: T, byName: Map<string, string[
     const hits = byName.get(respaced(bare(k))) ?? []
     return hits.length === 1 ? hits[0] : undefined
   }
-  const claims = new Map<string, Set<string>>()
-  for (const k of new Set([...l.on, ...l.scope])) {
+  // a target the loadout already holds is another mod (Repak X skips a name that is taken): it counts as a claim
+  const all = new Set([...l.on, ...l.scope])
+  const claims = new Map([...all].filter(isMemberKey).map(k => [current(k), new Set([current(k)])]))
+  for (const k of all) {
     const to = renamedTo(k)
     if (to) claims.set(to, (claims.get(to) ?? new Set()).add(canonKey(k)))
   }
@@ -152,5 +154,7 @@ if (import.meta.env.DEV) {
   console.assert(resolveKeys(L(['Two Up']), ren).on.join() === 'Two Up' && resolveKeys(L(['My Mod']), ren).on.join() === 'a|My_Mod', 'a legacy name: one match relinks, two leave it')
   console.assert(resolveKeys(L(['|Kept', '|Kept ']), ren).on.join() === '|Kept,|Kept_' && respaced('a\tb c') === 'a_b_c', 'an installed member stays, tabs count')
   console.assert(resolveKeys(L(['|Dup One', '|Dup One']), keysByName(['|Dup_One'])).on.join() === '|Dup One,|Dup One', 'two members that would become one mod both stay')
+  const held = resolveKeys({ on: ['|Held One'], scope: ['|Held One', '|Held_One'] }, keysByName(['|Held_One']))
+  console.assert(held.on.join() === '|Held One' && held.scope.join() === '|Held One,|Held_One', 'a gone member never takes over a mod the loadout already holds')
   console.assert(movesBetween(['a|Skin', 'b|Skin'], ['c|Skin', 'd|Skin']).size === 0 && movesBetween(['a|Skin'], []).size === 0, 'two same-named moves, or a delete, are not followed')
 }

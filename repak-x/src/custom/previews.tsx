@@ -139,6 +139,8 @@ export const refreshPreviewsAfterRename = (oldKey: string, newKey: string) => re
 const refreshPreviewsAfterRenames = (pairs: [string, string][]) => {
   const moved = pairs.filter(([from, to]) => from && to && from !== to)
   if (!moved.length) return
+  const ko = moved.filter(([from]) => koKeys.has(from)) // a KO preview stays one under its new key
+  if (ko.length) { ko.forEach(([from, to]) => { koKeys.delete(from); koKeys.add(to) }); localStorage.setItem(KO_KEYS, JSON.stringify([...koKeys])) }
   for (const base of moved.flat()) {
     revs.delete(base)
     dropCached(base)
@@ -157,7 +159,7 @@ const refreshPreviewsAfterRenames = (pairs: [string, string][]) => {
   }).catch(() => notify())
 }
 // a scan moved the previews of mods renamed outside the app (spaces to "_", xtra_respace.rs) to their new names
-listen<[string, string][]>('repakxtra-previews-relinked', e => refreshPreviewsAfterRenames(e.payload))
+listen<[string, string][]>('repakxtra-previews-relinked', e => refreshPreviewsAfterRenames(e.payload)).catch(() => undefined)
 /** A character's other forms (Magik's Darkchylde, Hulk's other two), or an animation mod's other emotes: <key>@2, <key>@3 beside <key>. */
 export const formKeys = (key: string) => [2, 3, 4, 5, 6, 7, 8].map(n => `${key}@${n}`).filter(k => revs.has(k))
 // No generator on this PC (a friend's copy without the preview kit): Generate buttons stay hidden, existing previews still show
