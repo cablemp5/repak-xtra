@@ -151,6 +151,8 @@ export const refreshPreviewsAfterRename = (oldKey: string, newKey: string) => {
     notify()
   }).catch(() => notify())
 }
+// a scan moved the previews of mods renamed outside the app (spaces to "_", xtra_respace.rs) to their new names
+listen<[string, string][]>('repakxtra-previews-relinked', e => e.payload.forEach(([from, to]) => refreshPreviewsAfterRename(from, to)))
 /** A character's other forms (Magik's Darkchylde, Hulk's other two), or an animation mod's other emotes: <key>@2, <key>@3 beside <key>. */
 export const formKeys = (key: string) => [2, 3, 4, 5, 6, 7, 8].map(n => `${key}@${n}`).filter(k => revs.has(k))
 // No generator on this PC (a friend's copy without the preview kit): Generate buttons stay hidden, existing previews still show

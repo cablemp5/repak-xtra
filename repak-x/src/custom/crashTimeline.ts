@@ -14,8 +14,8 @@ export const crashTimeline = (id: string) => invoke<Timeline>('xtra_crash_timeli
 /** What a timeline that could not be read says (the report is gone, or the history file could not be read). */
 export const UNREADABLE = "This crash's history could not be read."
 
-/** Records an operation the frontend finished (a loadout switch, a Mod Updater result) for What changed? */
-export const recordActivity = (kind: 'loadout' | 'update' | 'update_failed', ok: string[], failed: string[] = [], detail = '', started?: number) =>
+/** Records an operation the frontend finished (a loadout switch, a Mod Updater result, relinked members) for What changed? */
+export const recordActivity = (kind: 'loadout' | 'update' | 'update_failed' | 'relink', ok: string[], failed: string[] = [], detail = '', started?: number) =>
   invoke('xtra_activity_record', { kind, ok, failed, detail, started: started ?? null }).catch(() => {})
 
 const names = (list: string[], total = list.length, max = 2) => { const shown = list.slice(0, max); return total <= shown.length ? shown.join(', ') : `${shown.join(', ')} and ${total - shown.length} more` }
@@ -37,6 +37,7 @@ function words(e: ActivityEvent): string {
     case 'update': return `${e.detail === 'partial' ? 'Partly updated' : e.detail === 'decrypted' ? 'Decrypted' : 'Updated'} ${subject(e.ok, nOk)} in the Mod Updater`
     case 'update_failed': return `Mod Updater could not update ${subject(e.failed, nFailed)}, which stayed as ${nFailed === 1 ? 'it was' : 'they were'}`
     case 'loadout': return nOk ? `Turned ${e.detail || 'a loadout'} (${count(nOk, 'mod')} switched)${failedPart}` : `Could not turn ${e.detail || 'a loadout'}${failedPart}`
+    case 'relink': return `Kept the tags, loadouts, and previews of ${subject(e.ok, nOk)} after the spaces in ${nOk === 1 ? 'its name' : 'their names'} were changed to "_"`
     case 'app_update': return `${APP_NAME} updated to ${e.detail}`
     case 'game_update': return `The game updated${e.detail ? ` (build ${e.detail})` : ''}`
     default: return e.kind
@@ -58,6 +59,12 @@ export function timelineRows(t: Timeline): TimelineRow[] {
       const on = (x: ActivityEvent) => x.kind === 'switch' ? Number(x.detail.split('/')[0]) : x.kind === 'enable' ? Math.max(x.n_ok ?? 0, x.ok.length) : 0
       const off = (x: ActivityEvent) => x.kind === 'switch' ? Number(x.detail.split('/')[1]) : x.kind === 'disable' ? Math.max(x.n_ok ?? 0, x.ok.length) : 0
       merged[merged.length - 1] = { ...last, kind: 'switch', t: e.t, ok: [...last.ok, ...e.ok], failed: [], n_ok: undefined, detail: `${on(last) + on(e)}/${off(last) + off(e)}` }
+      continue
+    }
+    // one scan relinks in two places (tags and previews in Rust, loadouts here): one row, each name once
+    if (last && e.kind === 'relink' && last.kind === 'relink' && e.t - last.t <= 60) {
+      const ok = [...new Set([...last.ok, ...e.ok])]
+      merged[merged.length - 1] = { ...last, t: e.t, ok, n_ok: ok.length }
       continue
     }
     if (last && (e.kind === 'enable' || e.kind === 'disable' || e.kind === 'delete') && last.kind === e.kind && e.t - last.t <= 60) {

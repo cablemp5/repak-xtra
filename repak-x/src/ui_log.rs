@@ -114,6 +114,13 @@ pub fn emit(level: LogLevel, scope: &str, message: impl Into<String>) {
     }
 }
 
+/// repakxtra: any event to the frontend, through the handle `init` stored (code without a window, such as a scan).
+pub fn send<S: Serialize + Clone>(event: &str, payload: S) {
+    if let Some(app) = APP.lock().ok().and_then(|g| g.clone()) {
+        let _ = app.emit(event, payload);
+    }
+}
+
 pub fn debug(scope: &str, message: impl Into<String>) {
     emit(LogLevel::Debug, scope, message);
 }

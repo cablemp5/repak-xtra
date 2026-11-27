@@ -193,7 +193,7 @@ fn record_from(kind: &str, ok: &[String], failed: &[String], detail: &str, from:
 /// began.
 #[tauri::command(async)]
 pub fn xtra_activity_record(kind: String, ok: Vec<String>, failed: Vec<String>, detail: Option<String>, started: Option<u64>) -> Result<(), String> {
-    if !["loadout", "update", "update_failed"].contains(&kind.as_str()) { return Err(format!("not an activity kind: {kind}")); }
+    if !["loadout", "update", "update_failed", "relink"].contains(&kind.as_str()) { return Err(format!("not an activity kind: {kind}")); }
     record_from(&kind, &ok, &failed, detail.as_deref().unwrap_or(""), started.unwrap_or(0));
     Ok(())
 }

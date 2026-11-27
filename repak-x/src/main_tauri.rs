@@ -6,6 +6,7 @@
 mod asset_explorer;
 mod xtra_classify; // repakxtra: extra mod types, Project Galacta check
 mod xtra_dupes; // repakxtra: same-content installs and Check Conflicts' Duplicates
+mod xtra_respace; // repakxtra: data follows mods Repak X renamed (spaces to "_")
 mod xtra_unpacked; // repakxtra: a dropped archive is unpacked once
 mod xtra_activity; // repakxtra: what changed before a crash (installs, on and off, updates)
 mod xtra_ops; // repakxtra: game open, file in use, and name taken, one dialog each
@@ -793,6 +794,15 @@ async fn get_pak_files(state: State<'_, Arc<Mutex<AppState>>>) -> Result<Vec<Mod
                 character_name: None,
                 skin_name: None,
             });
+        }
+    }
+
+    // repakxtra: tags, previews, and install records follow mods Repak X renamed with "_" for spaces
+    let paths: Vec<PathBuf> = mods.iter().map(|m| m.path.clone()).collect();
+    if crate::xtra_respace::relink(game_path, &paths, state.inner()) {
+        let s = state.lock().unwrap();
+        for m in &mut mods {
+            m.custom_tags = s.mod_tags.get(&get_mod_key(&m.path)).cloned().unwrap_or_default();
         }
     }
 
