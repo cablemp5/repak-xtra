@@ -37,7 +37,7 @@ function words(e: ActivityEvent): string {
     case 'update': return `${e.detail === 'partial' ? 'Partly updated' : e.detail === 'decrypted' ? 'Decrypted' : 'Updated'} ${subject(e.ok, nOk)} in the Mod Updater`
     case 'update_failed': return `Mod Updater could not update ${subject(e.failed, nFailed)}, which stayed as ${nFailed === 1 ? 'it was' : 'they were'}`
     case 'loadout': return nOk ? `Turned ${e.detail || 'a loadout'} (${count(nOk, 'mod')} switched)${failedPart}` : `Could not turn ${e.detail || 'a loadout'}${failedPart}`
-    case 'relink': return `Kept the tags, loadouts, and previews of ${subject(e.ok, nOk)} after the spaces in ${nOk === 1 ? 'its name' : 'their names'} were changed to "_"`
+    case 'relink': return `Kept what was saved for ${subject(e.ok, nOk)} (tags, loadouts, or previews) after the spaces in ${nOk === 1 ? 'its name' : 'their names'} were changed to "_"`
     case 'app_update': return `${APP_NAME} updated to ${e.detail}`
     case 'game_update': return `The game updated${e.detail ? ` (build ${e.detail})` : ''}`
     default: return e.kind
