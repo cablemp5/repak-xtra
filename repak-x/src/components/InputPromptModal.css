@@ -220,6 +220,7 @@
     gap: 0.5rem;
     font-size: var(--fs-base);
     font-weight: 600;
+    width: 100%;
 }
 
 .prompt-option-badge {
@@ -230,10 +231,6 @@
     font-weight: 500;
     color: var(--prompt-accent, var(--accent-primary));
     background: color-mix(in srgb, var(--prompt-accent, var(--accent-primary)), transparent 85%);
-}
-
-.prompt-option-label {
-    width: 100%;
 }
 
 .prompt-option-detail {

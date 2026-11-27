@@ -55,6 +55,7 @@ const InputPromptModal = ({
 }: InputPromptModalProps) => {
     const [value, setValue] = useState(initialValue);
     const inputRef = useRef<HTMLInputElement | null>(null);
+    const firstOptionRef = useRef<HTMLButtonElement | null>(null); // choice mode: focus lands here, so Esc works at once
 
     // Reset value and focus input when modal opens
     useEffect(() => {
@@ -64,6 +65,7 @@ const InputPromptModal = ({
             setTimeout(() => {
                 inputRef.current?.focus();
                 inputRef.current?.select();
+                firstOptionRef.current?.focus();
             }, 100);
         }
     }, [isOpen, initialValue]);
@@ -128,8 +130,8 @@ const InputPromptModal = ({
                                 <>
                                     {description && <p className="prompt-description">{description}</p>}
                                     {children}
-                                    {options.map(o => (
-                                        <button key={o.value} type="button" className="prompt-option" onClick={() => onConfirm(o.value)}>
+                                    {options.map((o, i) => (
+                                        <button key={o.value} ref={i === 0 ? firstOptionRef : undefined} type="button" className="prompt-option" onClick={() => onConfirm(o.value)}>
                                             <span className="prompt-option-label">{o.label}</span>
                                             {o.detail && <span className="prompt-option-detail">{o.detail}</span>}
                                         </button>
