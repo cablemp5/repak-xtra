@@ -57,6 +57,12 @@ pub fn alone(what: &str) -> Result<Held<OwnedRwLockWriteGuard<()>>, String> {
     gate().try_write_owned().map(held).map_err(|_| format!("A mod change is still running. Try {what} again when it is done."))
 }
 
+/// Keeps snapshots, restores, and cleanups out without counting as a mod change: for work that changes no mod file (a
+/// relink of saved data), so scans beside it still see a quiet era.
+pub fn reading() -> Option<OwnedRwLockReadGuard<()>> {
+    gate().try_read_owned().ok()
+}
+
 /// None while any mod change runs, else a number that changes whenever one starts: equal before and after a folder
 /// walk, no mod change (a toggle, an update, a restore) ran during it, so the walk saw no half-done one (xtra_respace.rs).
 pub fn era() -> Option<u64> {
@@ -92,6 +98,11 @@ mod tests {
         let toggle = edit().unwrap();
         assert_eq!(era(), None, "an ordinary change (a VFX update, a toggle) counts too");
         drop(toggle);
-        assert!(era().unwrap() > after_restore);
+        let quiet = era().unwrap();
+        assert!(quiet > after_restore);
+        let relinking = reading().unwrap();
+        assert_eq!(era(), Some(quiet), "a relink beside a scan does not hold that scan back");
+        assert!(alone("a restore").is_err(), "but no restore starts under it");
+        drop(relinking);
     }
 }

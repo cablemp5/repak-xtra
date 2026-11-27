@@ -713,7 +713,7 @@ async fn get_pak_files(state: State<'_, Arc<Mutex<AppState>>>) -> Result<Vec<Mod
 
     // Scan root ~mods directory and all subdirectories recursively (no depth limit)
     let mut walk_failed = false; // repakxtra: a folder it could not read hides mods, so nothing relinks then
-    let era = crate::xtra_mutation::era(); // repakxtra: and a restore or cleanup during the walk
+    let era = crate::xtra_mutation::era(); // repakxtra: and any mod change during the walk
     for entry in WalkDir::new(&game_path).into_iter().filter_entry(crate::xtra_bundle::library_walk) /* repakxtra */.filter_map(|e| e.map_err(|_| walk_failed = true).ok()) {
         // repakxtra: a .pak.off set (RivalsFPS's off state) becomes this app's off state here, so every feature knows it
         let adopted = entry.file_type().is_file().then(|| crate::xtra_offfiles::adopt(entry.path())).flatten();

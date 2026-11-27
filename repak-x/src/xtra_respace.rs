@@ -41,12 +41,12 @@ pub fn pairs<'a>(stored: impl IntoIterator<Item = &'a String>, installed: &[Stri
 /// could not look (then loadouts wait too).
 pub fn relink(root: &Path, paths: &[PathBuf], state: &Mutex<crate::AppState>, era: Option<u64>) -> bool {
     // a mod change (a restore, a VFX update moving a file aside, a toggle) that ran during the walk (`era` is from before
-    // it) or runs now may have left the walk a half-done folder: the next scan relinks. Holding a change of its own then
-    // keeps restores and cleanups out until it is done.
+    // it) or runs now may have left the walk a half-done folder: the next scan relinks. Holding the gate
+    // keeps restores and cleanups out until it is done, without counting as one (scans beside it stay quiet).
+    let Some(_reading) = crate::xtra_mutation::reading() else { return false };
     if era.is_none() || crate::xtra_mutation::era() != era {
         return false;
     }
-    let Ok(_editing) = crate::xtra_mutation::edit() else { return false };
     let keys = |key: fn(&Path) -> String| paths.iter().map(|p| key(p)).collect::<Vec<String>>();
 
     let tag_keys = keys(crate::get_mod_key);
