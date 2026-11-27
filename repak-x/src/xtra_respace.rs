@@ -40,12 +40,13 @@ pub fn pairs<'a>(stored: impl IntoIterator<Item = &'a String>, installed: &[Stri
 /// mods whose tags or previews followed go in the activity log (install records are not shown anywhere). False when it
 /// could not look (then loadouts wait too).
 pub fn relink(root: &Path, paths: &[PathBuf], state: &Mutex<crate::AppState>, era: Option<u64>) -> bool {
-    // a snapshot restore or storage cleanup that ran during the walk (`era` is from before it) or runs now changes the
-    // folder under the scan: the next scan relinks
-    let Ok(_editing) = crate::xtra_mutation::edit() else { return false };
+    // a mod change (a restore, a VFX update moving a file aside, a toggle) that ran during the walk (`era` is from before
+    // it) or runs now may have left the walk a half-done folder: the next scan relinks. Holding a change of its own then
+    // keeps restores and cleanups out until it is done.
     if era.is_none() || crate::xtra_mutation::era() != era {
         return false;
     }
+    let Ok(_editing) = crate::xtra_mutation::edit() else { return false };
     let keys = |key: fn(&Path) -> String| paths.iter().map(|p| key(p)).collect::<Vec<String>>();
 
     let tag_keys = keys(crate::get_mod_key);

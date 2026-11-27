@@ -11,7 +11,7 @@ import { isTyping } from './hotkeys'
 import { modalOpen } from './dialogFocus'
 import { MOD_LOADERS } from './edition'
 import { recordActivity } from './crashTimeline'
-import { canonKey, isMemberKey, keysByName, memberKey, memberName, movesBetween, nameKey, resolveKeys } from './loadoutIdentity'
+import { canonKey, contestedTargets, isMemberKey, keysByName, memberKey, memberName, movesBetween, nameKey, resolveKeys } from './loadoutIdentity'
 export { memberName, nameKey } from './loadoutIdentity'
 
 export type Mod = { path: string; enabled?: boolean; modified_date?: number }
@@ -235,16 +235,19 @@ export function syncLoadoutKeys(mods: Mod[]) {
   const moved = lastKeys ? movesBetween(lastKeys, keys) : new Map<string, string>()
   lastKeys = keys
   if (!keys.length) return
-  // a scan Rust could not relink from (a folder it could not read, a restore during it) is no ground for loadouts either
-  const byName = keysByName(keys), relinked = mods.some(m => (m as { relink_held?: boolean }).relink_held) ? undefined : new Set<string>()
+  // a scan Rust could not relink from (a folder it could not read, a mod change during it) is no ground for loadouts
+  // either: no relink, and legacy names wait for a full scan
+  const held = mods.some(m => (m as { relink_held?: boolean }).relink_held)
+  const byName = keysByName(keys), relinked = held ? undefined : new Set<string>()
   try {
-    const list = readLoadouts(), next = list.map(l => resolveKeys(l, byName, moved, relinked))
+    const list = readLoadouts(), items = parseDeleted(LIVE.getItem(DELETED))
+    const opts = { relinked, legacy: !held, contested: contestedTargets([...list, ...items.map(r => r.loadout)], byName, moved) }
+    const next = list.map(l => resolveKeys(l, byName, moved, opts))
     if (next.some((l, i) => l !== list[i])) {
       if (list.some(hasLegacy) && !localStorage.getItem(BACKUP)) localStorage.setItem(BACKUP, JSON.stringify(list.map(l => ({ ...l, image: undefined }))))
       writeLoadouts(next)
     }
-    const items = parseDeleted(LIVE.getItem(DELETED))
-    const fixed = items.map(r => { const l = resolveKeys(r.loadout, byName, moved, relinked); return l === r.loadout ? r : { ...r, loadout: l } })
+    const fixed = items.map(r => { const l = resolveKeys(r.loadout, byName, moved, opts); return l === r.loadout ? r : { ...r, loadout: l } })
     if (fixed.some((r, i) => r !== items[i])) { putDeleted(LIVE, fixed); notify() }
     if (relinked?.size) recordActivity('relink', [...relinked]) // What changed? folds it into the scan's Rust row
   } catch (e) {
