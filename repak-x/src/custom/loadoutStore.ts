@@ -236,8 +236,8 @@ export function syncLoadoutKeys(mods: Mod[]) {
   // either: no relink, no moves (compared with the last full scan instead), and legacy names wait for a full scan
   const held = mods.some(m => (m as { relink_held?: boolean }).relink_held)
   const moved = lastKeys && !held ? movesBetween(lastKeys, keys) : new Map<string, string>()
-  if (!held) lastKeys = keys
   if (!keys.length) return
+  if (!held) lastKeys = keys
   const byName = keysByName(keys)
   try {
     const list = readLoadouts()
@@ -245,8 +245,9 @@ export function syncLoadoutKeys(mods: Mod[]) {
     try { items = parseDeleted(LIVE.getItem(DELETED)) } catch (e) { console.warn('Recently deleted loadouts not read:', e) }
     // a renamed file is contested across every loadout that can come back: unreadable Recently deleted defers renames
     const relinked = held || !items ? undefined : new Set<string>()
-    const now = Date.now(), restorable = (items ?? []).filter(r => r.expires > now).map(r => r.loadout)
-    const opts = { relinked, legacy: !held, contested: contestedTargets([...list, ...restorable], byName, moved) }
+    // only records that can come back (not expired, whole): the rest are swept and never restored
+    const now = Date.now(), restorable = (r: DeletedLoadout) => r.expires > now && Array.isArray(r.loadout.scope)
+    const opts = { relinked, legacy: !held, contested: contestedTargets([...list, ...(items ?? []).filter(restorable).map(r => r.loadout)], byName, moved) }
     const next = list.map(l => resolveKeys(l, byName, moved, opts))
     if (next.some((l, i) => l !== list[i])) {
       if (list.some(hasLegacy) && !localStorage.getItem(BACKUP)) localStorage.setItem(BACKUP, JSON.stringify(list.map(l => ({ ...l, image: undefined }))))
@@ -254,7 +255,7 @@ export function syncLoadoutKeys(mods: Mod[]) {
     }
     if (items) {
       const all = items
-      const fixed = all.map(r => { const l = resolveKeys(r.loadout, byName, moved, opts); return l === r.loadout ? r : { ...r, loadout: l } })
+      const fixed = all.map(r => { if (!restorable(r)) return r; const l = resolveKeys(r.loadout, byName, moved, opts); return l === r.loadout ? r : { ...r, loadout: l } })
       if (fixed.some((r, i) => r !== all[i])) { putDeleted(LIVE, fixed); notify() }
     }
     if (relinked?.size) recordActivity('relink', [...relinked]) // What changed? folds it into the scan's Rust row
