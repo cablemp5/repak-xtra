@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { MdDownload, MdOpenInNew, MdClose } from 'react-icons/md';
+import { MdDownload, MdOpenInNew, MdClose, MdCheckCircle } from 'react-icons/md';
 import './UpdateAppModal.css';
 
 type UpdateInfo = {
@@ -76,7 +76,7 @@ function renderChangelogBlocks(raw: string): React.ReactNode {
                                 width: '5px',
                                 height: '5px',
                                 borderRadius: '50%',
-                                background: 'var(--accent-primary, #4a9eff)'
+                                background: 'var(--accent-primary)'
                             }}
                         />
                         {renderInlineMarkdown(item)}
@@ -158,8 +158,8 @@ export default function UpdateAppModal({
                     onClick={(e: React.MouseEvent<HTMLDivElement>) => e.stopPropagation()}
                 >
                     <div className="modal-header">
-                        <h2>🎉 Update Available!</h2>
-                        <button className="modal-close" onClick={onClose}>
+                        <h2>Update Available</h2>
+                        <button aria-label="Close" className="modal-close" onClick={onClose}>
                             <MdClose />
                         </button>
                     </div>
@@ -191,7 +191,7 @@ export default function UpdateAppModal({
 
                         {isReady && (
                             <p className="update-ready">
-                                ✅ Download complete! Click "Install & Restart" to apply the update.
+                                <MdCheckCircle aria-hidden="true" /> Download complete. Click "Install & Restart" to apply the update.
                             </p>
                         )}
                     </div>
@@ -203,6 +203,7 @@ export default function UpdateAppModal({
                                     className="btn-secondary"
                                     onClick={() => onOpenReleasePage(updateInfo.url || '')}
                                     disabled={!updateInfo.url}
+                                    title={!updateInfo.url ? 'This update has no release page link' : undefined}
                                 >
                                     <MdOpenInNew /> View Release
                                 </button>

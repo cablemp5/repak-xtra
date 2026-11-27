@@ -182,7 +182,7 @@ export default function VfxUpdaterPanel() {
     try {
       const text = logs.map(l => `[${l.time}] ${l.message}`).join('\n');
       await navigator.clipboard.writeText(text);
-      setCopyFeedback('Copied!');
+      setCopyFeedback('Copied');
       setTimeout(() => setCopyFeedback(null), 1500);
     } catch (e) {
       console.error('Failed to copy logs', e);
@@ -473,7 +473,7 @@ export default function VfxUpdaterPanel() {
             modPath: pakPath,
             folderId: effectiveFolderId,
           });
-          addLog(`Mod moved to ${selectedFolderId} successfully!`, "success");
+          addLog(`Mod moved to ${selectedFolderId}`, "success");
         } catch (e) {
           console.error("Error moving:", e);
           addLog(`Failed to move mod to folder: ${opText(e)}`, "error"); // repakxtra: its own window has no shared dialog, the log says why
@@ -703,7 +703,7 @@ export default function VfxUpdaterPanel() {
           >
             <div className="vfx-complete-header">
               <MdCheckCircle />
-              <h2>Update Completed Successfully!</h2>
+              <h2>Update complete</h2>
             </div>
             <div className="vfx-complete-content">
               <p>Select an output destination for the updated mod:</p>
@@ -744,7 +744,7 @@ export default function VfxUpdaterPanel() {
             onClick={handleCopyLogs}
             title="Copy all logs"
           >
-            {copyFeedback ? <span style={{ fontSize: '10px', marginRight: '4px' }}>Copied!</span> : null}
+            {copyFeedback ? <span style={{ fontSize: '10px', marginRight: '4px' }}>Copied</span> : null}
             <BiCopyAlt size={16} />
           </button>
         )}

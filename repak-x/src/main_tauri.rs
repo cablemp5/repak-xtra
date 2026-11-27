@@ -2434,9 +2434,10 @@ fn quick_organize_impl(
             };
 
             if let Err(e) = extract_result {
-                error!("[QuickOrganize] Failed to extract archive: {}", e);
-                log(format!("[QuickOrganize] ERROR: Failed to extract archive: {}", e));
-                failures.push(format!("Could not unpack {}: {}", path_str, e));
+                let msg = crate::install_mod::install_mod_logic::archives::describe_extract_error(&path, &e.to_string());
+                error!("[QuickOrganize] {}", msg);
+                log(format!("[QuickOrganize] ERROR: {}", msg));
+                failures.push(msg);
                 continue;
             }
 
@@ -7859,8 +7860,9 @@ fn compute_mod_details(
             .collect();
         utoc_count = Some(utoc_files.len()); // repakxtra
 
-        // For Hybrid detection: Check if the .pak file also contains raw assets
-        if path.exists() && path.extension().unwrap_or_default() == "pak" {
+        // For Hybrid detection: Check if the .pak file also contains raw assets.
+        // Any enabled/disabled name, so a turned-off hybrid mod still reads as one.
+        if path.exists() {
             if let Ok(listing) = uasset_toolkit::list_pak(
                 path.to_str().unwrap_or_default(),
                 Some(crate::install_mod::AES_KEY_HEX),

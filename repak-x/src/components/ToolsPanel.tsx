@@ -48,6 +48,8 @@ type ToolCardConfig = {
     onClick: () => void;
     busy: boolean;
     disabled?: boolean;
+    /** Shown as a tooltip while disabled */
+    disabledReason?: string;
     /** Persistent state indicator, for the tools that have one */
     state?: { tone: StatusTone; label: string };
     /** Transient result message, takes over the status line while present */
@@ -275,6 +277,7 @@ export default function ToolsPanel({ onClose, onOpenAssetExplorer, projectGalact
             onClick: handleToggleSigBypasser,
             busy: isTogglingSigBypasser,
             disabled: isTogglingSigBypasser || sigBypasserState === 'NotInstalled',
+            disabledReason: sigBypasserState === 'NotInstalled' ? "Sig Bypasser isn't installed in your game folder" : undefined,
             state: sigBypasserState === 'Enabled'
                 ? { tone: 'on', label: 'On' }
                 : sigBypasserState === 'Disabled'
@@ -290,6 +293,7 @@ export default function ToolsPanel({ onClose, onOpenAssetExplorer, projectGalact
             onClick: handleToggleProjectGalacta,
             busy: isTogglingGalacta,
             disabled: isTogglingGalacta || !projectGalactaMod,
+            disabledReason: !projectGalactaMod ? "Project Galacta isn't in your mods folder" : undefined,
             state: !projectGalactaMod
                 ? { tone: 'unknown', label: 'Not Found' }
                 : projectGalactaMod.enabled
@@ -402,6 +406,7 @@ export default function ToolsPanel({ onClose, onOpenAssetExplorer, projectGalact
                                             className={`tool-card ${tool.busy ? 'is-busy' : ''}`}
                                             onClick={tool.onClick}
                                             disabled={tool.disabled}
+                                            title={tool.disabled ? tool.disabledReason : undefined}
                                         >
                                             <span className="tool-card-icon">
                                                 <Icon />

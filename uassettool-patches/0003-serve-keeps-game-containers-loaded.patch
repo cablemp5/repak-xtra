@@ -1,5 +1,5 @@
 diff --git a/src/UAssetTool/Program.cs b/src/UAssetTool/Program.cs
-index 71e62fa..42c77ff 100644
+index c1b548f..82d311a 100644
 --- a/src/UAssetTool/Program.cs
 +++ b/src/UAssetTool/Program.cs
 @@ -61,6 +61,7 @@ public partial class Program
@@ -9,8 +9,8 @@ index 71e62fa..42c77ff 100644
 +                "serve" => CliServe(),
                  "is_iostore_compressed" => CliIsIoStoreCompressed(args),
                  "is_iostore_encrypted" => CliIsIoStoreEncrypted(args),
-                 "extract_script_objects" => CliExtractScriptObjects(args),
-@@ -1392,7 +1393,167 @@ public partial class Program
+                 "deobfuscate_iostore" => CliDeobfuscateIoStore(args),
+@@ -1467,7 +1468,167 @@ public partial class Program
      /// Extract IoStore packages to legacy .uasset/.uexp format using native C# conversion.
      /// Usage: UAssetTool extract_iostore_legacy <utoc_path> <output_dir> [--script-objects <path>]
      /// </summary>
@@ -179,7 +179,7 @@ index 71e62fa..42c77ff 100644
      {
          if (args.Length < 3)
          {
-@@ -1492,51 +1653,10 @@ public partial class Program
+@@ -1567,51 +1728,10 @@ public partial class Program
          
          try
          {
@@ -236,7 +236,7 @@ index 71e62fa..42c77ff 100644
              if (!string.IsNullOrEmpty(globalUtocPath) && File.Exists(globalUtocPath))
              {
 diff --git a/src/UAssetTool/ZenPackage/FZenPackageContext.cs b/src/UAssetTool/ZenPackage/FZenPackageContext.cs
-index c419465..9d9fd97 100644
+index 2d935c3..265bece 100644
 --- a/src/UAssetTool/ZenPackage/FZenPackageContext.cs
 +++ b/src/UAssetTool/ZenPackage/FZenPackageContext.cs
 @@ -37,6 +37,9 @@ public class FZenPackageContext : IDisposable
@@ -265,7 +265,7 @@ index c419465..9d9fd97 100644
                  }
              }
          }
-@@ -1020,6 +1025,52 @@ public class FZenPackageContext : IDisposable
+@@ -1043,6 +1048,52 @@ public class FZenPackageContext : IDisposable
          _exportHashLookup.Clear();
      }
  

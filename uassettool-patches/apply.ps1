@@ -45,6 +45,32 @@ function Get-UatReadId {
     $bytes = [Security.Cryptography.SHA256]::Create().ComputeHash([Text.Encoding]::UTF8.GetBytes($parts -join "`n"))
     -join ($bytes | ForEach-Object { $_.ToString('x2') })
 }
+# Builds the library and the command line from the patched submodule into a temporary folder, then deletes it: proof that
+# a new submodule pin or a patch change still applies and builds. sync-upstream.ps1 runs it before it pushes (CI skips the
+# submodule, so CI stays green on a pin that breaks a patch). Throws on the first failure.
+function Test-UatBuild {
+    $uat = Join-Path $PSScriptRoot '..\UAssetToolRivals\src\UAssetTool' # not $sub: Use-UatPatches has its own
+    $out = Join-Path ([IO.Path]::GetTempPath()) "repakxtra-uat-check-$PID"
+    # the NativeAOT link step looks for vswhere, which lives in the Visual Studio Installer folder (as in build.ps1)
+    $vsInstaller = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer"
+    if ($env:PATH -notlike "*$vsInstaller*") { $env:PATH = "$vsInstaller;$env:PATH" }
+    $builds = @(
+        @('UAssetToolNative.csproj', 'lib'),
+        @('UAssetTool.csproj', 'cli', '-p:PublishAot=true', '-p:TrimMode=partial', '-p:PublishSingleFile=false', '-p:IlcOptimizationPreference=Speed')
+    )
+    try {
+        Use-UatPatches {
+            foreach ($b in $builds) {
+                Remove-Item "$uat\obj", "$uat\bin" -Recurse -Force -ErrorAction SilentlyContinue
+                & dotnet publish "$uat\$($b[0])" -c Release -r win-x64 -p:DebugType=none -p:DebugSymbols=false -o "$out\$($b[1])" @($b | Select-Object -Skip 2)
+                if ($LASTEXITCODE -ne 0) { throw "UAssetToolRivals\src\UAssetTool\$($b[0]) did not build with the patches applied." }
+            }
+        }
+    } finally {
+        Remove-Item "$uat\obj", "$uat\bin", $out -Recurse -Force -ErrorAction SilentlyContinue
+    }
+    Write-Host 'UAssetTool builds with every patch applied.' -ForegroundColor Green
+}
 function Write-UatSource {
     $id = "$(Get-UatSourceId)`n$(Get-UatReadId)"
     foreach ($dir in @('target\uassettool', 'target\uassettool-cli')) { [IO.File]::WriteAllText((Join-Path (Join-Path $PSScriptRoot '..') "$dir\UAssetTool.source"), $id) }

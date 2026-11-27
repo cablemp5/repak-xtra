@@ -53,3 +53,7 @@
 - Removed redundant full-on dots from Loadout pages and widened the spacing before row remove buttons
 - Moved repakxtra's data into its own folder, %APPDATA%\repakxtra, so Repak X can no longer empty its Recently deleted or overwrite its files (to go back to an older version, move everything in it except hero, hero_cache.json, Usmap, character_data.json, character_data_last_check.txt, and vfx_settings.json back into %APPDATA%\Repak-X first)
 - Fixed tags, loadouts, previews, and install records losing their mod when Repak X 2.4.0 replaced the spaces in its file name with "_": they now follow the renamed mod when exactly one mod matches
+- Changed to Repak X v2.4.0's asset tools, so the first launch after this update reads every mod again once, in the background, which takes a while with a large library
+- Fixed a password-protected archive showing a vague unpack error: it now says to unpack it yourself and install the files inside
+- Fixed a turned-off hybrid mod not being marked Hybrid
+- Changed small wording from Repak X v2.4.0 (no exclamation marks on Copied and install messages), and the Sig Bypasser and Project Galacta tools now say why when they are off

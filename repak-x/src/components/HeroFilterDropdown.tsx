@@ -154,6 +154,8 @@ const HeroFilterItem = ({ hero, selectedCharacters, onToggle }: HeroFilterItemPr
             <div className="hero-filter-row">
                 <button
                     className="hero-expand-btn"
+                    aria-label={isExpanded ? 'Collapse skins' : 'Expand skins'}
+                    aria-expanded={isExpanded}
                     onClick={handleExpandClick}
                     style={{ visibility: hasSkins || hero.baseModCount > 0 ? 'visible' : 'hidden' }}
                 >

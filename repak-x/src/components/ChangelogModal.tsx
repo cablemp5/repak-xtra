@@ -124,8 +124,8 @@ export default function ChangelogModal({
                     onClick={(e: React.MouseEvent<HTMLDivElement>) => e.stopPropagation()}
                 >
                     <div className="modal-header">
-                        <h2>📋 What's New in v{version}</h2>
-                        <button className="modal-close" onClick={onClose}>
+                        <h2>What's New in v{version}</h2>
+                        <button aria-label="Close" className="modal-close" onClick={onClose}>
                             <MdClose />
                         </button>
                     </div>

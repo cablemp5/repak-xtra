@@ -413,6 +413,7 @@ const ContextMenu = ({ x, y, mod, folder, onClose, onAssignTag, onNewTag, onMove
                     onClose()
                   }}
                   title={`Delete "${tag}" tag`}
+                  aria-label={`Delete "${tag}" tag`}
                 >
                   ×
                 </button>

@@ -713,7 +713,7 @@ function App() {
           setDropTargetFolder(null)
           alert.warning(
             'Cannot Quick-Organize Folder Mods',
-            'Folder mods with UAssets need to be processed. Please drop them on the Install Mods area.',
+            'Folder mods with UAssets need to be processed. Drop them on the Install Mods area.',
             { duration: 8000 }
           )
           return
@@ -1530,7 +1530,7 @@ function App() {
     const unlistenSame = listen('xtra_install_same', (event: any) => stableShowSame(event.payload))
     const unlistenComplete = listen('install_complete', (event: any) => {
       // repakxtra: install_complete also ends a failed install, so its own result toast says how it went
-      if (!event.payload?.failed?.length && !event.payload?.all_failed) { uiLog.success('Install', 'Installation complete'); setStatus('Installation complete!') }
+      if (!event.payload?.failed?.length && !event.payload?.all_failed) { uiLog.success('Install', 'Installation complete'); setStatus('Installation complete') }
       setIsModsLoading(false)
       setModLoadingProgress(0)
       void showMods(listAfterInstall(event.payload?.request)) // repakxtra: the listing the install flow's own step reads too
@@ -3480,7 +3480,7 @@ function App() {
         else loadMods()
         loadFolders()
         loadTags()
-        setStatus(failedNames.length ? `Installed ${plural(modsWithSettings.filter(done).length, 'mod')}, ${failedNames.length} failed` : 'Mods installed successfully!') // repakxtra
+        setStatus(failedNames.length ? `Installed ${plural(modsWithSettings.filter(done).length, 'mod')}, ${failedNames.length} failed` : 'Mods installed') // repakxtra
 
         // Reset DRP status to Idle (or effective mod count if we could easily get it)
         // For now, Idle is safe and functionally correct

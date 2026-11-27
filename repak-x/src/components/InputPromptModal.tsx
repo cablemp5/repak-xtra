@@ -14,8 +14,12 @@ type InputPromptModalProps = {
     onCancel: () => void;
     initialValue?: string;
     accentColor?: string;
-    mode?: 'input' | 'confirm';
+    mode?: 'input' | 'confirm' | 'choice';
     description?: string;
+    /** 'choice' mode: one button per option, clicking it confirms with its value */
+    options?: { value: string; label: React.ReactNode; detail?: string }[];
+    /** 'choice' mode: extra content between the description and the options */
+    children?: React.ReactNode;
 };
 
 /**
@@ -45,10 +49,13 @@ const InputPromptModal = ({
     initialValue = '',
     accentColor = '',
     mode = 'input',
-    description = ''
+    children,
+    description = '',
+    options = []
 }: InputPromptModalProps) => {
     const [value, setValue] = useState(initialValue);
     const inputRef = useRef<HTMLInputElement | null>(null);
+    const firstOptionRef = useRef<HTMLButtonElement | null>(null); // choice mode: focus lands here, so Esc works at once
 
     // Reset value and focus input when modal opens
     useEffect(() => {
@@ -58,6 +65,7 @@ const InputPromptModal = ({
             setTimeout(() => {
                 inputRef.current?.focus();
                 inputRef.current?.select();
+                firstOptionRef.current?.focus();
             }, 100);
         }
     }, [isOpen, initialValue]);
@@ -111,14 +119,25 @@ const InputPromptModal = ({
                                 {icon}
                             </div>
                             <h3>{title}</h3>
-                            <button className="prompt-close" onClick={onCancel}>
+                            <button aria-label="Close" className="prompt-close" onClick={onCancel}>
                                 <VscClose />
                             </button>
                         </div>
 
                         {/* Content */}
                         <form onSubmit={handleSubmit} className="prompt-content">
-                            {mode === 'confirm' ? (
+                            {mode === 'choice' ? (
+                                <>
+                                    {description && <p className="prompt-description">{description}</p>}
+                                    {children}
+                                    {options.map((o, i) => (
+                                        <button key={o.value} ref={i === 0 ? firstOptionRef : undefined} type="button" className="prompt-option" onClick={() => onConfirm(o.value)}>
+                                            <span className="prompt-option-label">{o.label}</span>
+                                            {o.detail && <span className="prompt-option-detail">{o.detail}</span>}
+                                        </button>
+                                    ))}
+                                </>
+                            ) : mode === 'confirm' ? (
                                 <p className="prompt-description">{description}</p>
                             ) : (
                                 <input
@@ -141,13 +160,16 @@ const InputPromptModal = ({
                                 >
                                     {cancelText}
                                 </button>
-                                <button
-                                    type="submit"
-                                    className="prompt-btn prompt-btn-confirm"
-                                    disabled={mode === 'input' && !value.trim()}
-                                >
-                                    {confirmText}
-                                </button>
+                                {mode !== 'choice' && (
+                                    <button
+                                        type="submit"
+                                        className="prompt-btn prompt-btn-confirm"
+                                        disabled={mode === 'input' && !value.trim()}
+                                        title={mode === 'input' && !value.trim() ? 'Type a name first' : undefined}
+                                    >
+                                        {confirmText}
+                                    </button>
+                                )}
                             </div>
                         </form>
                     </motion.div>
