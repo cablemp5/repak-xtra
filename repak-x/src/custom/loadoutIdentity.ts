@@ -73,7 +73,9 @@ export function movesBetween(before: string[], after: string[]) {
  *  the user picks), for a member no longer installed the same name in other folders (moved while the app was closed).
  *  Pure. */
 export const candidatesFor = (key: string, byName: Map<string, string[]>) => {
-  const hits = byName.get(bare(memberName(key))) ?? []
+  const name = bare(memberName(key))
+  // a legacy name Repak X renamed (its spaces as "_") is never relinked by itself, but can be picked
+  const hits = [...new Set([...(byName.get(name) ?? []), ...(isMemberKey(key) ? [] : byName.get(respaced(name)) ?? [])])]
   return isMemberKey(key) ? hits.filter(k => k !== memberKey(key)) : hits
 }
 
@@ -84,7 +86,7 @@ type Members = { on: string[]; scope: string[] }
 /** One loadout's keys brought up to date: member keys normalized and moved ones followed, legacy names with exactly one
  *  installed match turned into its member key. A member key no installed mod has follows the one mod Repak X renamed
  *  it to (its spaces as "_", same folder; xtra_respace.rs does tags and previews), and that mod's name goes in
- *  `relinked`. Legacy names never do: they match across folders, and a scan that missed one could pick the wrong mod.
+ *  `relinked` (no `relinked`, no relink). Legacy names never do: they match across folders, and a scan that missed one could pick the wrong mod.
  *  Two members that would become one mod relink neither. Ambiguous and missing ones stay as they are (shown, never
  *  dropped, never matched). Returns the same object when nothing changes, so a second run is a no-op. Pure, apart from
  *  filling `relinked`. */
@@ -99,7 +101,7 @@ export function resolveKeys<T extends Members>(l: T, byName: Map<string, string[
   }
   // the one installed mod a gone member key was renamed to, its spaces as "_", in its own folder
   const renamedTo = (k: string) => {
-    if (!isMemberKey(k)) return undefined
+    if (!relinked || !isMemberKey(k)) return undefined
     const c = current(k), to = `${memberFolder(c)}${SEP}${respaced(memberName(c))}`
     return to !== c && !installed(c) && installed(to) ? to : undefined
   }
@@ -155,11 +157,12 @@ if (import.meta.env.DEV) {
   const got = new Set<string>()
   console.assert(resolveKeys(L(['a|My Mod', 'b|My Mod']), ren, undefined, got).on.join() === 'a|My_Mod,b|My Mod' && [...got].join() === 'My_Mod', 'a renamed member follows in its folder, not into another')
   console.assert(resolveKeys(L(['Two Up']), ren).on.join() === 'Two Up' && resolveKeys(L(['My Mod']), ren).on.join() === 'My Mod', 'a legacy name never relinks (it matches across folders)')
-  console.assert(resolveKeys(L(['|Kept', '|Kept ']), ren).on.join() === '|Kept,|Kept_' && respaced('a\tb c') === 'a_b_c', 'an installed member stays, tabs count')
-  console.assert(resolveKeys(L(['|Dup One', '|Dup\u00a0One']), keysByName(['|Dup_One'])).on.join() === '|Dup One,|Dup\u00a0One', 'two members that would become one mod both stay')
-  const held = resolveKeys({ on: ['|Held One'], scope: ['|Held One', '|Held_One'] }, keysByName(['|Held_One']))
+  console.assert(resolveKeys(L(['a|My Mod']), ren).on.join() === 'a|My Mod' && candidatesFor('My Mod', ren).join() === 'a|My_Mod', 'a scan Rust held back relinks nothing, and a renamed legacy name is offered to pick')
+  console.assert(resolveKeys(L(['|Kept', '|Kept ']), ren, undefined, new Set()).on.join() === '|Kept,|Kept_' && respaced('a\tb c') === 'a_b_c', 'an installed member stays, tabs count')
+  console.assert(resolveKeys(L(['|Dup One', '|Dup\u00a0One']), keysByName(['|Dup_One']), undefined, new Set()).on.join() === '|Dup One,|Dup\u00a0One', 'two members that would become one mod both stay')
+  const held = resolveKeys({ on: ['|Held One'], scope: ['|Held One', '|Held_One'] }, keysByName(['|Held_One']), undefined, new Set())
   console.assert(held.on.join() === '|Held One' && held.scope.join() === '|Held One,|Held_One', 'a gone member never takes over a mod the loadout already holds')
-  const heldLegacy = resolveKeys({ on: ['|Held One'], scope: ['|Held One', 'Held_One'] }, keysByName(['|Held_One']))
+  const heldLegacy = resolveKeys({ on: ['|Held One'], scope: ['|Held One', 'Held_One'] }, keysByName(['|Held_One']), undefined, new Set())
   console.assert(heldLegacy.on.join() === '|Held One' && heldLegacy.scope.join() === '|Held One,|Held_One', 'nor one a legacy name of the loadout already means')
   console.assert(movesBetween(['a|Skin', 'b|Skin'], ['c|Skin', 'd|Skin']).size === 0 && movesBetween(['a|Skin'], []).size === 0, 'two same-named moves, or a delete, are not followed')
 }

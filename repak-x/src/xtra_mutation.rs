@@ -27,7 +27,8 @@ pub fn alone(what: &str) -> Result<OwnedRwLockWriteGuard<()>, String> {
 }
 
 static STARTED: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
-/// None while a snapshot, restore, or storage cleanup runs, else a number that changes whenever one starts: equal before
+/// None while a change that runs alone (a snapshot, restore, storage cleanup, or the like) runs, else a number that
+/// changes whenever one starts (some never touch the mods folder: then a relink only waits a scan): equal before
 /// and after a folder walk, the walk saw no such change (xtra_respace.rs).
 pub fn era() -> Option<u64> {
     let g = gate();

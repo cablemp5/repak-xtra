@@ -37,13 +37,14 @@ pub fn pairs<'a>(stored: impl IntoIterator<Item = &'a String>, installed: &[Stri
 }
 
 /// After a full scan of `root` found `paths` (`era`: xtra_mutation::era before the walk): tags, previews, and install records follow mods renamed this way. The
-/// mods whose tags or previews followed go in the activity log (install records are not shown anywhere).
-pub fn relink(root: &Path, paths: &[PathBuf], state: &Mutex<crate::AppState>, era: Option<u64>) {
+/// mods whose tags or previews followed go in the activity log (install records are not shown anywhere). False when it
+/// could not look (then loadouts wait too).
+pub fn relink(root: &Path, paths: &[PathBuf], state: &Mutex<crate::AppState>, era: Option<u64>) -> bool {
     // a snapshot restore or storage cleanup that ran during the walk (`era` is from before it) or runs now changes the
     // folder under the scan: the next scan relinks
-    let Ok(_editing) = crate::xtra_mutation::edit() else { return };
+    let Ok(_editing) = crate::xtra_mutation::edit() else { return false };
     if era.is_none() || crate::xtra_mutation::era() != era {
-        return;
+        return false;
     }
     let keys = |key: fn(&Path) -> String| paths.iter().map(|p| key(p)).collect::<Vec<String>>();
 
@@ -109,6 +110,7 @@ pub fn relink(root: &Path, paths: &[PathBuf], state: &Mutex<crate::AppState>, er
     if !names.is_empty() {
         crate::xtra_activity::record("relink", &names, &[], "");
     }
+    true
 }
 
 #[cfg(test)]

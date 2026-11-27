@@ -320,6 +320,9 @@ struct ModEntry {
     // Character/skin info from character_data (dynamically looked up)
     character_name: Option<String>,
     skin_name: Option<String>,
+    /// repakxtra: this scan could not relink (xtra_respace.rs), so loadouts do not either (loadoutStore.ts)
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    relink_held: bool,
 }
 
 // ============================================================================
@@ -795,6 +798,7 @@ async fn get_pak_files(state: State<'_, Arc<Mutex<AppState>>>) -> Result<Vec<Mod
                 priority,
                 character_name: None,
                 skin_name: None,
+                relink_held: false,
             });
         }
     }
@@ -802,13 +806,15 @@ async fn get_pak_files(state: State<'_, Arc<Mutex<AppState>>>) -> Result<Vec<Mod
     // repakxtra: tags, previews, and install records follow mods Repak X renamed with "_" for spaces
     if walk_failed {
         log::warn!("[relink] skipped: a folder in the mods folder could not be read");
-    } else {
-        let paths: Vec<PathBuf> = mods.iter().map(|m| m.path.clone()).collect();
-        crate::xtra_respace::relink(game_path, &paths, state.inner(), era);
+    }
+    let paths: Vec<PathBuf> = mods.iter().map(|m| m.path.clone()).collect();
+    let relinked = !walk_failed && crate::xtra_respace::relink(game_path, &paths, state.inner(), era);
+    {
         // tags as they are now: this scan or another one running beside it (VFX Updater, Galacta) may have moved some
         let s = state.lock().unwrap();
         for m in &mut mods {
             m.custom_tags = s.mod_tags.get(&get_mod_key(&m.path)).cloned().unwrap_or_default();
+            m.relink_held = !relinked;
         }
     }
 
@@ -919,6 +925,7 @@ async fn get_pak_files_in_folder(
                 priority,
                 character_name: None,
                 skin_name: None,
+                relink_held: false,
             });
         }
     }

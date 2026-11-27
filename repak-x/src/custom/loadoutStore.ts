@@ -235,7 +235,8 @@ export function syncLoadoutKeys(mods: Mod[]) {
   const moved = lastKeys ? movesBetween(lastKeys, keys) : new Map<string, string>()
   lastKeys = keys
   if (!keys.length) return
-  const byName = keysByName(keys), relinked = new Set<string>()
+  // a scan Rust could not relink from (a folder it could not read, a restore during it) is no ground for loadouts either
+  const byName = keysByName(keys), relinked = mods.some(m => (m as { relink_held?: boolean }).relink_held) ? undefined : new Set<string>()
   try {
     const list = readLoadouts(), next = list.map(l => resolveKeys(l, byName, moved, relinked))
     if (next.some((l, i) => l !== list[i])) {
@@ -245,7 +246,7 @@ export function syncLoadoutKeys(mods: Mod[]) {
     const items = parseDeleted(LIVE.getItem(DELETED))
     const fixed = items.map(r => { const l = resolveKeys(r.loadout, byName, moved, relinked); return l === r.loadout ? r : { ...r, loadout: l } })
     if (fixed.some((r, i) => r !== items[i])) { putDeleted(LIVE, fixed); notify() }
-    if (relinked.size) recordActivity('relink', [...relinked]) // What changed? folds it into the scan's Rust row
+    if (relinked?.size) recordActivity('relink', [...relinked]) // What changed? folds it into the scan's Rust row
   } catch (e) {
     console.warn('Loadout members not updated:', e) // left as they were; the next list tries again
   }
