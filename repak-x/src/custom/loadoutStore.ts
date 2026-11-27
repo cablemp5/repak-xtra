@@ -232,23 +232,31 @@ const hasLegacy = (l: Loadout) => [...l.on, ...l.scope].some(k => !isMemberKey(k
  *  on its next list, and that write is the newest save. An empty list (a failed scan) changes nothing. */
 export function syncLoadoutKeys(mods: Mod[]) {
   const keys = mods.map(m => modKey(m.path))
-  const moved = lastKeys ? movesBetween(lastKeys, keys) : new Map<string, string>()
-  lastKeys = keys
-  if (!keys.length) return
   // a scan Rust could not relink from (a folder it could not read, a mod change during it) is no ground for loadouts
-  // either: no relink, and legacy names wait for a full scan
+  // either: no relink, no moves (compared with the last full scan instead), and legacy names wait for a full scan
   const held = mods.some(m => (m as { relink_held?: boolean }).relink_held)
-  const byName = keysByName(keys), relinked = held ? undefined : new Set<string>()
+  const moved = lastKeys && !held ? movesBetween(lastKeys, keys) : new Map<string, string>()
+  if (!held) lastKeys = keys
+  if (!keys.length) return
+  const byName = keysByName(keys)
   try {
-    const list = readLoadouts(), items = parseDeleted(LIVE.getItem(DELETED))
-    const opts = { relinked, legacy: !held, contested: contestedTargets([...list, ...items.map(r => r.loadout)], byName, moved) }
+    const list = readLoadouts()
+    let items: DeletedLoadout[] | null = null
+    try { items = parseDeleted(LIVE.getItem(DELETED)) } catch (e) { console.warn('Recently deleted loadouts not read:', e) }
+    // a renamed file is contested across every loadout that can come back: unreadable Recently deleted defers renames
+    const relinked = held || !items ? undefined : new Set<string>()
+    const now = Date.now(), restorable = (items ?? []).filter(r => r.expires > now).map(r => r.loadout)
+    const opts = { relinked, legacy: !held, contested: contestedTargets([...list, ...restorable], byName, moved) }
     const next = list.map(l => resolveKeys(l, byName, moved, opts))
     if (next.some((l, i) => l !== list[i])) {
       if (list.some(hasLegacy) && !localStorage.getItem(BACKUP)) localStorage.setItem(BACKUP, JSON.stringify(list.map(l => ({ ...l, image: undefined }))))
       writeLoadouts(next)
     }
-    const fixed = items.map(r => { const l = resolveKeys(r.loadout, byName, moved, opts); return l === r.loadout ? r : { ...r, loadout: l } })
-    if (fixed.some((r, i) => r !== items[i])) { putDeleted(LIVE, fixed); notify() }
+    if (items) {
+      const all = items
+      const fixed = all.map(r => { const l = resolveKeys(r.loadout, byName, moved, opts); return l === r.loadout ? r : { ...r, loadout: l } })
+      if (fixed.some((r, i) => r !== all[i])) { putDeleted(LIVE, fixed); notify() }
+    }
     if (relinked?.size) recordActivity('relink', [...relinked]) // What changed? folds it into the scan's Rust row
   } catch (e) {
     console.warn('Loadout members not updated:', e) // left as they were; the next list tries again
