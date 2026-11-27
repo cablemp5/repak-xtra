@@ -622,7 +622,7 @@ export default function InstallModPanel({ mods, allTags, folders = [], currentFo
           <button onClick={onCancel} className="btn-cancel">
             Cancel
           </button>
-          <button onClick={handleInstall} className="btn-install" disabled={enabledCount === 0}>
+          <button onClick={handleInstall} className="btn-install" disabled={enabledCount === 0} title={enabledCount === 0 ? 'Turn on at least one mod to install' : undefined}>
             Install {enabledCount} {enabledCount === 1 ? 'mod' : 'mods'}
           </button>
         </div>

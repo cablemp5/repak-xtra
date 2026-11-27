@@ -192,7 +192,7 @@ export default function LogDrawer({
     e.preventDefault()
     try {
       await navigator.clipboard.writeText(scrub(formatLogLine(entry)))
-      showFeedback(entry.id, 'Copied!')
+      showFeedback(entry.id, 'Copied')
     } catch (err) {
       console.error('Failed to copy to clipboard:', err)
     }
@@ -394,7 +394,7 @@ export default function LogDrawer({
                       <span className="log-drawer-line-scope">{entry.scope}</span>
                       <span className="log-drawer-line-content">{entry.message}</span>
                       {copyFeedback?.id === entry.id && (
-                        <span className="log-line-feedback">Copied!</span>
+                        <span className="log-line-feedback">Copied</span>
                       )}
                     </div>
                   ))}

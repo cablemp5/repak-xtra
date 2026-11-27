@@ -357,7 +357,7 @@ export default function ModDetailsPanel({ mod, initialDetails, onClose, characte
                         // Show feedback
                         const btn = e.currentTarget
                         const original = btn.textContent
-                        btn.textContent = 'Copied!'
+                        btn.textContent = 'Copied'
                         setTimeout(() => { btn.textContent = original }, 1500)
                       })
                     }}
@@ -385,15 +385,6 @@ export default function ModDetailsPanel({ mod, initialDetails, onClose, characte
       </div>
     </div>
   )
-}
-
-function getFileIcon(filename: string) {
-  if (filename.endsWith('.uasset')) return '📦'
-  if (filename.endsWith('.uexp')) return '📄'
-  if (filename.endsWith('.umap')) return '🗺️'
-  if (filename.endsWith('.wem') || filename.endsWith('.bnk')) return '🔊'
-  if (filename.endsWith('.png') || filename.endsWith('.jpg')) return '🖼️'
-  return '📄'
 }
 
 // Portraits come from the synced cache (see utils/heroImages), falling back to

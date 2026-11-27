@@ -523,7 +523,7 @@ fn map_to_mods_internal(paths: &[PathBuf]) -> Vec<InstallableMod> {
                 let tempdir = match crate::xtra_unpacked::take_or_unpack(path) {
                     Ok(d) => d.to_string_lossy().to_string(),
                     Err(e) => {
-                        crate::ui_log::error("Install", format!("Could not unpack {} ({e}). It may be damaged or password protected.", path.display()));
+                        crate::ui_log::error("Install", crate::install_mod::install_mod_logic::archives::describe_extract_error(path, &e));
                         return None;
                     }
                 };

@@ -236,7 +236,7 @@ const QuickOrganizeOverlay = ({
                                     {paths.length} PAK file{paths.length > 1 ? 's' : ''} (Audio/Config)
                                 </p>
                             </div>
-                            <button className="close-btn" onClick={onCancel}>
+                            <button aria-label="Close" className="close-btn" onClick={onCancel}>
                                 <VscClose />
                             </button>
                         </div>
@@ -274,7 +274,7 @@ const QuickOrganizeOverlay = ({
                                                 autoFocus
                                                 onKeyDown={(e) => {
                                                     if (e.key === 'Enter') handleConfirmNewFolder();
-                                                    if (e.key === 'Escape') handleCancelNewFolder();
+                                                    if (e.key === 'Escape') { e.preventDefault(); handleCancelNewFolder(); }
                                                 }}
                                                 onClick={(e) => e.stopPropagation()}
                                             />

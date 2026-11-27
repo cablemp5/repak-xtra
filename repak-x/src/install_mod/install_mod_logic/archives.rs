@@ -59,6 +59,20 @@ fn entry_ok(out: &Path, name: &str) -> bool {
     is_safe_entry_path(Path::new(name)) && crate::xtra_extract::safe_entry(name) && crate::xtra_extract::through_link(out, name).is_ok()
 }
 
+/// A message a player can act on when an archive will not unpack: password
+/// protected, or damaged / not really that format. `err` is the extractor's text.
+pub fn describe_extract_error(archive: &Path, err: &str) -> String {
+    let name = archive
+        .file_name()
+        .map(|n| n.to_string_lossy().to_string())
+        .unwrap_or_else(|| archive.display().to_string());
+    if err.to_lowercase().contains("password") {
+        format!("{name} is password protected. Unpack it yourself, then install the files inside.")
+    } else {
+        format!("{name} could not be unpacked: it may be damaged or not a real archive. Try downloading it again. ({err})")
+    }
+}
+
 /// True when `path` stays inside the folder it is joined to: no "..", root or drive.
 fn is_safe_entry_path(path: &Path) -> bool {
     path.components()
