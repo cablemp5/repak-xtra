@@ -156,7 +156,7 @@ if (import.meta.env.DEV) {
   console.assert(resolveKeys(L(['a|My Mod', 'b|My Mod']), ren, undefined, got).on.join() === 'a|My_Mod,b|My Mod' && [...got].join() === 'My_Mod', 'a renamed member follows in its folder, not into another')
   console.assert(resolveKeys(L(['Two Up']), ren).on.join() === 'Two Up' && resolveKeys(L(['My Mod']), ren).on.join() === 'My Mod', 'a legacy name never relinks (it matches across folders)')
   console.assert(resolveKeys(L(['|Kept', '|Kept ']), ren).on.join() === '|Kept,|Kept_' && respaced('a\tb c') === 'a_b_c', 'an installed member stays, tabs count')
-  console.assert(resolveKeys(L(['|Dup One', '|Dup One']), keysByName(['|Dup_One'])).on.join() === '|Dup One,|Dup One', 'two members that would become one mod both stay')
+  console.assert(resolveKeys(L(['|Dup One', '|Dup\u00a0One']), keysByName(['|Dup_One'])).on.join() === '|Dup One,|Dup\u00a0One', 'two members that would become one mod both stay')
   const held = resolveKeys({ on: ['|Held One'], scope: ['|Held One', '|Held_One'] }, keysByName(['|Held_One']))
   console.assert(held.on.join() === '|Held One' && held.scope.join() === '|Held One,|Held_One', 'a gone member never takes over a mod the loadout already holds')
   const heldLegacy = resolveKeys({ on: ['|Held One'], scope: ['|Held One', 'Held_One'] }, keysByName(['|Held_One']))

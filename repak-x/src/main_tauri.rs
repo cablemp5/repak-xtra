@@ -800,7 +800,9 @@ async fn get_pak_files(state: State<'_, Arc<Mutex<AppState>>>) -> Result<Vec<Mod
     }
 
     // repakxtra: tags, previews, and install records follow mods Repak X renamed with "_" for spaces
-    if !walk_failed {
+    if walk_failed {
+        log::warn!("[relink] skipped: a folder in the mods folder could not be read");
+    } else {
         let paths: Vec<PathBuf> = mods.iter().map(|m| m.path.clone()).collect();
         crate::xtra_respace::relink(game_path, &paths, state.inner(), era);
         // tags as they are now: this scan or another one running beside it (VFX Updater, Galacta) may have moved some
