@@ -12,7 +12,8 @@ use std::sync::Mutex;
 
 const MAX_EVENTS: usize = 5000; // every mod a loadout switch turns on or off is its own event
 const MAX_NAMES: usize = 50;
-/// A loadout switch keeps every name it switched (up to this), so the timeline folds exactly its own toggles into it.
+/// A loadout switch keeps every name it switched (up to this), so the timeline folds exactly its own toggles into it. So
+/// does a relink, so its Rust and loadout rows fold into one exact count (crashTimeline.ts).
 const MAX_LOADOUT_NAMES: usize = 1000;
 
 /// One finished operation. `ok`: the mods it changed, `failed`: the ones it tried and could not (a partial batch has
@@ -167,7 +168,7 @@ pub(crate) fn mod_name(path: &str) -> String {
 }
 
 fn event(t: u64, kind: &str, ok: &[String], failed: &[String], detail: &str, from: u64) -> Event {
-    let cap = if kind == "loadout" { MAX_LOADOUT_NAMES } else { MAX_NAMES };
+    let cap = if kind == "loadout" || kind == "relink" { MAX_LOADOUT_NAMES } else { MAX_NAMES };
     // one name per mod: a dropped .pak, .utoc and .ucas are one mod
     let unique = |v: &[String]| { let mut seen = std::collections::HashSet::new(); v.iter().map(|p| mod_name(p)).filter(|n| seen.insert(n.to_lowercase())).collect::<Vec<_>>() };
     let (ok, failed) = (unique(ok), unique(failed));
