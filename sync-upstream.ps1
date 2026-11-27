@@ -32,7 +32,11 @@ if ($LASTEXITCODE -ne 0) {
     exit 1
 }
 
-git submodule update --init --recursive
+Run { git submodule update --init --recursive }
+# The release may move the UAssetToolRivals pin: every repakxtra patch must still apply and both tools must build before
+# anything is pushed (CI skips the submodule). On failure refresh the patches (uassettool-patches\README.md), commit, rerun.
+. .\uassettool-patches\apply.ps1
+Test-UatBuild
 Run { git push -u origin $branch }
 $pr = gh pr list -R cablemp5/repak-xtra --head $branch --json url -q '.[0].url'
 if (-not $pr) {
