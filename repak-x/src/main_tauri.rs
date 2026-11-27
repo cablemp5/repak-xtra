@@ -6,6 +6,7 @@
 mod asset_explorer;
 mod xtra_classify; // repakxtra: extra mod types, Project Galacta check
 mod xtra_dupes; // repakxtra: same-content installs and Check Conflicts' Duplicates
+mod xtra_respace; // repakxtra: data follows mods Repak X renamed (spaces to "_")
 mod xtra_unpacked; // repakxtra: a dropped archive is unpacked once
 mod xtra_activity; // repakxtra: what changed before a crash (installs, on and off, updates)
 mod xtra_ops; // repakxtra: game open, file in use, and name taken, one dialog each
@@ -319,6 +320,9 @@ struct ModEntry {
     // Character/skin info from character_data (dynamically looked up)
     character_name: Option<String>,
     skin_name: Option<String>,
+    /// repakxtra: this scan could not relink (xtra_respace.rs), so loadouts do not either (loadoutStore.ts)
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    relink_held: bool,
 }
 
 // ============================================================================
@@ -708,7 +712,9 @@ async fn get_pak_files(state: State<'_, Arc<Mutex<AppState>>>) -> Result<Vec<Mod
     let mut mods = Vec::new();
 
     // Scan root ~mods directory and all subdirectories recursively (no depth limit)
-    for entry in WalkDir::new(&game_path).into_iter().filter_entry(crate::xtra_bundle::library_walk) /* repakxtra */.filter_map(|e| e.ok()) {
+    let mut walk_failed = false; // repakxtra: a folder it could not read hides mods, so nothing relinks then
+    let era = crate::xtra_mutation::era(); // repakxtra: and any mod change during the walk
+    for entry in WalkDir::new(&game_path).into_iter().filter_entry(crate::xtra_bundle::library_walk) /* repakxtra */.filter_map(|e| e.map_err(|_| walk_failed = true).ok()) {
         // repakxtra: a .pak.off set (RivalsFPS's off state) becomes this app's off state here, so every feature knows it
         let adopted = entry.file_type().is_file().then(|| crate::xtra_offfiles::adopt(entry.path())).flatten();
         let path = adopted.as_deref().unwrap_or(entry.path());
@@ -792,7 +798,23 @@ async fn get_pak_files(state: State<'_, Arc<Mutex<AppState>>>) -> Result<Vec<Mod
                 priority,
                 character_name: None,
                 skin_name: None,
+                relink_held: false,
             });
+        }
+    }
+
+    // repakxtra: tags, previews, and install records follow mods Repak X renamed with "_" for spaces
+    if walk_failed {
+        log::warn!("[relink] skipped: a folder in the mods folder could not be read");
+    }
+    let paths: Vec<PathBuf> = mods.iter().map(|m| m.path.clone()).collect();
+    let relinked = !walk_failed && crate::xtra_respace::relink(game_path, &paths, state.inner(), era);
+    {
+        // tags as they are now: this scan or another one running beside it (VFX Updater, Galacta) may have moved some
+        let s = state.lock().unwrap();
+        for m in &mut mods {
+            m.custom_tags = s.mod_tags.get(&get_mod_key(&m.path)).cloned().unwrap_or_default();
+            m.relink_held = !relinked;
         }
     }
 
@@ -903,6 +925,7 @@ async fn get_pak_files_in_folder(
                 priority,
                 character_name: None,
                 skin_name: None,
+                relink_held: false,
             });
         }
     }

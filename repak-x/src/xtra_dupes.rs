@@ -225,6 +225,23 @@ pub fn record(root: &Path, pak: &Path, mut source: Source) {
     })
 }
 
+/// Records follow mods renamed outside the app with "_" for spaces (xtra_respace.rs). Returns the new keys.
+pub fn relink(root: &Path, paths: &[PathBuf]) -> Vec<String> {
+    let installed: Vec<String> = paths.iter().map(|p| key(root, p)).collect();
+    with_sources(|map| {
+        let moved = crate::xtra_respace::pairs(map.keys(), &installed);
+        for (old, new) in &moved {
+            if let Some(s) = map.remove(old) {
+                map.insert(new.clone(), s);
+            }
+        }
+        if !moved.is_empty() {
+            save_sources(map);
+        }
+        moved.into_iter().map(|(_, new)| new).collect()
+    })
+}
+
 /// Sets of installed mods that are the same mod: byte-identical files, or installed from the same download. The last
 /// answer is kept by the library's fingerprint (every mod's path, size, and modified time), so opening Check Conflicts
 /// again on an unchanged library is instant.

@@ -66,6 +66,7 @@ const soundBuffer = (s: Sound) => {
   return decoded.get(id)!
 }
 listen('mod-previews-done', () => { decoded.clear(); load() }).catch(() => undefined) // a run may have changed them
+listen('repakxtra-previews-relinked', () => { decoded.clear(); load() }).catch(() => undefined) // so may a relink (xtra_respace.rs)
 
 /** The sound exactly `seconds` long: cut, or padded with silence, so one loop of it is one loop of the clip. Its ends
  *  fade over a few milliseconds: a cut mid-wave jumped from loud to the start each loop, heard as a pop. */

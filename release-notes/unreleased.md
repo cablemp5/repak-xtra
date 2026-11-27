@@ -52,3 +52,4 @@
 - Updated Settings > Done to a blue primary button, replaced remaining non-Lucide icons, and standardized sentence case across panels and dialogs
 - Removed redundant full-on dots from Loadout pages and widened the spacing before row remove buttons
 - Moved repakxtra's data into its own folder, %APPDATA%\repakxtra, so Repak X can no longer empty its Recently deleted or overwrite its files (to go back to an older version, move everything in it except hero, hero_cache.json, Usmap, character_data.json, character_data_last_check.txt, and vfx_settings.json back into %APPDATA%\Repak-X first)
+- Fixed tags, loadouts, previews, and install records losing their mod when Repak X 2.4.0 replaced the spaces in its file name with "_": they now follow the renamed mod when exactly one mod matches
