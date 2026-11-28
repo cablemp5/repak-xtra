@@ -52,22 +52,48 @@ pub fn relink(root: &Path, paths: &[PathBuf], state: &Arc<Mutex<crate::AppState>
         return false;
     }
     let keys = |key: &dyn Fn(&Path) -> String| paths.iter().map(|p| key(p)).collect::<Vec<String>>();
-    // mods renamed or moved outside the app since the last scan, (old path, new path): each store keys them its own way
-    let found = crate::xtra_fingerprints::scan(root, paths, state);
+    // mods renamed or moved outside the app (xtra_fingerprints.rs), (old path, new path): those found now and, again,
+    // those found in the last 7 days, so a store that had to wait (a preview run holding the folder) follows on a later
+    // scan. Each store keys them its own way, and `pairs` never moves anything twice (the old key must still hold data).
+    let mut found = crate::xtra_fingerprints::scan(root, paths, state);
+    for (p, from) in paths.iter().zip(crate::xtra_fingerprints::relinked_from(root, paths, state)) {
+        if let Some(from) = from.filter(|_| !found.iter().any(|(_, n)| n == p)) {
+            found.push((from, p.clone()));
+        }
+    }
     let moved = |key: &dyn Fn(&Path) -> String| found.iter().map(|(o, n)| (key(o), key(n))).collect::<Vec<_>>();
 
     let tag_key = |p: &Path| crate::xtra_dupes::key(root, p);
     let tag_keys = keys(&tag_key);
+    let legacy_keys = keys(&crate::get_mod_key);
     let tags = {
         let mut s = state.lock().unwrap_or_else(|e| e.into_inner());
-        let migrated = crate::xtra_tags::migrate(&mut s, paths); // older saves' name-only tags, once
         let moved = pairs(s.mod_tags_by_key.keys(), &tag_keys, &moved(&tag_key));
         for (old, new) in &moved {
             if let Some(t) = s.mod_tags_by_key.remove(old) {
                 s.mod_tags_by_key.insert(new.clone(), t);
             }
         }
-        if migrated || !moved.is_empty() {
+        // the old map's names Repak X respaced follow too (older builds read it, and its tags wait there for the migration)
+        let legacy = pairs(s.mod_tags.keys(), &legacy_keys, &[]);
+        for (old, new) in &legacy {
+            if let Some(t) = s.mod_tags.remove(old) {
+                s.mod_tags.insert(new.clone(), t);
+            }
+        }
+        let migrated = crate::xtra_tags::migrate(&mut s, root, paths); // older saves' name-only tags, once
+        // and it mirrors both names of each mod whose tags moved
+        for (o, n) in &found {
+            if moved.iter().any(|(_, new)| *new == tag_key(n)) {
+                crate::xtra_tags::mirror(&mut s, o);
+            }
+        }
+        for (i, p) in paths.iter().enumerate() {
+            if moved.iter().any(|(_, new)| *new == tag_keys[i]) {
+                crate::xtra_tags::mirror(&mut s, p);
+            }
+        }
+        if migrated || !moved.is_empty() || !legacy.is_empty() {
             let _ = crate::save_state(&s);
         }
         moved
@@ -102,6 +128,7 @@ pub fn relink(root: &Path, paths: &[PathBuf], state: &Arc<Mutex<crate::AppState>
     }
 
     let sources = crate::xtra_dupes::relink(root, paths, &moved(&tag_key)).len();
+    crate::details_after_scan(state, &found);
 
     let (tags_to, previews_to): (HashSet<&str>, HashSet<&str>) =
         (tags.iter().map(|p| p.1.as_str()).collect(), previews.iter().map(|p| p.1.as_str()).collect());

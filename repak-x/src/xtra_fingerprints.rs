@@ -43,26 +43,31 @@ pub struct Found {
     pub stamp: String,
 }
 
-/// `len:nanos` of the .pak, .utoc and .ucas (the details cache's fingerprint, path-free). Empty when none could be read.
+/// The mod's .utoc or .ucas, also in its off forms (".utoc.bak_repak", install_mod_logic.rs).
+fn part(pak: &Path, ext: &str) -> Option<PathBuf> {
+    let on = crate::xtra_bundle::companion(pak, ext);
+    let named = |tail: &str| on.with_file_name(format!("{}{tail}", on.file_name().unwrap_or_default().to_string_lossy()));
+    [on.clone(), named(".bak_repak"), named(".pak_disabled")].into_iter().find(|p| p.is_file())
+}
+
+/// `len:nanos` of the .pak, .utoc and .ucas, path-free (a rename or move keeps it). Empty when the .pak cannot be read.
 pub fn stamp(path: &Path) -> String {
-    let print = crate::mod_fingerprint(path);
-    if print.iter().all(Option::is_none) {
-        return String::new();
-    }
-    let part = |p: &Option<(std::time::SystemTime, u64)>| match p {
-        Some((t, len)) => format!("{len}:{}", t.duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_nanos())),
-        None => "-".into(),
+    let stat = |p: Option<PathBuf>| {
+        p.and_then(|p| std::fs::metadata(p).ok())
+            .and_then(|m| Some(format!("{}:{}", m.len(), m.modified().ok()?.duration_since(std::time::UNIX_EPOCH).ok()?.as_nanos())))
     };
-    print.iter().map(part).collect::<Vec<_>>().join("|")
+    match stat(Some(path.to_path_buf())) {
+        Some(pak) => [pak, stat(part(path, "utoc")).unwrap_or("-".into()), stat(part(path, "ucas")).unwrap_or("-".into())].join("|"),
+        None => String::new(),
+    }
 }
 
 /// A hash of the mod's file list (IoStore: the .utoc's paths and the .ucas size, else the .pak's paths and sizes), as
 /// Repak X's content_id. A relink check, not an integrity check. None when it cannot be read.
 pub fn hash(path: &Path) -> Option<String> {
-    let utoc = crate::xtra_bundle::companion(path, "utoc");
     let _reading = crate::xtra_parse_guard::reading(path, &format!("{:?}", crate::mod_fingerprint(path))).ok()?;
-    let mut lines: Vec<String> = if utoc.exists() {
-        let ucas = std::fs::metadata(crate::xtra_bundle::companion(path, "ucas")).map_or(0, |m| m.len());
+    let mut lines: Vec<String> = if let Some(utoc) = part(path, "utoc") {
+        let ucas = part(path, "ucas").and_then(|u| std::fs::metadata(u).ok()).map_or(0, |m| m.len());
         let mut l: Vec<String> = crate::utoc_utils::try_read_utoc(&utoc).ok()?.into_iter().map(|f| f.file_path.to_lowercase()).collect();
         l.push(format!("\0ucas\0{ucas}"));
         l
@@ -88,8 +93,10 @@ pub fn reconcile(prints: &Prints, found: &[Found], now: u64, hash: &mut dyn FnMu
         }
         match prints.get(&f.key) {
             Some(p) => {
-                let hash = if p.stamp == f.stamp { p.hash.clone() } else { None };
-                next.insert(f.key.clone(), Print { path: f.path.clone(), stamp: f.stamp.clone(), hash, missing_since: None, from: p.from.clone() });
+                // new files under the key (an update, another mod copied over it): no hash yet, and no rename history
+                let same = p.stamp == f.stamp;
+                let (hash, from) = if same { (p.hash.clone(), p.from.clone()) } else { (None, None) };
+                next.insert(f.key.clone(), Print { path: f.path.clone(), stamp: f.stamp.clone(), hash, missing_since: None, from });
             }
             None => came.push(f),
         }
@@ -209,6 +216,16 @@ pub fn relinked_from(root: &Path, paths: &[PathBuf], state: &Mutex<crate::AppSta
 }
 
 static FILLING: AtomicBool = AtomicBool::new(false);
+/// (path, stamp) of files `fill` could not hash this launch: never tried again until they change
+static UNREADABLE: Mutex<Option<std::collections::HashSet<(String, String)>>> = Mutex::new(None);
+
+/// Lets the next `fill` start when this one ends, also when it panics.
+struct Filling;
+impl Drop for Filling {
+    fn drop(&mut self) {
+        FILLING.store(false, Ordering::SeqCst);
+    }
+}
 
 /// Hashes the file lists of the records that have none, one mod at a time, off the scan. One at once.
 fn fill(root: PathBuf, state: Arc<Mutex<crate::AppState>>) {
@@ -216,15 +233,20 @@ fn fill(root: PathBuf, state: Arc<Mutex<crate::AppState>>) {
         return;
     }
     std::thread::spawn(move || {
+        let _filling = Filling;
+        let tried = |p: &Print| UNREADABLE.lock().unwrap_or_else(|e| e.into_inner()).get_or_insert_with(Default::default).contains(&(p.path.clone(), p.stamp.clone()));
         let rk = root_key(&root);
         let todo: Vec<(String, Print)> = {
             let s = state.lock().unwrap_or_else(|e| e.into_inner());
-            s.mod_fingerprints.get(&rk).map(|m| m.iter().filter(|(_, p)| p.hash.is_none() && p.missing_since.is_none()).map(|(k, p)| (k.clone(), p.clone())).collect()).unwrap_or_default()
+            s.mod_fingerprints.get(&rk).map(|m| m.iter().filter(|(_, p)| p.hash.is_none() && p.missing_since.is_none() && !tried(p)).map(|(k, p)| (k.clone(), p.clone())).collect()).unwrap_or_default()
         };
         let mut done = 0;
         for (k, p) in todo {
             let file = root.join(&p.path);
-            let Some(h) = hash(&file).filter(|_| stamp(&file) == p.stamp) else { continue };
+            let Some(h) = hash(&file).filter(|_| stamp(&file) == p.stamp) else {
+                UNREADABLE.lock().unwrap_or_else(|e| e.into_inner()).get_or_insert_with(Default::default).insert((p.path.clone(), p.stamp.clone()));
+                continue;
+            };
             let mut s = state.lock().unwrap_or_else(|e| e.into_inner());
             // only while the record still describes that file
             if let Some(r) = s.mod_fingerprints.get_mut(&rk).and_then(|m| m.get_mut(&k)).filter(|r| r.stamp == p.stamp && r.path == p.path) {
@@ -239,7 +261,6 @@ fn fill(root: PathBuf, state: Arc<Mutex<crate::AppState>>) {
             let s = state.lock().unwrap_or_else(|e| e.into_inner());
             let _ = crate::save_state(&s);
         }
-        FILLING.store(false, Ordering::SeqCst);
     });
 }
 
@@ -314,10 +335,24 @@ mod tests {
     }
 
     #[test]
-    fn a_new_stamp_drops_the_hash_and_an_unreadable_stamp_never_matches() {
-        let before = prints(&[p("|a", "s", Some("h")), p("|gone", "", Some("h"))]);
+    fn a_new_stamp_drops_the_hash_and_the_rename_history_and_an_unreadable_stamp_never_matches() {
+        let mut a = p("|a", "s", Some("h"));
+        a.1.from = Some(("|old.pak".into(), 0));
+        let before = prints(&[a, p("|gone", "", Some("h"))]);
         let (next, r) = reconcile(&before, &[f("|a", "t"), f("|new", "")], 0, &mut no_read);
-        assert!(r.is_empty() && next["|a"].hash.is_none());
+        assert!(r.is_empty() && next["|a"].hash.is_none() && next["|a"].from.is_none());
+    }
+
+    #[test]
+    fn an_off_iostore_mod_stamps_and_finds_its_off_companions() {
+        let dir = tempfile::tempdir().unwrap();
+        let pak = dir.path().join("Skin_9999999_P.bak_repak");
+        for f in ["Skin_9999999_P.bak_repak", "Skin_9999999_P.utoc.bak_repak", "Skin_9999999_P.ucas.bak_repak"] {
+            std::fs::write(dir.path().join(f), b"x").unwrap();
+        }
+        assert_eq!(part(&pak, "utoc"), Some(dir.path().join("Skin_9999999_P.utoc.bak_repak")));
+        assert!(!stamp(&pak).contains('-'), "every part stamped: {}", stamp(&pak));
+        assert_eq!(stamp(&dir.path().join("Gone.pak")), "");
     }
 
     #[test]

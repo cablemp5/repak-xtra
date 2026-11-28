@@ -262,9 +262,37 @@ fn adopt_moved_details(st: &mut AppState, path: &Path, print: &ModFingerprint) {
     }
     let mut gone = st.mod_details_cache.iter().filter(|(p, (f, _))| f == print && !p.exists()).map(|(p, _)| p.clone());
     let (Some(old), None) = (gone.next(), gone.next()) else { return };
-    if let Some((f, mut d)) = st.mod_details_cache.remove(&old) {
-        d.mod_name = path.file_stem().and_then(|s| s.to_str()).unwrap_or("Unknown").to_string(); // as compute_mod_details names it
-        st.mod_details_cache.insert(path.to_path_buf(), (f, d));
+    move_details(st, &old, path);
+}
+
+/// repakxtra: the cached details at `old` move to `new` (nothing cached there yet), named as compute_mod_details names it.
+fn move_details(st: &mut AppState, old: &Path, new: &Path) {
+    if st.mod_details_cache.contains_key(new) {
+        return;
+    }
+    if let Some((f, mut d)) = st.mod_details_cache.remove(old) {
+        d.mod_name = new.file_stem().and_then(|s| s.to_str()).unwrap_or("Unknown").to_string();
+        st.mod_details_cache.insert(new.to_path_buf(), (f, d));
+        xtra_details_cache::mark_dirty();
+    }
+}
+
+/// repakxtra: after a whole scan, cached details follow the mods found renamed or moved (xtra_fingerprints.rs, also
+/// while the app was closed: the saved cache keeps entries whose file is gone until here), and the rest of those go.
+fn details_after_scan(state: &Mutex<AppState>, moved: &[(PathBuf, PathBuf)]) {
+    let cached: Vec<PathBuf> = {
+        let mut st = state.lock().unwrap_or_else(|e| e.into_inner());
+        for (old, new) in moved {
+            move_details(&mut st, old, new);
+        }
+        st.mod_details_cache.keys().cloned().collect()
+    };
+    let gone: Vec<PathBuf> = cached.into_iter().filter(|p| !p.exists()).collect(); // without the lock: a disk check each
+    if !gone.is_empty() {
+        let mut st = state.lock().unwrap_or_else(|e| e.into_inner());
+        for p in &gone {
+            st.mod_details_cache.remove(p);
+        }
         xtra_details_cache::mark_dirty();
     }
 }
@@ -841,6 +869,13 @@ async fn get_pak_files(state: State<'_, Arc<Mutex<AppState>>>) -> Result<Vec<Mod
         log::warn!("[relink] skipped: a folder in the mods folder could not be read");
     }
     let paths: Vec<PathBuf> = mods.iter().map(|m| m.path.clone()).collect();
+    if !walk_failed {
+        // older saves' name-only tags, whatever the relink below can do (xtra_tags.rs)
+        let mut s = state.lock().unwrap();
+        if xtra_tags::migrate(&mut s, game_path, &paths) {
+            let _ = save_state(&s);
+        }
+    }
     let relinked = !walk_failed && crate::xtra_respace::relink(game_path, &paths, state.inner(), era);
     {
         // tags as they are now: this scan or another one running beside it (VFX Updater, Galacta) may have moved some
@@ -3697,19 +3732,14 @@ async fn update_mod(
 
     info!("Preserved install subfolder: {}", install_subfolder);
 
-    // Migrate the old mod's custom tags (repakxtra: moved only once the new version is in place)
-    let old_key = get_mod_key(&actual_old_path);
-    let old_custom_tags = {
-        let state_guard = state.lock().unwrap();
-        state_guard.mod_tags.get(&old_key).cloned().unwrap_or_default()
-    };
+    // Migrate the old mod's custom tags (repakxtra: moved only once the new version is in place, xtra_tags::renamed)
 
     // (Deprecated old metadata)
     let (old_custom_name, old_folder_id) = (None::<String>, None::<String>);
 
     info!(
-        "Preserved metadata - custom_name: {:?}, tags: {:?}, folder_id: {:?}",
-        old_custom_name, old_custom_tags, old_folder_id
+        "Preserved metadata - custom_name: {:?}, folder_id: {:?}",
+        old_custom_name, old_folder_id
     );
 
     // Get the old mod's full stem (handles .pak.bak_repak as well as .pak)
@@ -3852,13 +3882,7 @@ async fn update_mod(
 
     {
         let mut state_guard = state.lock().unwrap();
-        let new_key = get_mod_key(&new_mod_path);
-        let followed = xtra_tags::moved(&mut state_guard, &actual_old_path, &new_mod_path, false) | !old_custom_tags.is_empty(); // repakxtra
-        if !old_custom_tags.is_empty() {
-            state_guard.mod_tags.remove(&old_key);
-            state_guard.mod_tags.insert(new_key, old_custom_tags);
-        }
-        if followed {
+        if xtra_tags::renamed(&mut state_guard, &actual_old_path, &new_mod_path) { // repakxtra
             let _ = save_state(&state_guard);
         }
     }
@@ -4573,16 +4597,7 @@ async fn rename_mod(
         state_guard.mod_details_cache.remove(&old_path_buf);
         xtra_details_cache::mark_dirty(); // repakxtra: the saved copy follows
 
-        let old_key = get_mod_key(&old_path_buf);
-        let new_key = get_mod_key(&new_path);
-        let mut changed = xtra_tags::moved(&mut state_guard, &old_path_buf, &new_path, false); // repakxtra
-        if old_key != new_key {
-            if let Some(tags) = state_guard.mod_tags.remove(&old_key) {
-                state_guard.mod_tags.insert(new_key, tags);
-                changed = true;
-            }
-        }
-        if changed {
+        if xtra_tags::renamed(&mut state_guard, &old_path_buf, &new_path) { // repakxtra: by folder + name, old map mirrored
             let _ = save_state(&state_guard);
         }
     }
