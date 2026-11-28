@@ -280,7 +280,8 @@ fn move_details(st: &mut AppState, old: &Path, new: &Path) {
 
 /// repakxtra: after a whole scan, cached details follow the mods found renamed or moved (xtra_fingerprints.rs, also
 /// while the app was closed: the saved cache keeps the entries of gone files). The rest stay in memory for
-/// adopt_moved_details, and the saved copy leaves them out (xtra_details_cache::save).
+/// adopt_moved_details until the save loop finds them gone twice (15 s apart), and the saved copy leaves them out
+/// (xtra_details_cache::save).
 fn details_after_scan(state: &Mutex<AppState>, moved: &[(PathBuf, PathBuf)]) {
     let mut st = state.lock().unwrap_or_else(|e| e.into_inner());
     for (old, new) in moved {
@@ -8807,8 +8808,13 @@ fn main() {
             std::thread::sleep(std::time::Duration::from_secs(15));
             // repakxtra: entries of files gone at two of these checks in a row leave memory (adopt_moved_details had that
             // long to give them to a renamed mod); the disk check runs without the lock
-            let keys: Vec<PathBuf> = details_state.lock().unwrap().mod_details_cache.keys().cloned().collect();
-            let gone: std::collections::HashSet<PathBuf> = keys.into_iter().filter(|p| !p.exists()).collect();
+            // Never while the mods folder itself is out of reach (a drive dropped out): every entry would look gone.
+            let (keys, root): (Vec<PathBuf>, PathBuf) = {
+                let st = details_state.lock().unwrap();
+                (st.mod_details_cache.keys().cloned().collect(), st.game_path.clone())
+            };
+            let reachable = root.is_dir();
+            let gone: std::collections::HashSet<PathBuf> = if reachable { keys.into_iter().filter(|p| !p.exists()).collect() } else { Default::default() };
             let stale: Vec<&PathBuf> = gone.intersection(&gone_before).collect();
             if !stale.is_empty() {
                 let mut st = details_state.lock().unwrap();
@@ -8820,7 +8826,7 @@ fn main() {
             gone_before = gone;
             if xtra_details_cache::take_dirty() {
                 let snapshot = details_state.lock().unwrap().mod_details_cache.clone();
-                xtra_details_cache::save(&snapshot);
+                xtra_details_cache::save(&snapshot, reachable);
             }
         }
     });

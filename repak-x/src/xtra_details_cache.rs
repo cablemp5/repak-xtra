@@ -97,10 +97,11 @@ pub fn take_dirty() -> bool {
     DIRTY.swap(false, Ordering::Relaxed)
 }
 
-/// Written beside the file, then swapped in, so a crash mid-write never leaves half a cache. Entries of files no
-/// longer there stay out (memory keeps them for the session, main_tauri.rs adopt_moved_details).
-pub fn save<T: Serialize>(entries: &HashMap<PathBuf, T>) {
-    let entries: HashMap<&PathBuf, &T> = entries.iter().filter(|(p, _)| p.exists()).collect();
+/// Written beside the file, then swapped in, so a crash mid-write never leaves half a cache. With `drop_gone` (the mods
+/// folder is reachable), entries of files no longer there stay out (memory keeps them until the save loop finds them
+/// gone twice, for main_tauri.rs adopt_moved_details).
+pub fn save<T: Serialize>(entries: &HashMap<PathBuf, T>, drop_gone: bool) {
+    let entries: HashMap<&PathBuf, &T> = entries.iter().filter(|(p, _)| !drop_gone || p.exists()).collect();
     let entries = &entries;
     let path = file();
     let tmp = path.with_extension("json.tmp");
