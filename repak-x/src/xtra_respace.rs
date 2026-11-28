@@ -74,8 +74,10 @@ pub fn relink(root: &Path, paths: &[PathBuf], state: &Arc<Mutex<crate::AppState>
                 s.mod_tags_by_key.insert(new.clone(), t);
             }
         }
-        // the old map's names Repak X respaced follow too (older builds read it, and its tags wait there for the migration)
-        let legacy = pairs(s.mod_tags.keys(), &legacy_keys, &[]);
+        // the old map's names Repak X respaced, not migrated yet, follow too (their tags wait there for the migration). A
+        // migrated name's tags already followed above, by key: moving its old entry too would give them to a namesake.
+        let waiting: Vec<String> = s.mod_tags.keys().filter(|k| !s.mod_tags_migrated.contains(*k)).cloned().collect();
+        let legacy = pairs(&waiting, &legacy_keys, &[]);
         for (old, new) in &legacy {
             if let Some(t) = s.mod_tags.remove(old) {
                 s.mod_tags.insert(new.clone(), t);

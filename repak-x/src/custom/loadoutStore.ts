@@ -243,13 +243,12 @@ export function syncLoadoutKeys(mods: Mod[]) {
   const found = new Map<string, string>()
   for (const m of held ? [] : mods) {
     const from = (m as { relinked_from?: string }).relinked_from
-    // one old key two mods name (renamed twice within the 7 days): neither
+    // one old key two mods name (renamed twice within the 7 days): neither, and no name guess for it either ('')
     if (from && !installed.has(modKey(from))) found.set(modKey(from), found.has(modKey(from)) ? '' : modKey(m.path))
   }
-  for (const [from, to] of [...found]) if (!to) found.delete(from)
-  const ends = new Set(found.values())
+  const ends = new Set([...found.values()].filter(Boolean))
   for (const [from, to] of [...moved]) if (ends.has(to) || found.has(from)) moved.delete(from)
-  for (const [from, to] of found) moved.set(from, to)
+  for (const [from, to] of found) if (to) moved.set(from, to)
   if (!keys.length) return
   if (!held) lastKeys = keys
   const byName = keysByName(keys)

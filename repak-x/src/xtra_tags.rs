@@ -29,10 +29,10 @@ pub fn of(s: &crate::AppState, path: &Path) -> Vec<String> {
 /// Sets a mod's tags (none removes the entry) and mirrors its name into the old map.
 pub fn set(s: &mut crate::AppState, path: &Path, tags: Vec<String>) {
     let k = key(s, path);
-    if tags.is_empty() {
+    if tags.is_empty() && !unmigrated(s, &crate::get_mod_key(path)) {
         s.mod_tags_by_key.remove(&k);
     } else {
-        s.mod_tags_by_key.insert(k, tags);
+        s.mod_tags_by_key.insert(k, tags); // an empty list too, while its name's old tags wait: they never come back here
     }
     mirror(s, path);
 }
@@ -213,6 +213,17 @@ mod tests {
         migrate(&mut s, &root(), &[p("A/New.pak"), p("B/New.pak"), p("B/Old.pak")]);
         assert!(of(&s, &p("B/New.pak")).is_empty());
         assert_eq!(of(&s, &p("B/Old.pak")), tags(&["o"]));
+    }
+
+    #[test]
+    fn the_last_old_tag_removed_before_the_migration_stays_removed() {
+        let mut s = st();
+        s.mod_tags.insert("Skin".into(), tags(&["red"]));
+        set(&mut s, &p("A/Skin.pak"), vec![]);
+        assert!(of(&s, &p("A/Skin.pak")).is_empty());
+        migrate(&mut s, &root(), &[p("A/Skin.pak"), p("B/Skin.pak")]);
+        assert!(of(&s, &p("A/Skin.pak")).is_empty());
+        assert_eq!(of(&s, &p("B/Skin.pak")), tags(&["red"]));
     }
 
     #[test]

@@ -279,22 +279,12 @@ fn move_details(st: &mut AppState, old: &Path, new: &Path) {
 }
 
 /// repakxtra: after a whole scan, cached details follow the mods found renamed or moved (xtra_fingerprints.rs, also
-/// while the app was closed: the saved cache keeps entries whose file is gone until here), and the rest of those go.
+/// while the app was closed: the saved cache keeps the entries of gone files). The rest stay in memory for
+/// adopt_moved_details, and the saved copy leaves them out (xtra_details_cache::save).
 fn details_after_scan(state: &Mutex<AppState>, moved: &[(PathBuf, PathBuf)]) {
-    let cached: Vec<PathBuf> = {
-        let mut st = state.lock().unwrap_or_else(|e| e.into_inner());
-        for (old, new) in moved {
-            move_details(&mut st, old, new);
-        }
-        st.mod_details_cache.keys().cloned().collect()
-    };
-    let gone: Vec<PathBuf> = cached.into_iter().filter(|p| !p.exists()).collect(); // without the lock: a disk check each
-    if !gone.is_empty() {
-        let mut st = state.lock().unwrap_or_else(|e| e.into_inner());
-        for p in &gone {
-            st.mod_details_cache.remove(p);
-        }
-        xtra_details_cache::mark_dirty();
+    let mut st = state.lock().unwrap_or_else(|e| e.into_inner());
+    for (old, new) in moved {
+        move_details(&mut st, old, new);
     }
 }
 
@@ -870,8 +860,9 @@ async fn get_pak_files(state: State<'_, Arc<Mutex<AppState>>>) -> Result<Vec<Mod
         log::warn!("[relink] skipped: a folder in the mods folder could not be read");
     }
     let paths: Vec<PathBuf> = mods.iter().map(|m| m.path.clone()).collect();
-    if !walk_failed {
-        // older saves' name-only tags, whatever the relink below can do (xtra_tags.rs)
+    if !walk_failed && era.is_some() && crate::xtra_mutation::era() == era {
+        // older saves' name-only tags, whatever the relink below can do (xtra_tags.rs); never from a walk a mod change (a
+        // restore) ran beside, which may have missed a mod
         let mut s = state.lock().unwrap();
         if xtra_tags::migrate(&mut s, game_path, &paths) {
             let _ = save_state(&s);

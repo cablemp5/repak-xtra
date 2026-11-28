@@ -113,9 +113,10 @@ pub fn reconcile(prints: &Prints, found: &[Found], now: u64, hash: &mut dyn FnMu
     for f in &came {
         let unique = !f.stamp.is_empty() && came_n.get(&f.stamp) == Some(&1) && gone_n.get(&f.stamp) == Some(&1);
         let old = unique.then(|| gone.iter().find(|(_, p)| p.stamp == f.stamp)).flatten();
-        // shortcut: a record renamed before `fill` hashed it relinks on its unique stamp alone (nanosecond times),
-        // upgrade to refusing it if a wrong relink is ever reported
-        let same = old.filter(|(_, p)| p.hash.is_none() || p.hash == hash(&f.path));
+        // shortcut: a record renamed before `fill` hashed it, or a new file whose list cannot be read (an off IoStore
+        // form the reader does not take), relinks on its unique stamp alone (nanosecond times); upgrade to refusing it if
+        // a wrong relink is ever reported
+        let same = old.filter(|(_, p)| p.hash.is_none() || hash(&f.path).map_or(true, |h| p.hash.as_deref() == Some(h.as_str())));
         match same {
             Some((k, p)) => {
                 taken.insert(k.as_str());
@@ -301,6 +302,12 @@ mod tests {
         let (next, r) = reconcile(&before, &[f("x|new", "s"), f("|kept", "k")], 5, &mut |rel| (rel == "x|new.pak").then(|| "h".into()));
         assert_eq!(r, [("|old".to_string(), "x|new".to_string(), "|old.pak".to_string())]);
         assert!(!next.contains_key("|old") && next["x|new"].hash.as_deref() == Some("h") && next["x|new"].from == Some(("|old.pak".into(), 5)));
+    }
+
+    #[test]
+    fn a_new_file_whose_list_cannot_be_read_relinks_on_its_stamp() {
+        let before = prints(&[p("|old", "s", Some("h"))]);
+        assert_eq!(reconcile(&before, &[f("|new", "s")], 0, &mut |_| None).1.len(), 1);
     }
 
     #[test]

@@ -97,8 +97,11 @@ pub fn take_dirty() -> bool {
     DIRTY.swap(false, Ordering::Relaxed)
 }
 
-/// Written beside the file, then swapped in, so a crash mid-write never leaves half a cache.
+/// Written beside the file, then swapped in, so a crash mid-write never leaves half a cache. Entries of files no
+/// longer there stay out (memory keeps them for the session, main_tauri.rs adopt_moved_details).
 pub fn save<T: Serialize>(entries: &HashMap<PathBuf, T>) {
+    let entries: HashMap<&PathBuf, &T> = entries.iter().filter(|(p, _)| p.exists()).collect();
+    let entries = &entries;
     let path = file();
     let tmp = path.with_extension("json.tmp");
     // a path JSON cannot hold (not UTF-8) fails every time: not retried. A disk error is, at the next save.
