@@ -75,11 +75,22 @@ pub fn relink(root: &Path, paths: &[PathBuf], state: &Arc<Mutex<crate::AppState>
         let tag_moves = moved(&tag_key);
         let taken: HashSet<&String> = tag_moves[..fresh].iter().filter(|(o, _)| s.mod_tags_by_key.get(o).is_some_and(|t| !t.is_empty())).map(|(_, n)| n).collect();
         let held: Vec<String> = s.mod_tags_by_key.iter().filter(|(k, t)| !t.is_empty() && !taken.contains(k)).map(|(k, _)| k.clone()).collect();
-        let moved = pairs(&held, &tag_keys, &tag_moves);
+        // and an untagged mod found renamed onto such a key (this scan) brings no tags: the gone mod's leave the key
+        let installed: HashSet<&String> = tag_keys.iter().collect();
+        let untagged: Vec<String> = tag_moves[..fresh]
+            .iter()
+            .filter(|(o, n)| !installed.contains(o) && s.mod_tags_by_key.get(o).map_or(true, |t| t.is_empty()) && s.mod_tags_by_key.get(n).is_some_and(|t| !t.is_empty()))
+            .map(|(_, n)| n.clone())
+            .collect();
+        let mut moved = pairs(&held, &tag_keys, &tag_moves);
         for (old, new) in &moved {
             if let Some(t) = s.mod_tags_by_key.remove(old) {
                 s.mod_tags_by_key.insert(new.clone(), t);
             }
+        }
+        for n in untagged {
+            s.mod_tags_by_key.remove(&n);
+            moved.push((String::new(), n)); // mirrored below like a move
         }
         // the old map's names Repak X respaced, not migrated yet, follow too (their tags wait there for the migration). A
         // migrated name's tags already followed above, by key: moving its old entry too would give them to a namesake.

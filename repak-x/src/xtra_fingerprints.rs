@@ -116,7 +116,9 @@ pub fn reconcile(prints: &Prints, found: &[Found], now: u64, hash: &mut dyn FnMu
     let mut taken = std::collections::HashSet::new();
     for f in &came {
         let one = |n: &HashMap<String, usize>| n.get(&f.stamp) == Some(&1);
+        // (same files: the stamp, and the file list when both can be read)
         let own = prints.get(&f.key).filter(|p| p.missing_since.is_some() && p.stamp == f.stamp);
+        let own = own.filter(|p| p.hash.is_none() || hash(&f.path).map_or(true, |h| p.hash.as_deref() == Some(h.as_str())));
         // a gone mod back at its own key with its own files is a restore (a relink leaves no record at its old key, so a
         // gone record sharing a stamp with another mod means there were copies: never guessed between); else the one mod
         // that left this scan with its stamp; else the one mod gone before with it (moved while the app was closed)
@@ -342,7 +344,7 @@ mod tests {
         // the gone mod itself back (same files): found at its key
         let mut back = p("|hat", "d", Some("x"));
         back.1.missing_since = Some(0);
-        assert!(reconcile(&prints(&[back]), &[f("|hat", "d")], 10, &mut no_read).1.is_empty());
+        assert!(reconcile(&prints(&[back]), &[f("|hat", "d")], 10, &mut |_| Some("x".into())).1.is_empty());
     }
 
     #[test]
@@ -363,8 +365,18 @@ mod tests {
         // copies A and B: A gone earlier, now A is back and B is gone in one scan: no guess between them
         let mut a = p("|a", "s", Some("h"));
         a.1.missing_since = Some(0);
-        let (next, r) = reconcile(&prints(&[a, p("|b", "s", Some("h"))]), &[f("|a", "s")], 10, &mut no_read);
+        let (next, r) = reconcile(&prints(&[a, p("|b", "s", Some("h"))]), &[f("|a", "s")], 10, &mut |_| Some("h".into()));
         assert!(r.is_empty() && next["|a"].missing_since.is_none() && next["|b"].missing_since == Some(10));
+    }
+
+    #[test]
+    fn another_file_list_at_a_gone_mods_key_is_not_its_restore() {
+        // A renamed onto deleted B's name, same sizes and times, other files: A's rename, not B back
+        let mut b = p("|b", "s", Some("hb"));
+        b.1.missing_since = Some(0);
+        let (_, r) = reconcile(&prints(&[p("|a", "s", Some("ha")), b]), &[f("|b", "s")], 10, &mut |_| Some("ha".into()));
+        assert_eq!(r.len(), 1);
+        assert_eq!(r[0].0, "|a");
     }
 
     #[test]
@@ -374,7 +386,7 @@ mod tests {
             x.1.missing_since = Some(0);
             x
         };
-        let (next, r) = reconcile(&prints(&[gone("a|skin"), gone("b|skin")]), &[f("a|skin", "s"), f("b|skin", "s")], 10, &mut no_read);
+        let (next, r) = reconcile(&prints(&[gone("a|skin"), gone("b|skin")]), &[f("a|skin", "s"), f("b|skin", "s")], 10, &mut |_| Some("h".into()));
         assert!(r.is_empty() && next.values().all(|p| p.missing_since.is_none() && p.hash.is_some()));
     }
 

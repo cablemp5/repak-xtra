@@ -101,7 +101,11 @@ pub fn take_dirty() -> bool {
 /// folder is reachable), entries of files no longer there stay out (memory keeps them until the save loop finds them
 /// gone twice, for main_tauri.rs adopt_moved_details).
 pub fn save<T: Serialize>(entries: &HashMap<PathBuf, T>, drop_gone: bool) {
-    let entries: HashMap<&PathBuf, &T> = entries.iter().filter(|(p, _)| !drop_gone || p.exists()).collect();
+    let kept: HashMap<&PathBuf, &T> = entries.iter().filter(|(p, _)| !drop_gone || p.exists()).collect();
+    if kept.is_empty() && !entries.is_empty() {
+        return; // every file gone at once: the drive dropped out after the check, so the saved copy stays as it was
+    }
+    let entries = kept;
     let entries = &entries;
     let path = file();
     let tmp = path.with_extension("json.tmp");
