@@ -284,7 +284,9 @@ fn move_details(st: &mut AppState, old: &Path, new: &Path) {
 fn details_after_scan(state: &Mutex<AppState>, moved: &[(PathBuf, PathBuf)]) {
     let mut st = state.lock().unwrap_or_else(|e| e.into_inner());
     for (old, new) in moved {
-        move_details(&mut st, old, new);
+        if !old.exists() {
+            move_details(&mut st, old, new); // a replayed move whose old path holds another mod again: not that one's
+        }
     }
 }
 
@@ -860,15 +862,16 @@ async fn get_pak_files(state: State<'_, Arc<Mutex<AppState>>>) -> Result<Vec<Mod
         log::warn!("[relink] skipped: a folder in the mods folder could not be read");
     }
     let paths: Vec<PathBuf> = mods.iter().map(|m| m.path.clone()).collect();
-    if !walk_failed && era.is_some() && crate::xtra_mutation::era() == era {
-        // older saves' name-only tags, whatever the relink below can do (xtra_tags.rs); never from a walk a mod change (a
-        // restore) ran beside, which may have missed a mod
+    let relinked = !walk_failed && crate::xtra_respace::relink(game_path, &paths, state.inner(), era);
+    if !walk_failed && !relinked && era.is_some() && crate::xtra_mutation::era() == era {
+        // older saves' name-only tags when the relink could not run (it migrates after its moves, so a leftover old name
+        // never takes a renamed mod's key), never from a walk a mod change (a restore) ran beside, which may have missed
+        // a mod (xtra_tags.rs)
         let mut s = state.lock().unwrap();
         if xtra_tags::migrate(&mut s, game_path, &paths) {
             let _ = save_state(&s);
         }
     }
-    let relinked = !walk_failed && crate::xtra_respace::relink(game_path, &paths, state.inner(), era);
     {
         // tags as they are now: this scan or another one running beside it (VFX Updater, Galacta) may have moved some
         let from = crate::xtra_fingerprints::relinked_from(game_path, &paths, state.inner());
