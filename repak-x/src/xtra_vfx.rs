@@ -938,6 +938,15 @@ pub async fn xtra_vfx_place(source: String, staged_base: String, turn_off_origin
         }
         let _ = crate::save_state(&s);
     }
+    // repakxtra: and the tags by folder + name (xtra_tags.rs)
+    let dir = Path::new(&source).parent().unwrap_or(Path::new("")).to_path_buf();
+    let mut copied = false;
+    for t in &to {
+        copied |= crate::xtra_tags::moved(&mut s, &dir.join(format!("{from}.pak")), &dir.join(format!("{t}.pak")), true);
+    }
+    if copied {
+        let _ = crate::save_state(&s);
+    }
     Ok(placed)
     }).await
 }

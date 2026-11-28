@@ -3,11 +3,12 @@
 //! keeps by name loses its mod. On each scan, data saved under a name no installed mod has follows the one installed mod
 //! whose name is that name with its spaces as "_": tags, previews, and install records here, loadout members in
 //! loadoutIdentity.ts (resolveKeys). Nexus sources need nothing: nexusSource.tsx norm reads a space and "_" as one.
-//! Only a single exact match relinks, and the files keep their new names (Repak X would rename them again).
+//! Only a single exact match relinks, and the files keep their new names (Repak X would rename them again). Mods renamed
+//! or moved outside the app any other way (xtra_fingerprints.rs) follow the same path, as `moved` pairs.
 
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
 /// Every whitespace as "_", as Repak X does. In a "<folder>|<name>" key only the name: Repak X renames files, not folders.
 fn respaced(key: &str) -> String {
@@ -15,23 +16,26 @@ fn respaced(key: &str) -> String {
     format!("{}{}", &key[..at], key[at..].replace(char::is_whitespace, "_"))
 }
 
-/// (old, new) for each stored key that no installed mod has and whose respaced form is exactly one installed mod's key
-/// with nothing stored under it yet. `installed` holds one key per installed mod, so a key there twice is two mods. Two
-/// stored keys with one respaced form relink neither. Pure.
-pub fn pairs<'a>(stored: impl IntoIterator<Item = &'a String>, installed: &[String]) -> Vec<(String, String)> {
+/// (old, new) for each stored key that no installed mod has and whose respaced form, or its new key in `moved`, is
+/// exactly one installed mod's key with nothing stored under it yet. `installed` holds one key per installed mod, so a
+/// key there twice is two mods. Two stored keys with one new key relink neither, nor does one stored key with two. Pure.
+pub fn pairs<'a>(stored: impl IntoIterator<Item = &'a String>, installed: &[String], moved: &[(String, String)]) -> Vec<(String, String)> {
     let stored: HashSet<&str> = stored.into_iter().map(String::as_str).collect();
     let mut mods: HashMap<&str, usize> = HashMap::new();
     for k in installed {
         *mods.entry(k).or_default() += 1;
     }
-    let mut by_new: HashMap<String, Vec<&str>> = HashMap::new();
-    for &old in &stored {
-        let new = respaced(old);
+    let mut by_new: HashMap<String, HashSet<&str>> = HashMap::new();
+    let from_moves = moved.iter().filter_map(|(o, n)| stored.get(o.as_str()).map(|&old| (old, n.clone())));
+    for (old, new) in stored.iter().map(|&old| (old, respaced(old))).chain(from_moves) {
         if new != old && !mods.contains_key(old) && mods.get(new.as_str()) == Some(&1) && !stored.contains(new.as_str()) {
-            by_new.entry(new).or_default().push(old);
+            by_new.entry(new).or_default().insert(old);
         }
     }
-    let mut out: Vec<(String, String)> = by_new.into_iter().filter(|(_, olds)| olds.len() == 1).map(|(new, olds)| (olds[0].to_string(), new)).collect();
+    let mut out: Vec<(String, String)> = by_new.into_iter().filter_map(|(new, olds)| (olds.len() == 1).then(|| (olds.into_iter().next().unwrap_or_default().to_string(), new))).collect();
+    let mut olds: HashMap<String, usize> = HashMap::new();
+    out.iter().for_each(|(o, _)| *olds.entry(o.clone()).or_default() += 1);
+    out.retain(|(o, _)| olds[o] == 1);
     out.sort();
     out
 }
@@ -39,7 +43,7 @@ pub fn pairs<'a>(stored: impl IntoIterator<Item = &'a String>, installed: &[Stri
 /// After a full scan of `root` found `paths` (`era`: xtra_mutation::era before the walk): tags, previews, and install records follow mods renamed this way. The
 /// mods whose tags or previews followed go in the activity log (install records are not shown anywhere). False when it
 /// could not look (then loadouts wait too).
-pub fn relink(root: &Path, paths: &[PathBuf], state: &Mutex<crate::AppState>, era: Option<u64>) -> bool {
+pub fn relink(root: &Path, paths: &[PathBuf], state: &Arc<Mutex<crate::AppState>>, era: Option<u64>) -> bool {
     // a mod change (a restore, a VFX update moving a file aside, a toggle) that ran during the walk (`era` is from before
     // it) or runs now may have left the walk a half-done folder: the next scan relinks. Holding the gate
     // keeps restores and cleanups out until it is done, without counting as one (scans beside it stay quiet).
@@ -47,29 +51,35 @@ pub fn relink(root: &Path, paths: &[PathBuf], state: &Mutex<crate::AppState>, er
     if era.is_none() || crate::xtra_mutation::era() != era {
         return false;
     }
-    let keys = |key: fn(&Path) -> String| paths.iter().map(|p| key(p)).collect::<Vec<String>>();
+    let keys = |key: &dyn Fn(&Path) -> String| paths.iter().map(|p| key(p)).collect::<Vec<String>>();
+    // mods renamed or moved outside the app since the last scan, (old path, new path): each store keys them its own way
+    let found = crate::xtra_fingerprints::scan(root, paths, state);
+    let moved = |key: &dyn Fn(&Path) -> String| found.iter().map(|(o, n)| (key(o), key(n))).collect::<Vec<_>>();
 
-    let tag_keys = keys(crate::get_mod_key);
+    let tag_key = |p: &Path| crate::xtra_dupes::key(root, p);
+    let tag_keys = keys(&tag_key);
     let tags = {
         let mut s = state.lock().unwrap_or_else(|e| e.into_inner());
-        let moved = pairs(s.mod_tags.keys(), &tag_keys);
+        let migrated = crate::xtra_tags::migrate(&mut s, paths); // older saves' name-only tags, once
+        let moved = pairs(s.mod_tags_by_key.keys(), &tag_keys, &moved(&tag_key));
         for (old, new) in &moved {
-            if let Some(t) = s.mod_tags.remove(old) {
-                s.mod_tags.insert(new.clone(), t);
+            if let Some(t) = s.mod_tags_by_key.remove(old) {
+                s.mod_tags_by_key.insert(new.clone(), t);
             }
         }
-        if !moved.is_empty() {
+        if migrated || !moved.is_empty() {
             let _ = crate::save_state(&s);
         }
         moved
     };
 
-    let preview_keys = keys(crate::xtra_previews::mod_key);
+    let preview_keys = keys(&crate::xtra_previews::mod_key);
+    let preview_moved = moved(&crate::xtra_previews::mod_key);
     // a key's other forms ("<key>@2") move with it: never while a mod named like one of the old or new forms is installed
     let form = |k: &str| k.rsplit_once('@').is_some_and(|(_, n)| !n.is_empty() && n.bytes().all(|c| c.is_ascii_digit()));
     let wanted = || -> Vec<(String, String)> {
         let stored: Vec<String> = crate::xtra_previews::list_mod_previews().into_iter().filter(|k| !form(k)).collect();
-        pairs(&stored, &preview_keys)
+        pairs(&stored, &preview_keys, &preview_moved)
             .into_iter()
             .filter(|(old, new)| !preview_keys.iter().any(|k| [old, new].iter().any(|o| k.strip_prefix(o.as_str()).is_some_and(|r| r.starts_with('@') && form(r)))))
             .collect()
@@ -91,7 +101,7 @@ pub fn relink(root: &Path, paths: &[PathBuf], state: &Mutex<crate::AppState>, er
         crate::ui_log::send("repakxtra-previews-relinked", &previews); // previews.tsx reloads those keys
     }
 
-    let sources = crate::xtra_dupes::relink(root, paths).len();
+    let sources = crate::xtra_dupes::relink(root, paths, &moved(&tag_key)).len();
 
     let (tags_to, previews_to): (HashSet<&str>, HashSet<&str>) =
         (tags.iter().map(|p| p.1.as_str()).collect(), previews.iter().map(|p| p.1.as_str()).collect());
@@ -106,7 +116,7 @@ pub fn relink(root: &Path, paths: &[PathBuf], state: &Mutex<crate::AppState>, er
     if !names.is_empty() || sources > 0 {
         let shown = names.iter().take(20).cloned().collect::<Vec<_>>().join(", ");
         let more = if names.len() > 20 { format!(" and {} more", names.len() - 20) } else { String::new() };
-        crate::ui_log::info("Mods", format!("Relinked {} mod(s) and {sources} install record(s) renamed outside the app with \"_\" for spaces: {shown}{more}", names.len()));
+        crate::ui_log::info("Mods", format!("Relinked {} mod(s) and {sources} install record(s) renamed or moved since the last scan: {shown}{more}", names.len()));
     }
     if !names.is_empty() {
         crate::xtra_activity::record("relink", &names, &[], "");
@@ -118,39 +128,55 @@ pub fn relink(root: &Path, paths: &[PathBuf], state: &Mutex<crate::AppState>, er
 mod tests {
     use super::*;
 
+    fn pairs2<'a>(stored: impl IntoIterator<Item = &'a String>, installed: &[String]) -> Vec<(String, String)> {
+        pairs(stored, installed, &[])
+    }
+
+    #[test]
+    fn a_moved_key_relinks_like_a_respaced_one() {
+        let mv = |o: &str, n: &str| vec![(o.to_string(), n.to_string())];
+        assert_eq!(pairs(&s(&["a|skin"]), &s(&["b|hat"]), &mv("a|skin", "b|hat")), [("a|skin".into(), "b|hat".into())]);
+        // nothing stored, the new key has its own, or the old one is still installed: no relink
+        assert!(pairs(&s(&["x"]), &s(&["b|hat"]), &mv("a|skin", "b|hat")).is_empty());
+        assert!(pairs(&s(&["a|skin", "b|hat"]), &s(&["b|hat"]), &mv("a|skin", "b|hat")).is_empty());
+        assert!(pairs(&s(&["a|skin"]), &s(&["a|skin", "b|hat"]), &mv("a|skin", "b|hat")).is_empty());
+        // one stored key told two ways (respaced and moved): neither
+        assert!(pairs(&s(&["a|my mod"]), &s(&["a|my_mod", "b|x"]), &mv("a|my mod", "b|x")).is_empty());
+    }
+
     fn s(v: &[&str]) -> Vec<String> {
         v.iter().map(|x| x.to_string()).collect()
     }
 
     #[test]
     fn a_unique_match_relinks() {
-        assert_eq!(pairs(&s(&["My Mod", "Other"]), &s(&["My_Mod", "Other"])), [("My Mod".into(), "My_Mod".into())]);
+        assert_eq!(pairs2(&s(&["My Mod", "Other"]), &s(&["My_Mod", "Other"])), [("My Mod".into(), "My_Mod".into())]);
         // folder keys: the name changes, the folder (spaces and all) stays
-        assert_eq!(pairs(&s(&["skins x|my mod"]), &s(&["skins x|my_mod"])), [("skins x|my mod".into(), "skins x|my_mod".into())]);
+        assert_eq!(pairs2(&s(&["skins x|my mod"]), &s(&["skins x|my_mod"])), [("skins x|my mod".into(), "skins x|my_mod".into())]);
         // a tab is whitespace too, as in Repak X
-        assert_eq!(pairs(&s(&["a\tb"]), &s(&["a_b"])).len(), 1);
+        assert_eq!(pairs2(&s(&["a\tb"]), &s(&["a_b"])).len(), 1);
     }
 
     #[test]
     fn two_candidates_relink_nothing() {
         // two installed mods with the new name (name-only keys from two folders)
-        assert!(pairs(&s(&["My Mod"]), &s(&["My_Mod", "My_Mod"])).is_empty());
+        assert!(pairs2(&s(&["My Mod"]), &s(&["My_Mod", "My_Mod"])).is_empty());
         // two stored names that both turn into it
-        assert!(pairs(&s(&["My Mod", "My\tMod"]), &s(&["My_Mod"])).is_empty());
+        assert!(pairs2(&s(&["My Mod", "My\tMod"]), &s(&["My_Mod"])).is_empty());
     }
 
     #[test]
     fn a_different_folder_is_not_a_match() {
-        assert!(pairs(&s(&["a|my mod"]), &s(&["b|my_mod"])).is_empty());
+        assert!(pairs2(&s(&["a|my mod"]), &s(&["b|my_mod"])).is_empty());
     }
 
     #[test]
     fn nothing_is_overwritten_or_taken_from_an_installed_mod() {
         // the new name already has its own data
-        assert!(pairs(&s(&["My Mod", "My_Mod"]), &s(&["My_Mod"])).is_empty());
+        assert!(pairs2(&s(&["My Mod", "My_Mod"]), &s(&["My_Mod"])).is_empty());
         // the old name is still installed (Repak X skipped it: the new name was taken)
-        assert!(pairs(&s(&["My Mod"]), &s(&["My Mod", "My_Mod"])).is_empty());
+        assert!(pairs2(&s(&["My Mod"]), &s(&["My Mod", "My_Mod"])).is_empty());
         // no space, nothing to follow
-        assert!(pairs(&s(&["Gone"]), &s(&["Gone_"])).is_empty());
+        assert!(pairs2(&s(&["Gone"]), &s(&["Gone_"])).is_empty());
     }
 }

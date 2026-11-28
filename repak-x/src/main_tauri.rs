@@ -7,6 +7,8 @@ mod asset_explorer;
 mod xtra_classify; // repakxtra: extra mod types, Project Galacta check
 mod xtra_dupes; // repakxtra: same-content installs and Check Conflicts' Duplicates
 mod xtra_respace; // repakxtra: data follows mods Repak X renamed (spaces to "_")
+mod xtra_fingerprints; // repakxtra: and mods renamed or moved outside the app
+mod xtra_tags; // repakxtra: tags by folder + name
 mod xtra_unpacked; // repakxtra: a dropped archive is unpacked once
 mod xtra_activity; // repakxtra: what changed before a crash (installs, on and off, updates)
 mod xtra_ops; // repakxtra: game open, file in use, and name taken, one dialog each
@@ -210,6 +212,16 @@ struct AppState {
     custom_tag_catalog: Vec<String>,
     #[serde(default)]
     mod_tags: std::collections::HashMap<String, Vec<String>>,
+    /// repakxtra: tags by folder + name (xtra_tags.rs); mod_tags above stays for older builds
+    #[serde(default)]
+    mod_tags_by_key: std::collections::HashMap<String, Vec<String>>,
+    /// repakxtra: the mod_tags names already copied into mod_tags_by_key
+    #[serde(default)]
+    mod_tags_migrated: std::collections::BTreeSet<String>,
+    /// repakxtra: each mod's stamp and file list hash, by mods folder and key, to find mods renamed outside the app
+    /// (xtra_fingerprints.rs)
+    #[serde(default)]
+    mod_fingerprints: std::collections::BTreeMap<String, xtra_fingerprints::Prints>,
     /// Last known crash folder name for detecting crashes from previous sessions
     #[serde(default)]
     last_known_crash_folder: Option<String>,
@@ -241,6 +253,22 @@ fn mod_fingerprint(path: &std::path::Path) -> ModFingerprint {
     ]
 }
 
+/// repakxtra: a mod renamed or moved since its details were read keeps them: with nothing cached at `path`, the one
+/// cached entry with the same fingerprint (size and modified time, which a rename or move keeps) whose file is gone moves
+/// to `path`. Two such entries (identical copies renamed at once) are read again instead.
+fn adopt_moved_details(st: &mut AppState, path: &Path, print: &ModFingerprint) {
+    if st.mod_details_cache.contains_key(path) || print.iter().all(Option::is_none) {
+        return;
+    }
+    let mut gone = st.mod_details_cache.iter().filter(|(p, (f, _))| f == print && !p.exists()).map(|(p, _)| p.clone());
+    let (Some(old), None) = (gone.next(), gone.next()) else { return };
+    if let Some((f, mut d)) = st.mod_details_cache.remove(&old) {
+        d.mod_name = path.file_stem().and_then(|s| s.to_str()).unwrap_or("Unknown").to_string(); // as compute_mod_details names it
+        st.mod_details_cache.insert(path.to_path_buf(), (f, d));
+        xtra_details_cache::mark_dirty();
+    }
+}
+
 impl Default for AppState {
     fn default() -> Self {
         Self {
@@ -265,6 +293,9 @@ impl Default for AppState {
             enable_animations: default_true(),
             custom_tag_catalog: Vec::new(),
             mod_tags: std::collections::HashMap::new(),
+            mod_tags_by_key: Default::default(), // repakxtra
+            mod_tags_migrated: Default::default(),
+            mod_fingerprints: Default::default(),
             last_known_crash_folder: None,
             last_known_crash_created: None,
             mod_details_cache: std::collections::HashMap::new(),
@@ -323,6 +354,10 @@ struct ModEntry {
     /// repakxtra: this scan could not relink (xtra_respace.rs), so loadouts do not either (loadoutStore.ts)
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     relink_held: bool,
+    /// repakxtra: where it was before a rename or move outside the app found in the last 7 days (xtra_fingerprints.rs),
+    /// so loadout members and its Nexus source follow it (loadoutStore.ts, nexusSource.tsx)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    relinked_from: Option<PathBuf>,
 }
 
 // ============================================================================
@@ -689,10 +724,7 @@ fn watch_mods_folder(window: &Window, game_path: &Path, watcher_state: &WatcherS
 async fn get_pak_files(state: State<'_, Arc<Mutex<AppState>>>) -> Result<Vec<ModEntry>, String> {
     let scan_started = std::time::Instant::now();
     // repakxtra: copies what the scan needs and lets go of the state, so the walk never holds up other commands
-    let (game_path, mod_tags) = {
-        let state = state.lock().unwrap();
-        (state.game_path.clone(), state.mod_tags.clone())
-    };
+    let game_path = state.lock().unwrap().game_path.clone(); // repakxtra: tags are read after the walk
     let game_path = &game_path;
 
     info!("Loading mods from: {}", game_path.display());
@@ -783,8 +815,7 @@ async fn get_pak_files(state: State<'_, Arc<Mutex<AppState>>>) -> Result<Vec<Mod
             // (Special) from the path.
             let priority = crate::xtra_conflicts::rank_of(path).1;
 
-            let key = get_mod_key(&path);
-            let custom_tags = mod_tags.get(&key).cloned().unwrap_or_default();
+            let custom_tags = Vec::new(); // repakxtra: filled after the walk, once tags have followed renamed mods
 
             mods.push(ModEntry {
                 path: path.to_path_buf(),
@@ -799,11 +830,13 @@ async fn get_pak_files(state: State<'_, Arc<Mutex<AppState>>>) -> Result<Vec<Mod
                 character_name: None,
                 skin_name: None,
                 relink_held: false,
+                relinked_from: None,
             });
         }
     }
 
-    // repakxtra: tags, previews, and install records follow mods Repak X renamed with "_" for spaces
+    // repakxtra: tags, previews, and install records follow mods Repak X renamed with "_" for spaces, and mods renamed or
+    // moved outside the app (xtra_fingerprints.rs)
     if walk_failed {
         log::warn!("[relink] skipped: a folder in the mods folder could not be read");
     }
@@ -811,10 +844,12 @@ async fn get_pak_files(state: State<'_, Arc<Mutex<AppState>>>) -> Result<Vec<Mod
     let relinked = !walk_failed && crate::xtra_respace::relink(game_path, &paths, state.inner(), era);
     {
         // tags as they are now: this scan or another one running beside it (VFX Updater, Galacta) may have moved some
+        let from = crate::xtra_fingerprints::relinked_from(game_path, &paths, state.inner());
         let s = state.lock().unwrap();
-        for m in &mut mods {
-            m.custom_tags = s.mod_tags.get(&get_mod_key(&m.path)).cloned().unwrap_or_default();
+        for (m, from) in mods.iter_mut().zip(from) {
+            m.custom_tags = xtra_tags::of(&s, &m.path);
             m.relink_held = !relinked;
+            m.relinked_from = from;
         }
     }
 
@@ -910,8 +945,7 @@ async fn get_pak_files_in_folder(
 
             let priority = crate::xtra_conflicts::rank_of(path).1; // repakxtra
 
-            let key = get_mod_key(&path);
-            let custom_tags = state.mod_tags.get(&key).cloned().unwrap_or_default();
+            let custom_tags = xtra_tags::of(&state, path); // repakxtra: by folder + name
 
             mods.push(ModEntry {
                 path: path.to_path_buf(),
@@ -926,6 +960,7 @@ async fn get_pak_files_in_folder(
                 character_name: None,
                 skin_name: None,
                 relink_held: false,
+                relinked_from: None,
             });
         }
     }
@@ -3818,9 +3853,12 @@ async fn update_mod(
     {
         let mut state_guard = state.lock().unwrap();
         let new_key = get_mod_key(&new_mod_path);
+        let followed = xtra_tags::moved(&mut state_guard, &actual_old_path, &new_mod_path, false) | !old_custom_tags.is_empty(); // repakxtra
         if !old_custom_tags.is_empty() {
             state_guard.mod_tags.remove(&old_key);
             state_guard.mod_tags.insert(new_key, old_custom_tags);
+        }
+        if followed {
             let _ = save_state(&state_guard);
         }
     }
@@ -4506,11 +4544,15 @@ async fn rename_mod(
 
         let old_key = get_mod_key(&old_path_buf);
         let new_key = get_mod_key(&new_path);
+        let mut changed = xtra_tags::moved(&mut state_guard, &old_path_buf, &new_path, false); // repakxtra
         if old_key != new_key {
             if let Some(tags) = state_guard.mod_tags.remove(&old_key) {
                 state_guard.mod_tags.insert(new_key, tags);
-                let _ = save_state(&state_guard);
+                changed = true;
             }
+        }
+        if changed {
+            let _ = save_state(&state_guard);
         }
     }
 
@@ -4857,6 +4899,8 @@ async fn rename_folder(
         toast_events::emit_folder_rename_failed(&window, &error_msg);
         return Err(error_msg);
     }
+    xtra_tags::folder_moved(&mut state, &id, &new_id); // repakxtra: its mods' tags follow
+    let _ = save_state(&state);
 
     Ok(new_id)
 }
@@ -4955,6 +4999,8 @@ async fn move_folder(
         toast_events::emit_folder_rename_failed(&window, &error_msg);
         return Err(error_msg);
     }
+    xtra_tags::folder_moved(&mut state, &id, &new_id); // repakxtra: its mods' tags follow
+    let _ = save_state(&state);
 
     Ok(new_id)
 }
@@ -4970,8 +5016,9 @@ async fn assign_mod_to_folder(
     crate::xtra_builtins::fixed_place(Path::new(&mod_path))?; // repakxtra
     let _mutation = crate::xtra_mutation::edit()?;
     crate::xtra_identity::upstream_guard()?; // repakxtra: not while Repak X is open (both change the same files)
-    let state = state.lock().unwrap();
-    let game_path = &state.game_path;
+    let mut state = state.lock().unwrap(); // repakxtra: mut, its tags follow
+    let game_path = state.game_path.clone();
+    let game_path = &game_path;
     let source_path = PathBuf::from(&mod_path);
 
     if !source_path.exists() {
@@ -5021,6 +5068,9 @@ async fn assign_mod_to_folder(
         toast_events::emit_move_failed(&window, &error_msg);
         return Err(error_msg);
     }
+    if xtra_tags::moved(&mut state, &source_path, &dest_path, false) { // repakxtra: its tags follow (keys hold the folder)
+        let _ = save_state(&state);
+    }
 
     Ok(dest_path.to_string_lossy().into_owned())
 }
@@ -5038,11 +5088,12 @@ async fn add_custom_tag(
         state.custom_tag_catalog.sort();
     }
 
-    let key = get_mod_key(std::path::Path::new(&mod_path));
-    let tags = state.mod_tags.entry(key).or_insert_with(Vec::new);
+    let path = std::path::Path::new(&mod_path);
+    let mut tags = xtra_tags::of(&state, path); // repakxtra: by folder + name
     if !tags.contains(&tag) {
         tags.push(tag);
         tags.sort();
+        xtra_tags::set(&mut state, path, tags);
     }
 
     save_state(&state).map_err(|e| e.to_string())?;
@@ -5086,13 +5137,10 @@ async fn remove_custom_tag(
 ) -> Result<(), String> {
     let mut state = state.lock().unwrap();
 
-    let key = get_mod_key(std::path::Path::new(&mod_path));
-    if let Some(tags) = state.mod_tags.get_mut(&key) {
-        tags.retain(|t| t != &tag);
-        if tags.is_empty() {
-            state.mod_tags.remove(&key);
-        }
-    }
+    let path = std::path::Path::new(&mod_path);
+    let mut tags = xtra_tags::of(&state, path); // repakxtra: by folder + name
+    tags.retain(|t| t != &tag);
+    xtra_tags::set(&mut state, path, tags);
 
     save_state(&state).map_err(|e| e.to_string())?;
     Ok(())
@@ -7729,6 +7777,7 @@ async fn get_mod_details(
             let path = PathBuf::from(&mod_path);
             let fingerprint = mod_fingerprint(&path);
             let mut st = state.lock().unwrap();
+            adopt_moved_details(&mut st, &path, &fingerprint); // repakxtra
             if let Some((cached, d)) = st.mod_details_cache.get_mut(&path) {
                 if *cached == fingerprint {
                     if let Some(copy) = library_copy(d) {
@@ -7775,6 +7824,7 @@ async fn get_cached_mod_details(
         let mut st = state.lock().unwrap();
         let mut out = std::collections::HashMap::new();
         for (key, path, print) in prints {
+            adopt_moved_details(&mut st, &path, &print); // repakxtra
             if let Some((cached, d)) = st.mod_details_cache.get_mut(&path) {
                 if *cached == print {
                     if let Some(copy) = library_copy(d) {
@@ -7821,7 +7871,8 @@ fn compute_mod_details(
     let fingerprint = mod_fingerprint(&path);
 
     {
-        let state_guard = state.lock().unwrap();
+        let mut state_guard = state.lock().unwrap();
+        adopt_moved_details(&mut state_guard, &path, &fingerprint); // repakxtra
         if let Some((cached_fingerprint, cached_details)) =
             state_guard.mod_details_cache.get(&path)
         {
@@ -8196,7 +8247,8 @@ async fn check_mod_clashes(
 /// the saved mod details when they are current: after a restart the check then reads no mod from the disk again.
 fn clash_files_from_details(state: &Arc<Mutex<AppState>>, pak: &Path, is_iostore: bool) -> Option<Vec<String>> {
     let fingerprint = mod_fingerprint(pak);
-    let st = state.lock().unwrap();
+    let mut st = state.lock().unwrap();
+    adopt_moved_details(&mut st, pak, &fingerprint); // repakxtra
     let (cached, d) = st.mod_details_cache.get(pak)?;
     if *cached != fingerprint {
         return None;

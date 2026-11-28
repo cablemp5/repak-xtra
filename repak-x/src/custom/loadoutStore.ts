@@ -236,6 +236,12 @@ export function syncLoadoutKeys(mods: Mod[]) {
   // either: no relink, no moves (compared with the last full scan instead), and legacy names wait for a full scan
   const held = mods.some(m => (m as { relink_held?: boolean }).relink_held)
   const moved = lastKeys && !held ? movesBetween(lastKeys, keys) : new Map<string, string>()
+  // and mods Rust found renamed or moved outside the app (xtra_fingerprints.rs), while no mod has the old key again
+  const installed = new Set(keys)
+  for (const m of mods) {
+    const from = (m as { relinked_from?: string }).relinked_from
+    if (from && !installed.has(modKey(from)) && !moved.has(modKey(from))) moved.set(modKey(from), modKey(m.path))
+  }
   if (!keys.length) return
   if (!held) lastKeys = keys
   const byName = keysByName(keys)

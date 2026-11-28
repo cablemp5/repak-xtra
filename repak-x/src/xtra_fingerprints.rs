@@ -1,0 +1,338 @@
+//! repakxtra: finds mods renamed or moved outside the app (Explorer, another mod manager), the idea of Repak X v2.4.0's
+//! mod_db/reconcile.rs without its database. Every full scan records each mod's stamp (size and modified time of its
+//! .pak, .utoc and .ucas, which a rename or move keeps) and, off the scan, a hash of its file list, by its key
+//! (xtra_dupes::key, folder + name) and per mods folder, in repakxtra-state.json. A key that went and one that came
+//! with the same stamp, one each, and the same file list, are one mod: xtra_respace.rs moves its tags, previews, and
+//! install records, loadoutStore.ts its loadout memberships, and nexusSource.tsx its source. Two identical copies share
+//! a stamp, so they never relink (nor swap). A record no scan finds is kept 7 days, then forgotten (its tags stay).
+
+use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
+use std::collections::{BTreeMap, HashMap};
+use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
+
+/// A record no scan finds is kept this long (seconds), so a mod moved while the app was closed is still found
+pub const ORPHAN_SECS: u64 = 7 * 24 * 3600;
+
+#[derive(Serialize, Deserialize, Clone, PartialEq, Debug, Default)]
+pub struct Print {
+    /// Where it is, relative to the mods folder with "/", as on disk
+    pub path: String,
+    pub stamp: String,
+    /// Its file list's hash, filled in off the scan (`fill`); None until then, or after its files changed
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hash: Option<String>,
+    /// Since when (Unix seconds) no scan found it
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub missing_since: Option<u64>,
+    /// The path it had before its last relink and when (Unix seconds): every scan for 7 days reports it, so a mod list
+    /// the frontend skipped (a newer one came) cannot lose a loadout's move
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub from: Option<(String, u64)>,
+}
+
+/// The records of one mods folder, by key.
+pub type Prints = BTreeMap<String, Print>;
+
+/// One mod a scan found: its key, path relative to the mods folder, and stamp.
+pub struct Found {
+    pub key: String,
+    pub path: String,
+    pub stamp: String,
+}
+
+/// `len:nanos` of the .pak, .utoc and .ucas (the details cache's fingerprint, path-free). Empty when none could be read.
+pub fn stamp(path: &Path) -> String {
+    let print = crate::mod_fingerprint(path);
+    if print.iter().all(Option::is_none) {
+        return String::new();
+    }
+    let part = |p: &Option<(std::time::SystemTime, u64)>| match p {
+        Some((t, len)) => format!("{len}:{}", t.duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_nanos())),
+        None => "-".into(),
+    };
+    print.iter().map(part).collect::<Vec<_>>().join("|")
+}
+
+/// A hash of the mod's file list (IoStore: the .utoc's paths and the .ucas size, else the .pak's paths and sizes), as
+/// Repak X's content_id. A relink check, not an integrity check. None when it cannot be read.
+pub fn hash(path: &Path) -> Option<String> {
+    let utoc = crate::xtra_bundle::companion(path, "utoc");
+    let _reading = crate::xtra_parse_guard::reading(path, &format!("{:?}", crate::mod_fingerprint(path))).ok()?;
+    let mut lines: Vec<String> = if utoc.exists() {
+        let ucas = std::fs::metadata(crate::xtra_bundle::companion(path, "ucas")).map_or(0, |m| m.len());
+        let mut l: Vec<String> = crate::utoc_utils::try_read_utoc(&utoc).ok()?.into_iter().map(|f| f.file_path.to_lowercase()).collect();
+        l.push(format!("\0ucas\0{ucas}"));
+        l
+    } else {
+        let listing = uasset_toolkit::list_pak(path.to_str()?, Some(crate::install_mod::AES_KEY_HEX), None).ok()?;
+        listing.files.into_iter().map(|e| format!("{}\0{}", e.path.to_lowercase(), e.size)).collect()
+    };
+    lines.sort();
+    Some(format!("{:x}", Sha256::digest(lines.join("\n").as_bytes())))
+}
+
+/// The records after a scan that found `found`, and the relinks: (old key, new key, old path). A record found by its
+/// key is refreshed (a new stamp drops its hash). A key no record has and a record no scan found pair up when theirs is
+/// the only such stamp on both sides and the file lists match (`hash` reads the new file; a record without a hash yet
+/// relinks on the stamp alone). The rest are new records, or missing ones (kept `ORPHAN_SECS`). Pure, apart from `hash`.
+pub fn reconcile(prints: &Prints, found: &[Found], now: u64, hash: &mut dyn FnMut(&str) -> Option<String>) -> (Prints, Vec<(String, String, String)>) {
+    let mut next = Prints::new();
+    let mut came = Vec::new();
+    let mut seen = std::collections::HashSet::new();
+    for f in found {
+        if !seen.insert(f.key.as_str()) {
+            continue; // one key twice (an on and an off copy side by side): the first is the record
+        }
+        match prints.get(&f.key) {
+            Some(p) => {
+                let hash = if p.stamp == f.stamp { p.hash.clone() } else { None };
+                next.insert(f.key.clone(), Print { path: f.path.clone(), stamp: f.stamp.clone(), hash, missing_since: None, from: p.from.clone() });
+            }
+            None => came.push(f),
+        }
+    }
+    let gone: Vec<(&String, &Print)> = prints.iter().filter(|(k, _)| !next.contains_key(*k)).collect();
+    let count = |stamps: &mut dyn Iterator<Item = &str>| {
+        let mut n: HashMap<String, usize> = HashMap::new();
+        stamps.for_each(|s| *n.entry(s.to_string()).or_default() += 1);
+        n
+    };
+    let (came_n, gone_n) = (count(&mut came.iter().map(|f| f.stamp.as_str())), count(&mut gone.iter().map(|(_, p)| p.stamp.as_str())));
+    let mut relinks = Vec::new();
+    let mut taken = std::collections::HashSet::new();
+    for f in &came {
+        let unique = !f.stamp.is_empty() && came_n.get(&f.stamp) == Some(&1) && gone_n.get(&f.stamp) == Some(&1);
+        let old = unique.then(|| gone.iter().find(|(_, p)| p.stamp == f.stamp)).flatten();
+        // shortcut: a record renamed before `fill` hashed it relinks on its unique stamp alone (nanosecond times),
+        // upgrade to refusing it if a wrong relink is ever reported
+        let same = old.filter(|(_, p)| p.hash.is_none() || p.hash == hash(&f.path));
+        match same {
+            Some((k, p)) => {
+                taken.insert(k.as_str());
+                relinks.push(((*k).clone(), f.key.clone(), p.path.clone()));
+                next.insert(f.key.clone(), Print { path: f.path.clone(), stamp: f.stamp.clone(), hash: p.hash.clone(), missing_since: None, from: Some((p.path.clone(), now)) });
+            }
+            None => {
+                next.insert(f.key.clone(), Print { path: f.path.clone(), stamp: f.stamp.clone(), ..Default::default() });
+            }
+        }
+    }
+    for (k, p) in gone {
+        if taken.contains(k.as_str()) {
+            continue;
+        }
+        let since = p.missing_since.unwrap_or(now);
+        if now.saturating_sub(since) <= ORPHAN_SECS {
+            next.insert(k.clone(), Print { missing_since: Some(since), ..p.clone() });
+        }
+    }
+    for p in next.values_mut() {
+        if p.from.as_ref().is_some_and(|(_, at)| now.saturating_sub(*at) > ORPHAN_SECS) {
+            p.from = None;
+        }
+    }
+    (next, relinks)
+}
+
+/// The records' key for a mods folder: its path, lowercase with "/".
+fn root_key(root: &Path) -> String {
+    root.to_string_lossy().replace('\\', "/").trim_end_matches('/').to_lowercase()
+}
+
+fn now() -> u64 {
+    std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_secs())
+}
+
+/// After a full scan of `root` found `paths`: records every mod (the first scan of a build records them all, before any
+/// later rename) and returns the mods renamed or moved since, (old path, new path). Nothing when the scan found nothing,
+/// the mods folder is gone, or the game path changed since the scan started (no record is orphaned then). The caller
+/// holds the mutation gate (xtra_respace::relink).
+pub fn scan(root: &Path, paths: &[PathBuf], state: &Arc<Mutex<crate::AppState>>) -> Vec<(PathBuf, PathBuf)> {
+    if paths.is_empty() || !root.is_dir() {
+        return Vec::new();
+    }
+    let rk = root_key(root);
+    let found: Vec<Found> = paths
+        .iter()
+        .map(|p| Found {
+            key: crate::xtra_dupes::key(root, p),
+            path: p.strip_prefix(root).unwrap_or(p).to_string_lossy().replace('\\', "/"),
+            stamp: stamp(p),
+        })
+        .collect();
+    let before = {
+        let s = state.lock().unwrap_or_else(|e| e.into_inner());
+        if s.game_path != root {
+            return Vec::new();
+        }
+        s.mod_fingerprints.get(&rk).cloned().unwrap_or_default()
+    };
+    // file lists read without the state locked (only for a possible relink, which is rare)
+    let (next, relinks) = reconcile(&before, &found, now(), &mut |rel| hash(&root.join(rel)));
+    let mut next = next;
+    {
+        let mut s = state.lock().unwrap_or_else(|e| e.into_inner());
+        // a scan beside this one got there first: its answer stands, this one relinks nothing. Hashes `fill` added
+        // meanwhile are no such change: they are kept.
+        let now_held = s.mod_fingerprints.get(&rk).cloned().unwrap_or_default();
+        let unhashed = |m: &Prints| m.iter().map(|(k, p)| (k.clone(), Print { hash: None, ..p.clone() })).collect::<Prints>();
+        if s.game_path != root || unhashed(&now_held) != unhashed(&before) {
+            return Vec::new();
+        }
+        for (k, p) in next.iter_mut() {
+            if p.hash.is_none() {
+                p.hash = now_held.get(k).filter(|o| o.stamp == p.stamp && o.path == p.path).and_then(|o| o.hash.clone());
+            }
+        }
+        if next != now_held {
+            s.mod_fingerprints.insert(rk, next.clone());
+            let _ = crate::save_state(&s);
+        }
+    }
+    if next.values().any(|p| p.hash.is_none() && p.missing_since.is_none()) {
+        fill(root.to_path_buf(), state.clone());
+    }
+    relinks.into_iter().map(|(_, new, old)| (root.join(old), root.join(&next[&new].path))).collect()
+}
+
+/// The path each mod at `paths` had before a relink in the last 7 days, by index (for the scan's mod list).
+pub fn relinked_from(root: &Path, paths: &[PathBuf], state: &Mutex<crate::AppState>) -> Vec<Option<PathBuf>> {
+    let s = state.lock().unwrap_or_else(|e| e.into_inner());
+    let prints = s.mod_fingerprints.get(&root_key(root));
+    paths
+        .iter()
+        .map(|p| prints?.get(&crate::xtra_dupes::key(root, p))?.from.as_ref().map(|(old, _)| root.join(old)))
+        .collect()
+}
+
+static FILLING: AtomicBool = AtomicBool::new(false);
+
+/// Hashes the file lists of the records that have none, one mod at a time, off the scan. One at once.
+fn fill(root: PathBuf, state: Arc<Mutex<crate::AppState>>) {
+    if FILLING.swap(true, Ordering::SeqCst) {
+        return;
+    }
+    std::thread::spawn(move || {
+        let rk = root_key(&root);
+        let todo: Vec<(String, Print)> = {
+            let s = state.lock().unwrap_or_else(|e| e.into_inner());
+            s.mod_fingerprints.get(&rk).map(|m| m.iter().filter(|(_, p)| p.hash.is_none() && p.missing_since.is_none()).map(|(k, p)| (k.clone(), p.clone())).collect()).unwrap_or_default()
+        };
+        let mut done = 0;
+        for (k, p) in todo {
+            let file = root.join(&p.path);
+            let Some(h) = hash(&file).filter(|_| stamp(&file) == p.stamp) else { continue };
+            let mut s = state.lock().unwrap_or_else(|e| e.into_inner());
+            // only while the record still describes that file
+            if let Some(r) = s.mod_fingerprints.get_mut(&rk).and_then(|m| m.get_mut(&k)).filter(|r| r.stamp == p.stamp && r.path == p.path) {
+                r.hash = Some(h);
+                done += 1;
+                if done % 50 == 0 {
+                    let _ = crate::save_state(&s);
+                }
+            }
+        }
+        if done > 0 {
+            let s = state.lock().unwrap_or_else(|e| e.into_inner());
+            let _ = crate::save_state(&s);
+        }
+        FILLING.store(false, Ordering::SeqCst);
+    });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn f(key: &str, stamp: &str) -> Found {
+        Found { key: key.into(), path: format!("{key}.pak"), stamp: stamp.into() }
+    }
+    fn p(key: &str, stamp: &str, hash: Option<&str>) -> (String, Print) {
+        (key.into(), Print { path: format!("{key}.pak"), stamp: stamp.into(), hash: hash.map(Into::into), ..Default::default() })
+    }
+    fn prints(v: &[(String, Print)]) -> Prints {
+        v.iter().cloned().collect()
+    }
+    fn no_read(_: &str) -> Option<String> {
+        panic!("a file list read with nothing to relink")
+    }
+
+    #[test]
+    fn the_first_scan_records_every_mod_and_an_unchanged_one_changes_nothing() {
+        let (next, r) = reconcile(&Prints::new(), &[f("|a", "1"), f("x|b", "2")], 0, &mut no_read);
+        assert!(r.is_empty() && next.len() == 2 && next.values().all(|p| p.hash.is_none() && p.missing_since.is_none()));
+        let before = prints(&[p("|a", "1", Some("h"))]);
+        assert_eq!(reconcile(&before, &[f("|a", "1")], 0, &mut no_read).0, before);
+    }
+
+    #[test]
+    fn a_unique_match_with_the_same_file_list_relinks() {
+        let before = prints(&[p("|old", "s", Some("h")), p("|kept", "k", None)]);
+        let (next, r) = reconcile(&before, &[f("x|new", "s"), f("|kept", "k")], 5, &mut |rel| (rel == "x|new.pak").then(|| "h".into()));
+        assert_eq!(r, [("|old".to_string(), "x|new".to_string(), "|old.pak".to_string())]);
+        assert!(!next.contains_key("|old") && next["x|new"].hash.as_deref() == Some("h") && next["x|new"].from == Some(("|old.pak".into(), 5)));
+    }
+
+    #[test]
+    fn another_file_list_or_a_changed_stamp_is_another_mod() {
+        let before = prints(&[p("|old", "s", Some("h"))]);
+        let (next, r) = reconcile(&before, &[f("|new", "s")], 0, &mut |_| Some("other".into()));
+        assert!(r.is_empty() && next["|old"].missing_since == Some(0) && next["|new"].hash.is_none());
+        assert!(reconcile(&before, &[f("|new", "t")], 0, &mut no_read).1.is_empty());
+    }
+
+    #[test]
+    fn identical_copies_never_relink_or_swap() {
+        // two copies (one stamp) renamed at once
+        let before = prints(&[p("a|skin", "s", Some("h")), p("b|skin", "s", Some("h"))]);
+        let (next, r) = reconcile(&before, &[f("a|skin2", "s"), f("b|skin2", "s")], 0, &mut |_| Some("h".into()));
+        assert!(r.is_empty() && next["a|skin"].missing_since.is_some() && next["b|skin"].missing_since.is_some());
+        // one renamed, and a copy of it made: two new keys for one record
+        let one = prints(&[p("|skin", "s", Some("h"))]);
+        assert!(reconcile(&one, &[f("|skin2", "s"), f("|skin3", "s")], 0, &mut |_| Some("h".into())).1.is_empty());
+        // one of two copies renamed: the other is still found by its key, so this one is unique
+        let (_, r) = reconcile(&before, &[f("a|skin2", "s"), f("b|skin", "s")], 0, &mut |_| Some("h".into()));
+        assert_eq!(r.len(), 1);
+        assert_eq!(r[0].0, "a|skin");
+    }
+
+    #[test]
+    fn a_missing_record_is_kept_7_days_and_found_again() {
+        let before = prints(&[p("|gone", "s", None)]);
+        let (kept, _) = reconcile(&before, &[f("|other", "o")], 100, &mut no_read);
+        assert_eq!(kept["|gone"].missing_since, Some(100));
+        let (still, _) = reconcile(&kept, &[f("|other", "o")], 100 + ORPHAN_SECS, &mut no_read);
+        assert_eq!(still["|gone"].missing_since, Some(100), "the first day it went missing counts");
+        assert!(!reconcile(&still, &[f("|other", "o")], 101 + ORPHAN_SECS, &mut no_read).0.contains_key("|gone"));
+        // back at its key: found, no longer missing
+        assert_eq!(reconcile(&kept, &[f("|gone", "s")], 200, &mut no_read).0["|gone"].missing_since, None);
+        // moved while the app was closed, days later: still relinks
+        assert_eq!(reconcile(&kept, &[f("x|gone", "s")], 100 + 3 * 86400, &mut no_read).1.len(), 1);
+    }
+
+    #[test]
+    fn a_new_stamp_drops_the_hash_and_an_unreadable_stamp_never_matches() {
+        let before = prints(&[p("|a", "s", Some("h")), p("|gone", "", Some("h"))]);
+        let (next, r) = reconcile(&before, &[f("|a", "t"), f("|new", "")], 0, &mut no_read);
+        assert!(r.is_empty() && next["|a"].hash.is_none());
+    }
+
+    #[test]
+    fn an_empty_scan_a_missing_mods_folder_or_another_game_path_orphans_nothing() {
+        let dir = tempfile::tempdir().unwrap();
+        let state = Arc::new(Mutex::new(crate::AppState { game_path: dir.path().to_path_buf(), ..Default::default() }));
+        let rk = root_key(dir.path());
+        state.lock().unwrap().mod_fingerprints.insert(rk.clone(), prints(&[p("|a", "s", Some("h"))]));
+        let kept = |s: &Arc<Mutex<crate::AppState>>| s.lock().unwrap().mod_fingerprints[&rk]["|a"].missing_since.is_none();
+        assert!(scan(dir.path(), &[], &state).is_empty() && kept(&state));
+        let gone = dir.path().join("missing");
+        assert!(scan(&gone, &[gone.join("b.pak")], &state).is_empty());
+        state.lock().unwrap().game_path = dir.path().join("elsewhere");
+        let other = dir.path().join("b.pak");
+        std::fs::write(&other, b"x").unwrap();
+        assert!(scan(dir.path(), &[other], &state).is_empty() && kept(&state));
+    }
+}

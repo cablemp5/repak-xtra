@@ -107,6 +107,15 @@ export function renameSource(oldKey: string, ...newKeys: string[]) {
   write(store)
 }
 
+/** Sources follow mods Rust found renamed outside the app (xtra_fingerprints.rs, a mod's relinked_from), while no mod
+ *  has the old name and the new one has none of its own. */
+export function followRelinks(mods: { path: string; relinked_from?: string }[]) {
+  const names = new Set(mods.map(m => norm(nameKey(m.path)))), store = read()
+  for (const m of mods) {
+    if (m.relinked_from && !names.has(norm(nameKey(m.relinked_from))) && !store[norm(nameKey(m.path))]) renameSource(nameKey(m.relinked_from), nameKey(m.path))
+  }
+}
+
 /** Re-renders when any source is recorded or renamed; returns a value that changes with them. */
 export const useNexusVersion = () => useSyncExternalStore(subscribe, () => savedItem(STORAGE) || '')
 
