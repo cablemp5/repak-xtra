@@ -56,6 +56,7 @@ pub fn relink(root: &Path, paths: &[PathBuf], state: &Arc<Mutex<crate::AppState>
     // those found in the last 7 days, so a store that had to wait (a preview run holding the folder) follows on a later
     // scan. Each store keys them its own way, and `pairs` never moves anything twice (the old key must still hold data).
     let mut found = crate::xtra_fingerprints::scan(root, paths, state);
+    let fresh = found.len(); // found by this scan; the rest are replays
     for (p, from) in paths.iter().zip(crate::xtra_fingerprints::relinked_from(root, paths, state)) {
         if let Some(from) = from.filter(|_| !found.iter().any(|(_, n)| n == p)) {
             found.push((from, p.clone()));
@@ -68,10 +69,11 @@ pub fn relink(root: &Path, paths: &[PathBuf], state: &Arc<Mutex<crate::AppState>
     let legacy_keys = keys(&crate::get_mod_key);
     let tags = {
         let mut s = state.lock().unwrap_or_else(|e| e.into_inner());
-        // a mod found renamed onto a gone mod's key (deleted, its tags kept) takes the key, those tags were not this
-        // file's; and an empty list only holds a key's place while its old tags wait: neither refuses a move there
+        // a mod found renamed onto a gone mod's key by this scan (deleted, its tags kept) takes the key, those tags were
+        // not this file's (a replay keeps the guard: by then the key's tags are the moved mod's own); and an empty list only
+        // holds a key's place while its old tags wait: neither refuses a move there
         let tag_moves = moved(&tag_key);
-        let taken: HashSet<&String> = tag_moves.iter().filter(|(o, _)| s.mod_tags_by_key.get(o).is_some_and(|t| !t.is_empty())).map(|(_, n)| n).collect();
+        let taken: HashSet<&String> = tag_moves[..fresh].iter().filter(|(o, _)| s.mod_tags_by_key.get(o).is_some_and(|t| !t.is_empty())).map(|(_, n)| n).collect();
         let held: Vec<String> = s.mod_tags_by_key.iter().filter(|(k, t)| !t.is_empty() && !taken.contains(k)).map(|(k, _)| k.clone()).collect();
         let moved = pairs(&held, &tag_keys, &tag_moves);
         for (old, new) in &moved {

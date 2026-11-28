@@ -8818,10 +8818,13 @@ fn main() {
             let stale: Vec<&PathBuf> = gone.intersection(&gone_before).collect();
             if !stale.is_empty() {
                 let mut st = details_state.lock().unwrap();
+                let mut removed = false;
                 for p in stale.into_iter().filter(|p| !p.exists()) {
-                    st.mod_details_cache.remove(p); // looked at again: a mod back meanwhile keeps its fresh entry
+                    removed |= st.mod_details_cache.remove(p).is_some(); // looked at again: a mod back meanwhile keeps its fresh entry
                 }
-                xtra_details_cache::mark_dirty();
+                if removed {
+                    xtra_details_cache::mark_dirty();
+                }
             }
             gone_before = gone;
             if xtra_details_cache::take_dirty() {
