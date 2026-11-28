@@ -8812,8 +8812,8 @@ fn main() {
             let stale: Vec<&PathBuf> = gone.intersection(&gone_before).collect();
             if !stale.is_empty() {
                 let mut st = details_state.lock().unwrap();
-                for p in stale {
-                    st.mod_details_cache.remove(p);
+                for p in stale.into_iter().filter(|p| !p.exists()) {
+                    st.mod_details_cache.remove(p); // looked at again: a mod back meanwhile keeps its fresh entry
                 }
                 xtra_details_cache::mark_dirty();
             }

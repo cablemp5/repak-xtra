@@ -68,8 +68,12 @@ pub fn relink(root: &Path, paths: &[PathBuf], state: &Arc<Mutex<crate::AppState>
     let legacy_keys = keys(&crate::get_mod_key);
     let tags = {
         let mut s = state.lock().unwrap_or_else(|e| e.into_inner());
-        // (an empty list only holds a key's place while its old tags wait: never a reason to refuse a move there)
-        let moved = pairs(s.mod_tags_by_key.iter().filter(|(_, t)| !t.is_empty()).map(|(k, _)| k), &tag_keys, &moved(&tag_key));
+        // a mod found renamed onto a gone mod's key (deleted, its tags kept) takes the key, those tags were not this
+        // file's; and an empty list only holds a key's place while its old tags wait: neither refuses a move there
+        let tag_moves = moved(&tag_key);
+        let taken: HashSet<&String> = tag_moves.iter().filter(|(o, _)| s.mod_tags_by_key.get(o).is_some_and(|t| !t.is_empty())).map(|(_, n)| n).collect();
+        let held: Vec<String> = s.mod_tags_by_key.iter().filter(|(k, t)| !t.is_empty() && !taken.contains(k)).map(|(k, _)| k.clone()).collect();
+        let moved = pairs(&held, &tag_keys, &tag_moves);
         for (old, new) in &moved {
             if let Some(t) = s.mod_tags_by_key.remove(old) {
                 s.mod_tags_by_key.insert(new.clone(), t);
@@ -77,8 +81,10 @@ pub fn relink(root: &Path, paths: &[PathBuf], state: &Arc<Mutex<crate::AppState>
         }
         // the old map's names Repak X respaced, not migrated yet, follow too (their tags wait there for the migration). A
         // migrated name's tags already followed above, by key: moving its old entry too would give them to a namesake.
+        // Never onto a mod found renamed or moved: that file is another mod, not the respaced one.
+        let arrived: HashSet<String> = found.iter().map(|(_, n)| crate::get_mod_key(n)).collect();
         let mut legacy = pairs(s.mod_tags.keys(), &legacy_keys, &[]);
-        legacy.retain(|(old, _)| !s.mod_tags_migrated.contains(old));
+        legacy.retain(|(old, new)| !s.mod_tags_migrated.contains(old) && !arrived.contains(new));
         for (old, new) in &legacy {
             if let Some(t) = s.mod_tags.remove(old) {
                 s.mod_tags.insert(new.clone(), t);

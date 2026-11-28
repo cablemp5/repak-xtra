@@ -117,13 +117,14 @@ pub fn reconcile(prints: &Prints, found: &[Found], now: u64, hash: &mut dyn FnMu
     for f in &came {
         let one = |n: &HashMap<String, usize>| n.get(&f.stamp) == Some(&1);
         let own = prints.get(&f.key).filter(|p| p.missing_since.is_some() && p.stamp == f.stamp);
-        // the one mod that left this scan with its stamp; else the gone mod back at its own key with its own files (a
-        // restore); else the one mod gone before with that stamp (moved while the app was closed)
-        let old = if f.stamp.is_empty() || !one(&came_n) {
+        // a gone mod back at its own key with its own files is a restore (a relink leaves no record at its old key, so a
+        // gone record sharing a stamp with another mod means there were copies: never guessed between); else the one mod
+        // that left this scan with its stamp; else the one mod gone before with it (moved while the app was closed)
+        let old = if f.stamp.is_empty() || !one(&came_n) || own.is_some() {
             None
         } else if one(&gone_n) {
             pick(&gone, &f.stamp)
-        } else if own.is_some() || gone_n.contains_key(&f.stamp) {
+        } else if gone_n.contains_key(&f.stamp) {
             None
         } else if one(&orphan_n) {
             pick(&orphans, &f.stamp)
@@ -346,14 +347,24 @@ mod tests {
 
     #[test]
     fn renamed_back_and_forth_within_the_7_days_each_rename_relinks() {
-        // A -> B -> A: B is kept as gone, with A's stamp; A -> B again must still move A's data
-        let mut b = p("|b", "s", Some("h"));
-        b.1.missing_since = Some(0);
-        let before = prints(&[p("|a", "s", Some("h")), b]);
-        let (next, r) = reconcile(&before, &[f("|b", "s")], 10, &mut |_| Some("h".into()));
-        assert_eq!(r.len(), 1);
+        let h = &mut |_: &str| Some("h".to_string());
+        let one = prints(&[p("|a", "s", Some("h"))]);
+        let (two, r) = reconcile(&one, &[f("|b", "s")], 10, h);
         assert_eq!(r[0].0, "|a");
-        assert!(!next.contains_key("|a") && next["|b"].missing_since.is_none() && next["|b"].from == Some(("|a.pak".into(), 10)));
+        assert!(!two.contains_key("|a"), "a relink leaves no record behind");
+        let (three, r) = reconcile(&two, &[f("|a", "s")], 20, h);
+        assert_eq!(r[0].0, "|b");
+        let (_, r) = reconcile(&three, &[f("|b", "s")], 30, h);
+        assert_eq!(r[0].0, "|a");
+    }
+
+    #[test]
+    fn an_identical_copy_back_at_its_key_while_the_other_goes_is_a_restore() {
+        // copies A and B: A gone earlier, now A is back and B is gone in one scan: no guess between them
+        let mut a = p("|a", "s", Some("h"));
+        a.1.missing_since = Some(0);
+        let (next, r) = reconcile(&prints(&[a, p("|b", "s", Some("h"))]), &[f("|a", "s")], 10, &mut no_read);
+        assert!(r.is_empty() && next["|a"].missing_since.is_none() && next["|b"].missing_since == Some(10));
     }
 
     #[test]
