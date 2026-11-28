@@ -91,7 +91,8 @@ pub fn reconcile(prints: &Prints, found: &[Found], now: u64, hash: &mut dyn FnMu
         if !seen.insert(f.key.as_str()) {
             continue; // one key twice (an on and an off copy side by side): the first is the record
         }
-        match prints.get(&f.key) {
+        // a record the last scan found; a gone one's key (a file there again) is settled below
+        match prints.get(&f.key).filter(|p| p.missing_since.is_none()) {
             Some(p) => {
                 // new files under the key (an update, another mod copied over it): no hash yet, and no rename history
                 let same = p.stamp == f.stamp;
@@ -101,36 +102,55 @@ pub fn reconcile(prints: &Prints, found: &[Found], now: u64, hash: &mut dyn FnMu
             None => came.push(f),
         }
     }
-    let gone: Vec<(&String, &Print)> = prints.iter().filter(|(k, _)| !next.contains_key(*k)).collect();
+    // gone this scan (the last one found them) and gone before (kept 7 days)
+    let gone: Vec<(&String, &Print)> = prints.iter().filter(|(k, p)| !next.contains_key(*k) && p.missing_since.is_none()).collect();
+    let orphans: Vec<(&String, &Print)> = prints.iter().filter(|(_, p)| p.missing_since.is_some()).collect();
     let count = |stamps: &mut dyn Iterator<Item = &str>| {
         let mut n: HashMap<String, usize> = HashMap::new();
         stamps.for_each(|s| *n.entry(s.to_string()).or_default() += 1);
         n
     };
-    let (came_n, gone_n) = (count(&mut came.iter().map(|f| f.stamp.as_str())), count(&mut gone.iter().map(|(_, p)| p.stamp.as_str())));
+    let came_n = count(&mut came.iter().map(|f| f.stamp.as_str()));
+    let (gone_n, orphan_n) = (count(&mut gone.iter().map(|(_, p)| p.stamp.as_str())), count(&mut orphans.iter().map(|(_, p)| p.stamp.as_str())));
     let mut relinks = Vec::new();
     let mut taken = std::collections::HashSet::new();
     for f in &came {
-        let unique = !f.stamp.is_empty() && came_n.get(&f.stamp) == Some(&1) && gone_n.get(&f.stamp) == Some(&1);
-        let old = unique.then(|| gone.iter().find(|(_, p)| p.stamp == f.stamp)).flatten();
+        let one = |n: &HashMap<String, usize>| n.get(&f.stamp) == Some(&1);
+        let own = prints.get(&f.key).filter(|p| p.missing_since.is_some() && p.stamp == f.stamp);
+        // the one mod that left this scan with its stamp; else the gone mod back at its own key with its own files (a
+        // restore); else the one mod gone before with that stamp (moved while the app was closed)
+        let old = if f.stamp.is_empty() || !one(&came_n) {
+            None
+        } else if one(&gone_n) {
+            pick(&gone, &f.stamp)
+        } else if own.is_some() || gone_n.contains_key(&f.stamp) {
+            None
+        } else if one(&orphan_n) {
+            pick(&orphans, &f.stamp)
+        } else {
+            None
+        };
         // shortcut: a record renamed before `fill` hashed it, or a new file whose list cannot be read (an off IoStore
         // form the reader does not take), relinks on its unique stamp alone (nanosecond times); upgrade to refusing it if
         // a wrong relink is ever reported
         let same = old.filter(|(_, p)| p.hash.is_none() || hash(&f.path).map_or(true, |h| p.hash.as_deref() == Some(h.as_str())));
-        match same {
-            Some((k, p)) => {
+        match (same, own) {
+            (Some((k, p)), _) => {
                 taken.insert(k.as_str());
                 relinks.push(((*k).clone(), f.key.clone(), p.path.clone()));
                 next.insert(f.key.clone(), Print { path: f.path.clone(), stamp: f.stamp.clone(), hash: p.hash.clone(), missing_since: None, from: Some((p.path.clone(), now)) });
             }
-            None => {
+            (None, Some(p)) => {
+                next.insert(f.key.clone(), Print { path: f.path.clone(), missing_since: None, ..p.clone() });
+            }
+            (None, None) => {
                 next.insert(f.key.clone(), Print { path: f.path.clone(), stamp: f.stamp.clone(), ..Default::default() });
             }
         }
     }
-    for (k, p) in gone {
-        if taken.contains(k.as_str()) {
-            continue;
+    for (k, p) in gone.into_iter().chain(orphans) {
+        if taken.contains(k.as_str()) || next.contains_key(k) {
+            continue; // relinked, or its key holds a file again
         }
         let since = p.missing_since.unwrap_or(now);
         if now.saturating_sub(since) <= ORPHAN_SECS {
@@ -143,6 +163,11 @@ pub fn reconcile(prints: &Prints, found: &[Found], now: u64, hash: &mut dyn FnMu
         }
     }
     (next, relinks)
+}
+
+/// The record in `list` with `stamp`.
+fn pick<'a>(list: &[(&'a String, &'a Print)], stamp: &str) -> Option<(&'a String, &'a Print)> {
+    list.iter().copied().find(|(_, p)| p.stamp == stamp)
 }
 
 /// The records' key for a mods folder: its path, lowercase with "/".
@@ -302,6 +327,44 @@ mod tests {
         let (next, r) = reconcile(&before, &[f("x|new", "s"), f("|kept", "k")], 5, &mut |rel| (rel == "x|new.pak").then(|| "h".into()));
         assert_eq!(r, [("|old".to_string(), "x|new".to_string(), "|old.pak".to_string())]);
         assert!(!next.contains_key("|old") && next["x|new"].hash.as_deref() == Some("h") && next["x|new"].from == Some(("|old.pak".into(), 5)));
+    }
+
+    #[test]
+    fn a_file_renamed_onto_a_gone_mods_name_still_relinks() {
+        let mut dead = p("|hat", "d", Some("x"));
+        dead.1.missing_since = Some(0);
+        let before = prints(&[p("|skin", "s", Some("h")), dead]);
+        let (next, r) = reconcile(&before, &[f("|hat", "s")], 10, &mut |_| Some("h".into()));
+        assert_eq!(r, [("|skin".to_string(), "|hat".to_string(), "|skin.pak".to_string())]);
+        assert_eq!(next["|hat"].stamp, "s");
+        assert_eq!(next["|hat"].missing_since, None);
+        // the gone mod itself back (same files): found at its key
+        let mut back = p("|hat", "d", Some("x"));
+        back.1.missing_since = Some(0);
+        assert!(reconcile(&prints(&[back]), &[f("|hat", "d")], 10, &mut no_read).1.is_empty());
+    }
+
+    #[test]
+    fn renamed_back_and_forth_within_the_7_days_each_rename_relinks() {
+        // A -> B -> A: B is kept as gone, with A's stamp; A -> B again must still move A's data
+        let mut b = p("|b", "s", Some("h"));
+        b.1.missing_since = Some(0);
+        let before = prints(&[p("|a", "s", Some("h")), b]);
+        let (next, r) = reconcile(&before, &[f("|b", "s")], 10, &mut |_| Some("h".into()));
+        assert_eq!(r.len(), 1);
+        assert_eq!(r[0].0, "|a");
+        assert!(!next.contains_key("|a") && next["|b"].missing_since.is_none() && next["|b"].from == Some(("|a.pak".into(), 10)));
+    }
+
+    #[test]
+    fn identical_copies_restored_at_their_own_keys_are_found_there() {
+        let gone = |k: &str| {
+            let mut x = p(k, "s", Some("h"));
+            x.1.missing_since = Some(0);
+            x
+        };
+        let (next, r) = reconcile(&prints(&[gone("a|skin"), gone("b|skin")]), &[f("a|skin", "s"), f("b|skin", "s")], 10, &mut no_read);
+        assert!(r.is_empty() && next.values().all(|p| p.missing_since.is_none() && p.hash.is_some()));
     }
 
     #[test]
