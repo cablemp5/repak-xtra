@@ -57,3 +57,6 @@
 - Fixed a password-protected archive showing a vague unpack error: it now says to unpack it yourself and install the files inside
 - Fixed a turned-off hybrid mod not being marked Hybrid
 - Changed small wording from Repak X v2.4.0 (no exclamation marks on Copied and install messages), and the Sig Bypasser and Project Galacta tools now say why when they are off
+- Fixed same-named mods in two folders sharing their tags: each keeps its own, and tags saved before are copied to every mod with that name
+- Added tags, loadout membership, previews, install records, and Nexus sources following a mod renamed or moved outside the app (Explorer or another mod manager), matched by its size, modified time, and file list, never between two identical copies
+- Fixed a mod renamed or moved outside the app reading its files again for its details

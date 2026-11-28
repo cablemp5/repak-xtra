@@ -225,11 +225,12 @@ pub fn record(root: &Path, pak: &Path, mut source: Source) {
     })
 }
 
-/// Records follow mods renamed outside the app with "_" for spaces (xtra_respace.rs). Returns the new keys.
-pub fn relink(root: &Path, paths: &[PathBuf]) -> Vec<String> {
+/// Records follow mods renamed outside the app with "_" for spaces, or renamed or moved any other way (`moved`: old and
+/// new keys, xtra_respace.rs). Returns the new keys.
+pub fn relink(root: &Path, paths: &[PathBuf], moved: &[(String, String)]) -> Vec<String> {
     let installed: Vec<String> = paths.iter().map(|p| key(root, p)).collect();
     with_sources(|map| {
-        let moved = crate::xtra_respace::pairs(map.keys(), &installed);
+        let moved = crate::xtra_respace::pairs(map.keys(), &installed, moved);
         for (old, new) in &moved {
             if let Some(s) = map.remove(old) {
                 map.insert(new.clone(), s);

@@ -143,7 +143,7 @@ import Wordmark from './custom/Wordmark' // repakxtra: the logo
 import { plural } from './custom/modName' // repakxtra: "1 mod", "3 mods"
 import ConflictsPanel from './custom/ConflictsPanel' // repakxtra: in place of Repak X's ClashPanel (grouped, in words)
 import { keepThisOne, setModsBlocked } from './custom/keepOne' // repakxtra: Keep this one
-import { NEXUS_TYPE, recordSourceAs, recordSources, renameSource, sourceOf, useNexusScan, useNexusSources } from './custom/nexusSource' // repakxtra: Nexus source
+import { NEXUS_TYPE, followRelinks, recordSourceAs, recordSources, renameSource, sourceOf, useNexusScan, useNexusSources } from './custom/nexusSource' // repakxtra: Nexus source
 import { stageOffFiles } from './custom/offFiles' // repakxtra: .pak.off files
 import CrashSuspects, { previousCrashes, withSuspects } from './custom/CrashSuspects' // repakxtra: crash suspects
 import { fitHeader } from './custom/fit' // repakxtra: header buttons fall back to icons when their names do not fit
@@ -1908,6 +1908,7 @@ function App() {
       console.log('Loaded mods:', modList)
       if (mine !== loadModsSeq.current) return modList as ModRecord[] // a newer load is on its way, with the newer list
       syncLoadoutKeys(modList) // repakxtra: loadout members follow moved mods and old saves migrate, before the list shows
+      followRelinks(modList) // repakxtra: and Nexus sources follow mods renamed outside the app
       shownList.current = modList // repakxtra
       setMods(modList)
       requestAnimationFrame(hideSplash) // repakxtra: after the list paints

@@ -7,6 +7,8 @@ mod asset_explorer;
 mod xtra_classify; // repakxtra: extra mod types, Project Galacta check
 mod xtra_dupes; // repakxtra: same-content installs and Check Conflicts' Duplicates
 mod xtra_respace; // repakxtra: data follows mods Repak X renamed (spaces to "_")
+mod xtra_fingerprints; // repakxtra: and mods renamed or moved outside the app
+mod xtra_tags; // repakxtra: tags by folder + name
 mod xtra_unpacked; // repakxtra: a dropped archive is unpacked once
 mod xtra_activity; // repakxtra: what changed before a crash (installs, on and off, updates)
 mod xtra_ops; // repakxtra: game open, file in use, and name taken, one dialog each
@@ -210,6 +212,16 @@ struct AppState {
     custom_tag_catalog: Vec<String>,
     #[serde(default)]
     mod_tags: std::collections::HashMap<String, Vec<String>>,
+    /// repakxtra: tags by folder + name (xtra_tags.rs); mod_tags above stays for older builds
+    #[serde(default)]
+    mod_tags_by_key: std::collections::HashMap<String, Vec<String>>,
+    /// repakxtra: the mod_tags names already copied into mod_tags_by_key
+    #[serde(default)]
+    mod_tags_migrated: std::collections::BTreeSet<String>,
+    /// repakxtra: each mod's stamp and file list hash, by mods folder and key, to find mods renamed outside the app
+    /// (xtra_fingerprints.rs)
+    #[serde(default)]
+    mod_fingerprints: std::collections::BTreeMap<String, xtra_fingerprints::Prints>,
     /// Last known crash folder name for detecting crashes from previous sessions
     #[serde(default)]
     last_known_crash_folder: Option<String>,
@@ -241,6 +253,44 @@ fn mod_fingerprint(path: &std::path::Path) -> ModFingerprint {
     ]
 }
 
+/// repakxtra: a mod renamed or moved since its details were read keeps them: with nothing cached at `path`, the one
+/// cached entry with the same fingerprint (size and modified time, which a rename or move keeps) whose file is gone moves
+/// to `path`. Two such entries (identical copies renamed at once) are read again instead.
+fn adopt_moved_details(st: &mut AppState, path: &Path, print: &ModFingerprint) {
+    if st.mod_details_cache.get(path).is_some_and(|(f, _)| f == print) || print.iter().all(Option::is_none) {
+        return;
+    }
+    let mut gone = st.mod_details_cache.iter().filter(|(p, (f, _))| f == print && p.as_path() != path && !p.exists()).map(|(p, _)| p.clone());
+    let (Some(old), None) = (gone.next(), gone.next()) else { return };
+    st.mod_details_cache.remove(path); // what was cached here was another mod's (it was replaced)
+    move_details(st, &old, path);
+}
+
+/// repakxtra: the cached details at `old` move to `new` (nothing cached there yet), named as compute_mod_details names it.
+fn move_details(st: &mut AppState, old: &Path, new: &Path) {
+    if st.mod_details_cache.contains_key(new) {
+        return;
+    }
+    if let Some((f, mut d)) = st.mod_details_cache.remove(old) {
+        d.mod_name = new.file_stem().and_then(|s| s.to_str()).unwrap_or("Unknown").to_string();
+        st.mod_details_cache.insert(new.to_path_buf(), (f, d));
+        xtra_details_cache::mark_dirty();
+    }
+}
+
+/// repakxtra: after a whole scan, cached details follow the mods found renamed or moved (xtra_fingerprints.rs, also
+/// while the app was closed: the saved cache keeps the entries of gone files). The rest stay in memory for
+/// adopt_moved_details until the save loop finds them gone twice (15 s apart), and the saved copy leaves them out
+/// (xtra_details_cache::save).
+fn details_after_scan(state: &Mutex<AppState>, moved: &[(PathBuf, PathBuf)]) {
+    let mut st = state.lock().unwrap_or_else(|e| e.into_inner());
+    for (old, new) in moved {
+        if !old.exists() {
+            move_details(&mut st, old, new); // a replayed move whose old path holds another mod again: not that one's
+        }
+    }
+}
+
 impl Default for AppState {
     fn default() -> Self {
         Self {
@@ -265,6 +315,9 @@ impl Default for AppState {
             enable_animations: default_true(),
             custom_tag_catalog: Vec::new(),
             mod_tags: std::collections::HashMap::new(),
+            mod_tags_by_key: Default::default(), // repakxtra
+            mod_tags_migrated: Default::default(),
+            mod_fingerprints: Default::default(),
             last_known_crash_folder: None,
             last_known_crash_created: None,
             mod_details_cache: std::collections::HashMap::new(),
@@ -323,6 +376,10 @@ struct ModEntry {
     /// repakxtra: this scan could not relink (xtra_respace.rs), so loadouts do not either (loadoutStore.ts)
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     relink_held: bool,
+    /// repakxtra: where it was before a rename or move outside the app found in the last 7 days (xtra_fingerprints.rs),
+    /// so loadout members and its Nexus source follow it (loadoutStore.ts, nexusSource.tsx)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    relinked_from: Option<PathBuf>,
 }
 
 // ============================================================================
@@ -689,10 +746,7 @@ fn watch_mods_folder(window: &Window, game_path: &Path, watcher_state: &WatcherS
 async fn get_pak_files(state: State<'_, Arc<Mutex<AppState>>>) -> Result<Vec<ModEntry>, String> {
     let scan_started = std::time::Instant::now();
     // repakxtra: copies what the scan needs and lets go of the state, so the walk never holds up other commands
-    let (game_path, mod_tags) = {
-        let state = state.lock().unwrap();
-        (state.game_path.clone(), state.mod_tags.clone())
-    };
+    let game_path = state.lock().unwrap().game_path.clone(); // repakxtra: tags are read after the walk
     let game_path = &game_path;
 
     info!("Loading mods from: {}", game_path.display());
@@ -783,8 +837,7 @@ async fn get_pak_files(state: State<'_, Arc<Mutex<AppState>>>) -> Result<Vec<Mod
             // (Special) from the path.
             let priority = crate::xtra_conflicts::rank_of(path).1;
 
-            let key = get_mod_key(&path);
-            let custom_tags = mod_tags.get(&key).cloned().unwrap_or_default();
+            let custom_tags = Vec::new(); // repakxtra: filled after the walk, once tags have followed renamed mods
 
             mods.push(ModEntry {
                 path: path.to_path_buf(),
@@ -799,11 +852,13 @@ async fn get_pak_files(state: State<'_, Arc<Mutex<AppState>>>) -> Result<Vec<Mod
                 character_name: None,
                 skin_name: None,
                 relink_held: false,
+                relinked_from: None,
             });
         }
     }
 
-    // repakxtra: tags, previews, and install records follow mods Repak X renamed with "_" for spaces
+    // repakxtra: tags, previews, and install records follow mods Repak X renamed with "_" for spaces, and mods renamed or
+    // moved outside the app (xtra_fingerprints.rs)
     if walk_failed {
         log::warn!("[relink] skipped: a folder in the mods folder could not be read");
     }
@@ -811,10 +866,12 @@ async fn get_pak_files(state: State<'_, Arc<Mutex<AppState>>>) -> Result<Vec<Mod
     let relinked = !walk_failed && crate::xtra_respace::relink(game_path, &paths, state.inner(), era);
     {
         // tags as they are now: this scan or another one running beside it (VFX Updater, Galacta) may have moved some
+        let from = crate::xtra_fingerprints::relinked_from(game_path, &paths, state.inner());
         let s = state.lock().unwrap();
-        for m in &mut mods {
-            m.custom_tags = s.mod_tags.get(&get_mod_key(&m.path)).cloned().unwrap_or_default();
+        for (m, from) in mods.iter_mut().zip(from) {
+            m.custom_tags = xtra_tags::of(&s, &m.path);
             m.relink_held = !relinked;
+            m.relinked_from = from;
         }
     }
 
@@ -910,8 +967,7 @@ async fn get_pak_files_in_folder(
 
             let priority = crate::xtra_conflicts::rank_of(path).1; // repakxtra
 
-            let key = get_mod_key(&path);
-            let custom_tags = state.mod_tags.get(&key).cloned().unwrap_or_default();
+            let custom_tags = xtra_tags::of(&state, path); // repakxtra: by folder + name
 
             mods.push(ModEntry {
                 path: path.to_path_buf(),
@@ -926,6 +982,7 @@ async fn get_pak_files_in_folder(
                 character_name: None,
                 skin_name: None,
                 relink_held: false,
+                relinked_from: None,
             });
         }
     }
@@ -985,15 +1042,12 @@ async fn set_mod_priority(
         }
     };
 
-    // Invalidate cache for old path. Tags follow a ! change, retaining the old key if another installed mod still uses it.
-    let old_tag_key = get_mod_key(&path);
-    let tag_key_shared = old_tag_key != get_mod_key(&new_path)
-        && another_mod_uses_key(&game_path, &new_path, &old_tag_key, get_mod_key);
+    // repakxtra: the cached details follow (a ! change keeps the files), and the tags (xtra_tags::renamed: by folder +
+    // name, which a priority change keeps, the old map's names mirrored)
     {
         let mut state_guard = state.lock().unwrap();
-        state_guard.mod_details_cache.remove(&path);
-        xtra_details_cache::mark_dirty(); // repakxtra: the saved copy follows
-        if migrate_tags(&mut state_guard.mod_tags, &path, &new_path, tag_key_shared) {
+        move_details(&mut state_guard, &path, &new_path);
+        if xtra_tags::renamed(&mut state_guard, &path, &new_path, false) {
             let _ = save_state(&state_guard);
         }
     }
@@ -1025,26 +1079,6 @@ fn another_mod_uses_key(mods_dir: &Path, exclude: &Path, key: &str, key_fn: fn(&
         }
     }
     false
-}
-
-/// repakxtra: migrates a mod's saved tags from its old name's key to the new one's (a ! change gives it a new key).
-/// When `keep_old` is true (another installed mod still uses `old`), tags are copied instead of moved.
-fn migrate_tags(tags: &mut std::collections::HashMap<String, Vec<String>>, old: &Path, new: &Path, keep_old: bool) -> bool {
-    let (from, to) = (get_mod_key(old), get_mod_key(new));
-    if from == to || tags.contains_key(&to) {
-        return false;
-    }
-    if keep_old {
-        match tags.get(&from).cloned() {
-            Some(t) => tags.insert(to, t).is_none(),
-            None => false,
-        }
-    } else {
-        match tags.remove(&from) {
-            Some(t) => tags.insert(to, t).is_none(),
-            None => false,
-        }
-    }
 }
 
 /// repakxtra: computes the target path for a priority/Special change without mutating disk, or None when unchanged.
@@ -3662,19 +3696,14 @@ async fn update_mod(
 
     info!("Preserved install subfolder: {}", install_subfolder);
 
-    // Migrate the old mod's custom tags (repakxtra: moved only once the new version is in place)
-    let old_key = get_mod_key(&actual_old_path);
-    let old_custom_tags = {
-        let state_guard = state.lock().unwrap();
-        state_guard.mod_tags.get(&old_key).cloned().unwrap_or_default()
-    };
+    // Migrate the old mod's custom tags (repakxtra: moved only once the new version is in place, xtra_tags::renamed)
 
     // (Deprecated old metadata)
     let (old_custom_name, old_folder_id) = (None::<String>, None::<String>);
 
     info!(
-        "Preserved metadata - custom_name: {:?}, tags: {:?}, folder_id: {:?}",
-        old_custom_name, old_custom_tags, old_folder_id
+        "Preserved metadata - custom_name: {:?}, folder_id: {:?}",
+        old_custom_name, old_folder_id
     );
 
     // Get the old mod's full stem (handles .pak.bak_repak as well as .pak)
@@ -3817,10 +3846,7 @@ async fn update_mod(
 
     {
         let mut state_guard = state.lock().unwrap();
-        let new_key = get_mod_key(&new_mod_path);
-        if !old_custom_tags.is_empty() {
-            state_guard.mod_tags.remove(&old_key);
-            state_guard.mod_tags.insert(new_key, old_custom_tags);
+        if xtra_tags::renamed(&mut state_guard, &actual_old_path, &new_mod_path, false) { // repakxtra
             let _ = save_state(&state_guard);
         }
     }
@@ -4259,21 +4285,38 @@ mod toggle_and_delete_tests {
     }
 
     #[test]
-    fn tags_follow_a_special_change() {
-        let mut tags = std::collections::HashMap::from([("Skin".to_string(), vec!["red".to_string()]), ("!Kept".to_string(), vec!["a".to_string()]), ("Kept".to_string(), vec!["b".to_string()])]);
-        let p = std::path::Path::new;
-        assert!(super::migrate_tags(&mut tags, p("m/Skin_9999999_P.pak"), p("m/!Skin_9999999_P.pak"), false));
-        assert_eq!(tags.get("!Skin"), Some(&vec!["red".to_string()]));
-        assert!(!tags.contains_key("Skin"));
-        assert!(!super::migrate_tags(&mut tags, p("m/!Skin_9999999_P.pak"), p("m/!Skin_99999999_P.pak"), false), "a number change keeps the key");
-        assert!(!super::migrate_tags(&mut tags, p("m/Kept.pak"), p("m/!Kept.pak"), false), "tags the new key has stay");
-        assert_eq!(tags.get("Kept"), Some(&vec!["b".to_string()]));
+    fn a_renamed_mod_keeps_its_cached_details_unless_two_copies_went() {
+        let dir = tempfile::tempdir().unwrap();
+        let new = dir.path().join("New_9999999_P.pak");
+        std::fs::write(&new, "x").unwrap();
+        let print = super::mod_fingerprint(&new);
+        let details = |name: &str| -> super::ModDetails {
+            serde_json::from_value(serde_json::json!({ "mod_name": name, "mod_type": "Skin", "character_name": "", "category": "", "character_id": "",
+                "file_count": 1, "total_size": 1, "files": ["a"], "is_iostore": false, "is_encrypted": false, "has_blueprint": false, "is_hybrid": false })).unwrap()
+        };
+        let mut st = super::AppState::default();
+        st.mod_details_cache.insert(dir.path().join("Old.pak"), (print, details("Old")));
+        super::adopt_moved_details(&mut st, &new, &print);
+        assert_eq!(st.mod_details_cache.get(&new).map(|e| e.1.mod_name.as_str()), Some("New_9999999_P"));
+        assert!(!st.mod_details_cache.contains_key(&dir.path().join("Old.pak")));
 
-        let mut shared = std::collections::HashMap::from([("Skin".to_string(), vec!["fav".to_string()])]);
-        assert!(super::migrate_tags(&mut shared, p("A/Skin.pak"), p("A/!Skin.pak"), true));
-        assert_eq!(shared.get("Skin"), Some(&vec!["fav".to_string()]), "shared old key is retained");
-        assert_eq!(shared.get("!Skin"), Some(&vec!["fav".to_string()]), "new key gets a copy");
+        // two gone copies with that fingerprint: read again
+        let mut two = super::AppState::default();
+        two.mod_details_cache.insert(dir.path().join("A.pak"), (print, details("A")));
+        two.mod_details_cache.insert(dir.path().join("B.pak"), (print, details("B")));
+        super::adopt_moved_details(&mut two, &new, &print);
+        assert!(!two.mod_details_cache.contains_key(&new));
+        // an entry whose file is still there (a copy) is never taken
+        let mut kept = super::AppState::default();
+        let copy = dir.path().join("Copy.pak");
+        std::fs::write(&copy, "x").unwrap();
+        kept.mod_details_cache.insert(copy.clone(), (print, details("Copy")));
+        super::adopt_moved_details(&mut kept, &new, &print);
+        assert!(kept.mod_details_cache.contains_key(&copy) && !kept.mod_details_cache.contains_key(&new));
+    }
 
+    #[test]
+    fn another_installed_mod_with_the_key_is_found() {
         let dir = tempfile::tempdir().unwrap();
         std::fs::create_dir_all(dir.path().join("A")).unwrap();
         std::fs::create_dir_all(dir.path().join("B")).unwrap();
@@ -4498,19 +4541,13 @@ async fn rename_mod(
         return Err(error_msg);
     }
 
-    // Invalidate cache for old path and migrate tags
+    // repakxtra: the cached details and tags follow (a rename keeps the files, and the cache checks their times anyway)
     {
         let mut state_guard = state.lock().unwrap();
-        state_guard.mod_details_cache.remove(&old_path_buf);
-        xtra_details_cache::mark_dirty(); // repakxtra: the saved copy follows
+        move_details(&mut state_guard, &old_path_buf, &new_path);
 
-        let old_key = get_mod_key(&old_path_buf);
-        let new_key = get_mod_key(&new_path);
-        if old_key != new_key {
-            if let Some(tags) = state_guard.mod_tags.remove(&old_key) {
-                state_guard.mod_tags.insert(new_key, tags);
-                let _ = save_state(&state_guard);
-            }
+        if xtra_tags::renamed(&mut state_guard, &old_path_buf, &new_path, false) { // repakxtra: by folder + name, old map mirrored
+            let _ = save_state(&state_guard);
         }
     }
 
@@ -4857,6 +4894,8 @@ async fn rename_folder(
         toast_events::emit_folder_rename_failed(&window, &error_msg);
         return Err(error_msg);
     }
+    xtra_tags::folder_moved(&mut state, &id, &new_id); // repakxtra: its mods' tags follow
+    let _ = save_state(&state);
 
     Ok(new_id)
 }
@@ -4955,6 +4994,8 @@ async fn move_folder(
         toast_events::emit_folder_rename_failed(&window, &error_msg);
         return Err(error_msg);
     }
+    xtra_tags::folder_moved(&mut state, &id, &new_id); // repakxtra: its mods' tags follow
+    let _ = save_state(&state);
 
     Ok(new_id)
 }
@@ -4970,8 +5011,9 @@ async fn assign_mod_to_folder(
     crate::xtra_builtins::fixed_place(Path::new(&mod_path))?; // repakxtra
     let _mutation = crate::xtra_mutation::edit()?;
     crate::xtra_identity::upstream_guard()?; // repakxtra: not while Repak X is open (both change the same files)
-    let state = state.lock().unwrap();
-    let game_path = &state.game_path;
+    let mut state = state.lock().unwrap(); // repakxtra: mut, its tags follow
+    let game_path = state.game_path.clone();
+    let game_path = &game_path;
     let source_path = PathBuf::from(&mod_path);
 
     if !source_path.exists() {
@@ -5021,6 +5063,9 @@ async fn assign_mod_to_folder(
         toast_events::emit_move_failed(&window, &error_msg);
         return Err(error_msg);
     }
+    if xtra_tags::renamed(&mut state, &source_path, &dest_path, false) { // repakxtra: its tags follow (keys hold the folder; Keep both renames)
+        let _ = save_state(&state);
+    }
 
     Ok(dest_path.to_string_lossy().into_owned())
 }
@@ -5038,11 +5083,12 @@ async fn add_custom_tag(
         state.custom_tag_catalog.sort();
     }
 
-    let key = get_mod_key(std::path::Path::new(&mod_path));
-    let tags = state.mod_tags.entry(key).or_insert_with(Vec::new);
+    let path = std::path::Path::new(&mod_path);
+    let mut tags = xtra_tags::of(&state, path); // repakxtra: by folder + name
     if !tags.contains(&tag) {
         tags.push(tag);
         tags.sort();
+        xtra_tags::set(&mut state, path, tags);
     }
 
     save_state(&state).map_err(|e| e.to_string())?;
@@ -5086,13 +5132,10 @@ async fn remove_custom_tag(
 ) -> Result<(), String> {
     let mut state = state.lock().unwrap();
 
-    let key = get_mod_key(std::path::Path::new(&mod_path));
-    if let Some(tags) = state.mod_tags.get_mut(&key) {
-        tags.retain(|t| t != &tag);
-        if tags.is_empty() {
-            state.mod_tags.remove(&key);
-        }
-    }
+    let path = std::path::Path::new(&mod_path);
+    let mut tags = xtra_tags::of(&state, path); // repakxtra: by folder + name
+    tags.retain(|t| t != &tag);
+    xtra_tags::set(&mut state, path, tags);
 
     save_state(&state).map_err(|e| e.to_string())?;
     Ok(())
@@ -7729,6 +7772,7 @@ async fn get_mod_details(
             let path = PathBuf::from(&mod_path);
             let fingerprint = mod_fingerprint(&path);
             let mut st = state.lock().unwrap();
+            adopt_moved_details(&mut st, &path, &fingerprint); // repakxtra
             if let Some((cached, d)) = st.mod_details_cache.get_mut(&path) {
                 if *cached == fingerprint {
                     if let Some(copy) = library_copy(d) {
@@ -7775,6 +7819,7 @@ async fn get_cached_mod_details(
         let mut st = state.lock().unwrap();
         let mut out = std::collections::HashMap::new();
         for (key, path, print) in prints {
+            adopt_moved_details(&mut st, &path, &print); // repakxtra
             if let Some((cached, d)) = st.mod_details_cache.get_mut(&path) {
                 if *cached == print {
                     if let Some(copy) = library_copy(d) {
@@ -7821,7 +7866,8 @@ fn compute_mod_details(
     let fingerprint = mod_fingerprint(&path);
 
     {
-        let state_guard = state.lock().unwrap();
+        let mut state_guard = state.lock().unwrap();
+        adopt_moved_details(&mut state_guard, &path, &fingerprint); // repakxtra
         if let Some((cached_fingerprint, cached_details)) =
             state_guard.mod_details_cache.get(&path)
         {
@@ -8196,7 +8242,8 @@ async fn check_mod_clashes(
 /// the saved mod details when they are current: after a restart the check then reads no mod from the disk again.
 fn clash_files_from_details(state: &Arc<Mutex<AppState>>, pak: &Path, is_iostore: bool) -> Option<Vec<String>> {
     let fingerprint = mod_fingerprint(pak);
-    let st = state.lock().unwrap();
+    let mut st = state.lock().unwrap();
+    adopt_moved_details(&mut st, pak, &fingerprint); // repakxtra
     let (cached, d) = st.mod_details_cache.get(pak)?;
     if *cached != fingerprint {
         return None;
@@ -8756,11 +8803,33 @@ fn main() {
                 st.mod_details_cache.entry(path).or_insert(entry);
             }
         }
+        let mut gone_before = std::collections::HashSet::new();
         loop {
             std::thread::sleep(std::time::Duration::from_secs(15));
+            // repakxtra: entries of files gone at two of these checks in a row leave memory (adopt_moved_details had that
+            // long to give them to a renamed mod); the disk check runs without the lock
+            // Never while the mods folder itself is out of reach (a drive dropped out): every entry would look gone.
+            let (keys, root): (Vec<PathBuf>, PathBuf) = {
+                let st = details_state.lock().unwrap();
+                (st.mod_details_cache.keys().cloned().collect(), st.game_path.clone())
+            };
+            let reachable = root.is_dir();
+            let gone: std::collections::HashSet<PathBuf> = if reachable { keys.into_iter().filter(|p| !p.exists()).collect() } else { Default::default() };
+            let stale: Vec<&PathBuf> = gone.intersection(&gone_before).collect();
+            if !stale.is_empty() {
+                let mut st = details_state.lock().unwrap();
+                let mut removed = false;
+                for p in stale.into_iter().filter(|p| !p.exists()) {
+                    removed |= st.mod_details_cache.remove(p).is_some(); // looked at again: a mod back meanwhile keeps its fresh entry
+                }
+                if removed {
+                    xtra_details_cache::mark_dirty();
+                }
+            }
+            gone_before = gone;
             if xtra_details_cache::take_dirty() {
                 let snapshot = details_state.lock().unwrap().mod_details_cache.clone();
-                xtra_details_cache::save(&snapshot);
+                xtra_details_cache::save(&snapshot, reachable);
             }
         }
     });

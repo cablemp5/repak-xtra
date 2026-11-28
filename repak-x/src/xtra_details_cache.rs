@@ -73,11 +73,11 @@ struct Saved<M> {
     entries: M,
 }
 
-/// The saved entries of mods that are still there (an empty map when the build or character data changed).
+/// The saved entries (an empty map when the build or character data changed), also those of mods no longer at their
+/// path: the first full scan moves the ones renamed or moved while the app was closed (main_tauri.rs
+/// details_after_scan), and the rest leave memory a little later (the save loop).
 pub fn load<T: DeserializeOwned>() -> HashMap<PathBuf, T> {
-    let mut entries = std::fs::read(file()).map(|b| parse(&b, &stamp())).unwrap_or_default();
-    entries.retain(|p, _| p.exists());
-    entries
+    std::fs::read(file()).map(|b| parse(&b, &stamp())).unwrap_or_default()
 }
 
 /// Pure: the entries in a saved cache, none when it was written under another stamp or cannot be read.
@@ -97,8 +97,16 @@ pub fn take_dirty() -> bool {
     DIRTY.swap(false, Ordering::Relaxed)
 }
 
-/// Written beside the file, then swapped in, so a crash mid-write never leaves half a cache.
-pub fn save<T: Serialize>(entries: &HashMap<PathBuf, T>) {
+/// Written beside the file, then swapped in, so a crash mid-write never leaves half a cache. With `drop_gone` (the mods
+/// folder is reachable), entries of files no longer there stay out (memory keeps them until the save loop finds them
+/// gone twice, for main_tauri.rs adopt_moved_details).
+pub fn save<T: Serialize>(entries: &HashMap<PathBuf, T>, drop_gone: bool) {
+    let kept: HashMap<&PathBuf, &T> = entries.iter().filter(|(p, _)| !drop_gone || p.exists()).collect();
+    if kept.is_empty() && !entries.is_empty() {
+        return; // every file gone at once: the drive dropped out after the check, so the saved copy stays as it was
+    }
+    let entries = kept;
+    let entries = &entries;
     let path = file();
     let tmp = path.with_extension("json.tmp");
     // a path JSON cannot hold (not UTF-8) fails every time: not retried. A disk error is, at the next save.
