@@ -4297,6 +4297,37 @@ mod toggle_and_delete_tests {
     }
 
     #[test]
+    fn a_renamed_mod_keeps_its_cached_details_unless_two_copies_went() {
+        let dir = tempfile::tempdir().unwrap();
+        let new = dir.path().join("New_9999999_P.pak");
+        std::fs::write(&new, "x").unwrap();
+        let print = super::mod_fingerprint(&new);
+        let details = |name: &str| -> super::ModDetails {
+            serde_json::from_value(serde_json::json!({ "mod_name": name, "mod_type": "Skin", "character_name": "", "category": "", "character_id": "",
+                "file_count": 1, "total_size": 1, "files": ["a"], "is_iostore": false, "is_encrypted": false, "has_blueprint": false, "is_hybrid": false })).unwrap()
+        };
+        let mut st = super::AppState::default();
+        st.mod_details_cache.insert(dir.path().join("Old.pak"), (print, details("Old")));
+        super::adopt_moved_details(&mut st, &new, &print);
+        assert_eq!(st.mod_details_cache.get(&new).map(|e| e.1.mod_name.as_str()), Some("New_9999999_P"));
+        assert!(!st.mod_details_cache.contains_key(&dir.path().join("Old.pak")));
+
+        // two gone copies with that fingerprint: read again
+        let mut two = super::AppState::default();
+        two.mod_details_cache.insert(dir.path().join("A.pak"), (print, details("A")));
+        two.mod_details_cache.insert(dir.path().join("B.pak"), (print, details("B")));
+        super::adopt_moved_details(&mut two, &new, &print);
+        assert!(!two.mod_details_cache.contains_key(&new));
+        // an entry whose file is still there (a copy) is never taken
+        let mut kept = super::AppState::default();
+        let copy = dir.path().join("Copy.pak");
+        std::fs::write(&copy, "x").unwrap();
+        kept.mod_details_cache.insert(copy.clone(), (print, details("Copy")));
+        super::adopt_moved_details(&mut kept, &new, &print);
+        assert!(kept.mod_details_cache.contains_key(&copy) && !kept.mod_details_cache.contains_key(&new));
+    }
+
+    #[test]
     fn tags_follow_a_special_change() {
         let mut tags = std::collections::HashMap::from([("Skin".to_string(), vec!["red".to_string()]), ("!Kept".to_string(), vec!["a".to_string()]), ("Kept".to_string(), vec!["b".to_string()])]);
         let p = std::path::Path::new;
