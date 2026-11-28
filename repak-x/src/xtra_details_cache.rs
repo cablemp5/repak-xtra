@@ -73,9 +73,9 @@ struct Saved<M> {
     entries: M,
 }
 
-/// The saved entries (an empty map when the build or character data changed). Those of mods no longer at their path
-/// stay until the first full scan, which moves the ones renamed or moved while the app was closed and drops the rest
-/// (main_tauri.rs details_after_scan).
+/// The saved entries (an empty map when the build or character data changed), also those of mods no longer at their
+/// path: the first full scan moves the ones renamed or moved while the app was closed (main_tauri.rs
+/// details_after_scan), and the rest leave memory a little later (the save loop).
 pub fn load<T: DeserializeOwned>() -> HashMap<PathBuf, T> {
     std::fs::read(file()).map(|b| parse(&b, &stamp())).unwrap_or_default()
 }

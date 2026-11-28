@@ -68,7 +68,8 @@ pub fn relink(root: &Path, paths: &[PathBuf], state: &Arc<Mutex<crate::AppState>
     let legacy_keys = keys(&crate::get_mod_key);
     let tags = {
         let mut s = state.lock().unwrap_or_else(|e| e.into_inner());
-        let moved = pairs(s.mod_tags_by_key.keys(), &tag_keys, &moved(&tag_key));
+        // (an empty list only holds a key's place while its old tags wait: never a reason to refuse a move there)
+        let moved = pairs(s.mod_tags_by_key.iter().filter(|(_, t)| !t.is_empty()).map(|(k, _)| k), &tag_keys, &moved(&tag_key));
         for (old, new) in &moved {
             if let Some(t) = s.mod_tags_by_key.remove(old) {
                 s.mod_tags_by_key.insert(new.clone(), t);
@@ -76,11 +77,17 @@ pub fn relink(root: &Path, paths: &[PathBuf], state: &Arc<Mutex<crate::AppState>
         }
         // the old map's names Repak X respaced, not migrated yet, follow too (their tags wait there for the migration). A
         // migrated name's tags already followed above, by key: moving its old entry too would give them to a namesake.
-        let waiting: Vec<String> = s.mod_tags.keys().filter(|k| !s.mod_tags_migrated.contains(*k)).cloned().collect();
-        let legacy = pairs(&waiting, &legacy_keys, &[]);
+        let mut legacy = pairs(s.mod_tags.keys(), &legacy_keys, &[]);
+        legacy.retain(|(old, _)| !s.mod_tags_migrated.contains(old));
         for (old, new) in &legacy {
             if let Some(t) = s.mod_tags.remove(old) {
                 s.mod_tags.insert(new.clone(), t);
+            }
+        }
+        // a mod found renamed or moved is not a new mod named like old tags still waiting: they are never its own
+        for (_, n) in &found {
+            if crate::xtra_tags::unmigrated(&s, &crate::get_mod_key(n)) {
+                s.mod_tags_by_key.entry(tag_key(n)).or_default();
             }
         }
         let migrated = crate::xtra_tags::migrate(&mut s, root, paths); // older saves' name-only tags, once

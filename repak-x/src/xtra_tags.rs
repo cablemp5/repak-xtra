@@ -13,7 +13,7 @@ pub fn key(s: &crate::AppState, path: &Path) -> String {
 }
 
 /// An old-map name not copied into the new map yet.
-fn unmigrated(s: &crate::AppState, legacy: &str) -> bool {
+pub fn unmigrated(s: &crate::AppState, legacy: &str) -> bool {
     s.mod_tags.contains_key(legacy) && !s.mod_tags_migrated.contains(legacy)
 }
 
@@ -62,7 +62,8 @@ pub fn mirror(s: &mut crate::AppState, path: &Path) {
 /// (none there, or `new` has its own).
 pub fn moved(s: &mut crate::AppState, old: &Path, new: &Path, copy: bool) -> bool {
     let (from, to) = (key(s, old), key(s, new));
-    if from == to || s.mod_tags_by_key.contains_key(&to) {
+    // an empty list only holds a key's place while its old tags wait (`set`): not tags of its own
+    if from == to || s.mod_tags_by_key.get(&to).is_some_and(|t| !t.is_empty()) {
         return false;
     }
     let t = if copy { s.mod_tags_by_key.get(&from).cloned() } else { s.mod_tags_by_key.remove(&from) };
@@ -126,11 +127,17 @@ pub fn migrate(s: &mut crate::AppState, root: &Path, paths: &[std::path::PathBuf
             changed = true;
         }
     }
-    // marked after every path, so a name in two folders gives both its tags
+    // marked after every path, so a name in two folders gives both its tags; an empty list that held a key's place
+    // (`set`) is not needed once the name is migrated
     for p in paths {
         let legacy = crate::get_mod_key(p);
         if s.mod_tags.contains_key(&legacy) {
             changed |= s.mod_tags_migrated.insert(legacy);
+            let k = key(s, p);
+            if s.mod_tags_by_key.get(&k).is_some_and(Vec::is_empty) {
+                s.mod_tags_by_key.remove(&k);
+                changed = true;
+            }
         }
     }
     changed
@@ -224,6 +231,22 @@ mod tests {
         migrate(&mut s, &root(), &[p("A/Skin.pak"), p("B/Skin.pak")]);
         assert!(of(&s, &p("A/Skin.pak")).is_empty());
         assert_eq!(of(&s, &p("B/Skin.pak")), tags(&["red"]));
+    }
+
+    #[test]
+    fn an_emptied_key_never_keeps_another_mods_tags_out() {
+        let mut s = st();
+        s.mod_tags.insert("Skin".into(), tags(&["red"]));
+        set(&mut s, &p("A/Skin.pak"), vec![]);
+        migrate(&mut s, &root(), &[p("A/Skin.pak")]);
+        assert!(!s.mod_tags_by_key.contains_key("a|skin"), "the place holder goes with the migration");
+        // and before it: a tagged mod moved onto an emptied key brings its tags
+        let mut s = st();
+        s.mod_tags.insert("Skin".into(), tags(&["red"]));
+        set(&mut s, &p("A/Skin.pak"), vec![]);
+        s.mod_tags_by_key.insert("b|skin".into(), tags(&["b"]));
+        assert!(moved(&mut s, &p("B/Skin.pak"), &p("A/Skin.pak"), false));
+        assert_eq!(of(&s, &p("A/Skin.pak")), tags(&["b"]));
     }
 
     #[test]

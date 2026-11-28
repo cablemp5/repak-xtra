@@ -11,7 +11,7 @@ import { isTyping } from './hotkeys'
 import { modalOpen } from './dialogFocus'
 import { MOD_LOADERS } from './edition'
 import { recordActivity } from './crashTimeline'
-import { canonKey, contestedTargets, isMemberKey, keysByName, memberKey, memberName, movesBetween, nameKey, resolveKeys } from './loadoutIdentity'
+import { canonKey, contestedTargets, isMemberKey, keysByName, memberFolder, memberKey, memberName, movesBetween, nameKey, resolveKeys, respaced } from './loadoutIdentity'
 export { memberName, nameKey } from './loadoutIdentity'
 
 export type Mod = { path: string; enabled?: boolean; modified_date?: number }
@@ -247,6 +247,8 @@ export function syncLoadoutKeys(mods: Mod[]) {
     if (from && !installed.has(modKey(from))) found.set(modKey(from), found.has(modKey(from)) ? '' : modKey(m.path))
   }
   const ends = new Set([...found.values()].filter(Boolean))
+  // an old key two mods name is no ground for its space-rename guess either (loadoutIdentity.ts renameTarget)
+  const unsure = [...found].filter(([, to]) => !to).map(([from]) => `${memberFolder(from)}|${respaced(memberName(from))}`)
   for (const [from, to] of [...moved]) if (ends.has(to) || found.has(from)) moved.delete(from)
   for (const [from, to] of found) if (to) moved.set(from, to)
   if (!keys.length) return
@@ -260,7 +262,7 @@ export function syncLoadoutKeys(mods: Mod[]) {
     const relinked = held || !items ? undefined : new Set<string>()
     // only records that can come back (not expired, whole): the rest are swept and never restored
     const now = Date.now(), restorable = (r: DeletedLoadout) => r.expires > now && Array.isArray(r.loadout.scope)
-    const opts = { relinked, legacy: !held, contested: new Set([...contestedTargets([...list, ...(items ?? []).filter(restorable).map(r => r.loadout)], byName, moved), ...ends]) } // a mod Rust relinked is taken: no gone member renames onto it
+    const opts = { relinked, legacy: !held, contested: new Set([...contestedTargets([...list, ...(items ?? []).filter(restorable).map(r => r.loadout)], byName, moved), ...ends, ...unsure]) } // a mod Rust relinked is taken: no gone member renames onto it
     const next = list.map(l => resolveKeys(l, byName, moved, opts))
     if (next.some((l, i) => l !== list[i])) {
       if (list.some(hasLegacy) && !localStorage.getItem(BACKUP)) localStorage.setItem(BACKUP, JSON.stringify(list.map(l => ({ ...l, image: undefined }))))

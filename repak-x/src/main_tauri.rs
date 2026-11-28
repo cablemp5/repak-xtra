@@ -863,15 +863,6 @@ async fn get_pak_files(state: State<'_, Arc<Mutex<AppState>>>) -> Result<Vec<Mod
     }
     let paths: Vec<PathBuf> = mods.iter().map(|m| m.path.clone()).collect();
     let relinked = !walk_failed && crate::xtra_respace::relink(game_path, &paths, state.inner(), era);
-    if !walk_failed && !relinked && era.is_some() && crate::xtra_mutation::era() == era {
-        // older saves' name-only tags when the relink could not run (it migrates after its moves, so a leftover old name
-        // never takes a renamed mod's key), never from a walk a mod change (a restore) ran beside, which may have missed
-        // a mod (xtra_tags.rs)
-        let mut s = state.lock().unwrap();
-        if xtra_tags::migrate(&mut s, game_path, &paths) {
-            let _ = save_state(&s);
-        }
-    }
     {
         // tags as they are now: this scan or another one running beside it (VFX Updater, Galacta) may have moved some
         let from = crate::xtra_fingerprints::relinked_from(game_path, &paths, state.inner());
@@ -8811,8 +8802,22 @@ fn main() {
                 st.mod_details_cache.entry(path).or_insert(entry);
             }
         }
+        let mut gone_before = std::collections::HashSet::new();
         loop {
             std::thread::sleep(std::time::Duration::from_secs(15));
+            // repakxtra: entries of files gone at two of these checks in a row leave memory (adopt_moved_details had that
+            // long to give them to a renamed mod); the disk check runs without the lock
+            let keys: Vec<PathBuf> = details_state.lock().unwrap().mod_details_cache.keys().cloned().collect();
+            let gone: std::collections::HashSet<PathBuf> = keys.into_iter().filter(|p| !p.exists()).collect();
+            let stale: Vec<&PathBuf> = gone.intersection(&gone_before).collect();
+            if !stale.is_empty() {
+                let mut st = details_state.lock().unwrap();
+                for p in stale {
+                    st.mod_details_cache.remove(p);
+                }
+                xtra_details_cache::mark_dirty();
+            }
+            gone_before = gone;
             if xtra_details_cache::take_dirty() {
                 let snapshot = details_state.lock().unwrap().mod_details_cache.clone();
                 xtra_details_cache::save(&snapshot);
