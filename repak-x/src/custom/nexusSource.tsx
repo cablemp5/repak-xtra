@@ -109,7 +109,8 @@ export function renameSource(oldKey: string, ...newKeys: string[]) {
 
 /** Sources follow mods Rust found renamed outside the app (xtra_fingerprints.rs, a mod's relinked_from), while no mod
  *  has the old name, one mod has the new one (sources are kept by name), and it has no source of its own. */
-export function followRelinks(mods: { path: string; relinked_from?: string }[]) {
+export function followRelinks(mods: { path: string; relinked_from?: string; relink_held?: boolean }[]) {
+  if (mods.some(m => m.relink_held)) return // a scan that may have missed a mod with the old name
   const count = new Map<string, number>()
   for (const m of mods) { const n = norm(nameKey(m.path)); count.set(n, (count.get(n) ?? 0) + 1) }
   for (const m of mods) {

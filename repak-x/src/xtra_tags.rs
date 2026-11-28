@@ -69,21 +69,26 @@ pub fn moved(s: &mut crate::AppState, old: &Path, new: &Path, copy: bool) -> boo
     t.map(|t| s.mod_tags_by_key.insert(to, t)).is_some()
 }
 
-/// An in-app rename or update put the mod at `old` at `new`: its tags follow (`moved`), and the old map's names are
-/// mirrored. A name whose old tags are not migrated yet moves in the old map as before (unless `new`'s name has its
-/// own). True when anything changed.
-pub fn renamed(s: &mut crate::AppState, old: &Path, new: &Path) -> bool {
-    let mut changed = moved(s, old, new, false);
+/// An in-app rename, move, update, or priority change put the mod at `old` at `new` (`copy`: a copy, `old` stays): its
+/// tags follow (`moved`), and the old map mirrors both names. Old tags not migrated yet go to `new`'s key and stay in the
+/// old map for that name's other mods: never under `new`'s name there, where the migration would give them to its
+/// namesakes. True when anything changed.
+pub fn renamed(s: &mut crate::AppState, old: &Path, new: &Path, copy: bool) -> bool {
+    let mut changed = moved(s, old, new, copy);
     let (from, to) = (crate::get_mod_key(old), crate::get_mod_key(new));
-    if from != to && unmigrated(s, &from) {
-        if !s.mod_tags.contains_key(&to) {
-            let t = s.mod_tags.remove(&from).unwrap_or_default();
-            s.mod_tags.insert(to, t);
+    if unmigrated(s, &from) {
+        let k = key(s, new);
+        if !s.mod_tags_by_key.contains_key(&k) {
+            let t = s.mod_tags[&from].clone();
+            s.mod_tags_by_key.insert(k, t);
             changed = true;
         }
-    } else if changed {
+    } else if changed || from != to {
         mirror(s, old);
+    }
+    if changed || from != to {
         mirror(s, new);
+        changed = true;
     }
     changed
 }
@@ -183,6 +188,31 @@ mod tests {
         let mut other = st();
         other.mod_tags.insert("Skin".into(), tags(&["red"]));
         assert!(!migrate(&mut other, &PathBuf::from("D:/old"), &[PathBuf::from("D:/old/Skin.pak")]) && other.mod_tags_migrated.is_empty());
+    }
+
+    #[test]
+    fn an_update_or_priority_change_never_hands_a_namesakes_tags_to_another_mod() {
+        // A/Skin untagged, B/Skin tagged: the old map's "Skin" holds B's tags
+        let mut s = st();
+        set(&mut s, &p("B/Skin.pak"), tags(&["b"]));
+        renamed(&mut s, &p("A/Skin.pak"), &p("A/Skin_vfx.pak"), true);
+        migrate(&mut s, &root(), &[p("A/Skin.pak"), p("A/Skin_vfx.pak"), p("B/Skin.pak")]);
+        assert!(of(&s, &p("A/Skin_vfx.pak")).is_empty() && of(&s, &p("A/Skin.pak")).is_empty());
+        // clearing "!" on a tagged A/!Skin while an untagged B/Skin exists
+        let mut s = st();
+        set(&mut s, &p("A/!Skin.pak"), tags(&["a"]));
+        renamed(&mut s, &p("A/!Skin.pak"), &p("A/Skin.pak"), false);
+        migrate(&mut s, &root(), &[p("A/Skin.pak"), p("B/Skin.pak")]);
+        assert_eq!(of(&s, &p("A/Skin.pak")), tags(&["a"]));
+        assert!(of(&s, &p("B/Skin.pak")).is_empty());
+        // before the migration: the renamed mod keeps its old tags, and its old name's other mods still get them
+        let mut s = st();
+        s.mod_tags.insert("Old".into(), tags(&["o"]));
+        renamed(&mut s, &p("A/Old.pak"), &p("A/New.pak"), false);
+        assert_eq!(of(&s, &p("A/New.pak")), tags(&["o"]));
+        migrate(&mut s, &root(), &[p("A/New.pak"), p("B/New.pak"), p("B/Old.pak")]);
+        assert!(of(&s, &p("B/New.pak")).is_empty());
+        assert_eq!(of(&s, &p("B/Old.pak")), tags(&["o"]));
     }
 
     #[test]

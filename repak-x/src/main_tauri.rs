@@ -257,11 +257,12 @@ fn mod_fingerprint(path: &std::path::Path) -> ModFingerprint {
 /// cached entry with the same fingerprint (size and modified time, which a rename or move keeps) whose file is gone moves
 /// to `path`. Two such entries (identical copies renamed at once) are read again instead.
 fn adopt_moved_details(st: &mut AppState, path: &Path, print: &ModFingerprint) {
-    if st.mod_details_cache.contains_key(path) || print.iter().all(Option::is_none) {
+    if st.mod_details_cache.get(path).is_some_and(|(f, _)| f == print) || print.iter().all(Option::is_none) {
         return;
     }
-    let mut gone = st.mod_details_cache.iter().filter(|(p, (f, _))| f == print && !p.exists()).map(|(p, _)| p.clone());
+    let mut gone = st.mod_details_cache.iter().filter(|(p, (f, _))| f == print && p.as_path() != path && !p.exists()).map(|(p, _)| p.clone());
     let (Some(old), None) = (gone.next(), gone.next()) else { return };
+    st.mod_details_cache.remove(path); // what was cached here was another mod's (it was replaced)
     move_details(st, &old, path);
 }
 
@@ -1055,15 +1056,12 @@ async fn set_mod_priority(
         }
     };
 
-    // Invalidate cache for old path. Tags follow a ! change, retaining the old key if another installed mod still uses it.
-    let old_tag_key = get_mod_key(&path);
-    let tag_key_shared = old_tag_key != get_mod_key(&new_path)
-        && another_mod_uses_key(&game_path, &new_path, &old_tag_key, get_mod_key);
+    // repakxtra: the cached details follow (a ! change keeps the files), and the tags (xtra_tags::renamed: by folder +
+    // name, which a priority change keeps, the old map's names mirrored)
     {
         let mut state_guard = state.lock().unwrap();
-        state_guard.mod_details_cache.remove(&path);
-        xtra_details_cache::mark_dirty(); // repakxtra: the saved copy follows
-        if migrate_tags(&mut state_guard.mod_tags, &path, &new_path, tag_key_shared) {
+        move_details(&mut state_guard, &path, &new_path);
+        if xtra_tags::renamed(&mut state_guard, &path, &new_path, false) {
             let _ = save_state(&state_guard);
         }
     }
@@ -1095,26 +1093,6 @@ fn another_mod_uses_key(mods_dir: &Path, exclude: &Path, key: &str, key_fn: fn(&
         }
     }
     false
-}
-
-/// repakxtra: migrates a mod's saved tags from its old name's key to the new one's (a ! change gives it a new key).
-/// When `keep_old` is true (another installed mod still uses `old`), tags are copied instead of moved.
-fn migrate_tags(tags: &mut std::collections::HashMap<String, Vec<String>>, old: &Path, new: &Path, keep_old: bool) -> bool {
-    let (from, to) = (get_mod_key(old), get_mod_key(new));
-    if from == to || tags.contains_key(&to) {
-        return false;
-    }
-    if keep_old {
-        match tags.get(&from).cloned() {
-            Some(t) => tags.insert(to, t).is_none(),
-            None => false,
-        }
-    } else {
-        match tags.remove(&from) {
-            Some(t) => tags.insert(to, t).is_none(),
-            None => false,
-        }
-    }
 }
 
 /// repakxtra: computes the target path for a priority/Special change without mutating disk, or None when unchanged.
@@ -3882,7 +3860,7 @@ async fn update_mod(
 
     {
         let mut state_guard = state.lock().unwrap();
-        if xtra_tags::renamed(&mut state_guard, &actual_old_path, &new_mod_path) { // repakxtra
+        if xtra_tags::renamed(&mut state_guard, &actual_old_path, &new_mod_path, false) { // repakxtra
             let _ = save_state(&state_guard);
         }
     }
@@ -4352,21 +4330,7 @@ mod toggle_and_delete_tests {
     }
 
     #[test]
-    fn tags_follow_a_special_change() {
-        let mut tags = std::collections::HashMap::from([("Skin".to_string(), vec!["red".to_string()]), ("!Kept".to_string(), vec!["a".to_string()]), ("Kept".to_string(), vec!["b".to_string()])]);
-        let p = std::path::Path::new;
-        assert!(super::migrate_tags(&mut tags, p("m/Skin_9999999_P.pak"), p("m/!Skin_9999999_P.pak"), false));
-        assert_eq!(tags.get("!Skin"), Some(&vec!["red".to_string()]));
-        assert!(!tags.contains_key("Skin"));
-        assert!(!super::migrate_tags(&mut tags, p("m/!Skin_9999999_P.pak"), p("m/!Skin_99999999_P.pak"), false), "a number change keeps the key");
-        assert!(!super::migrate_tags(&mut tags, p("m/Kept.pak"), p("m/!Kept.pak"), false), "tags the new key has stay");
-        assert_eq!(tags.get("Kept"), Some(&vec!["b".to_string()]));
-
-        let mut shared = std::collections::HashMap::from([("Skin".to_string(), vec!["fav".to_string()])]);
-        assert!(super::migrate_tags(&mut shared, p("A/Skin.pak"), p("A/!Skin.pak"), true));
-        assert_eq!(shared.get("Skin"), Some(&vec!["fav".to_string()]), "shared old key is retained");
-        assert_eq!(shared.get("!Skin"), Some(&vec!["fav".to_string()]), "new key gets a copy");
-
+    fn another_installed_mod_with_the_key_is_found() {
         let dir = tempfile::tempdir().unwrap();
         std::fs::create_dir_all(dir.path().join("A")).unwrap();
         std::fs::create_dir_all(dir.path().join("B")).unwrap();
@@ -4591,13 +4555,12 @@ async fn rename_mod(
         return Err(error_msg);
     }
 
-    // Invalidate cache for old path and migrate tags
+    // repakxtra: the cached details and tags follow (a rename keeps the files, and the cache checks their times anyway)
     {
         let mut state_guard = state.lock().unwrap();
-        state_guard.mod_details_cache.remove(&old_path_buf);
-        xtra_details_cache::mark_dirty(); // repakxtra: the saved copy follows
+        move_details(&mut state_guard, &old_path_buf, &new_path);
 
-        if xtra_tags::renamed(&mut state_guard, &old_path_buf, &new_path) { // repakxtra: by folder + name, old map mirrored
+        if xtra_tags::renamed(&mut state_guard, &old_path_buf, &new_path, false) { // repakxtra: by folder + name, old map mirrored
             let _ = save_state(&state_guard);
         }
     }
@@ -5114,7 +5077,7 @@ async fn assign_mod_to_folder(
         toast_events::emit_move_failed(&window, &error_msg);
         return Err(error_msg);
     }
-    if xtra_tags::moved(&mut state, &source_path, &dest_path, false) { // repakxtra: its tags follow (keys hold the folder)
+    if xtra_tags::renamed(&mut state, &source_path, &dest_path, false) { // repakxtra: its tags follow (keys hold the folder; Keep both renames)
         let _ = save_state(&state);
     }
 

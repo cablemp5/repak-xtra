@@ -149,6 +149,12 @@ fn root_key(root: &Path) -> String {
     root.to_string_lossy().replace('\\', "/").trim_end_matches('/').to_lowercase()
 }
 
+/// A record's path (with "/") under `root`, in the OS's separators, so it names the file as the scan does (the crash
+/// guard keys files by their path text, xtra_parse_guard.rs).
+fn at(root: &Path, rel: &str) -> PathBuf {
+    rel.split('/').fold(root.to_path_buf(), |p, part| p.join(part))
+}
+
 fn now() -> u64 {
     std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_secs())
 }
@@ -178,7 +184,7 @@ pub fn scan(root: &Path, paths: &[PathBuf], state: &Arc<Mutex<crate::AppState>>)
         s.mod_fingerprints.get(&rk).cloned().unwrap_or_default()
     };
     // file lists read without the state locked (only for a possible relink, which is rare)
-    let (next, relinks) = reconcile(&before, &found, now(), &mut |rel| hash(&root.join(rel)));
+    let (next, relinks) = reconcile(&before, &found, now(), &mut |rel| hash(&at(root, rel)));
     let mut next = next;
     {
         let mut s = state.lock().unwrap_or_else(|e| e.into_inner());
@@ -202,7 +208,7 @@ pub fn scan(root: &Path, paths: &[PathBuf], state: &Arc<Mutex<crate::AppState>>)
     if next.values().any(|p| p.hash.is_none() && p.missing_since.is_none()) {
         fill(root.to_path_buf(), state.clone());
     }
-    relinks.into_iter().map(|(_, new, old)| (root.join(old), root.join(&next[&new].path))).collect()
+    relinks.into_iter().map(|(_, new, old)| (at(root, &old), at(root, &next[&new].path))).collect()
 }
 
 /// The path each mod at `paths` had before a relink in the last 7 days, by index (for the scan's mod list).
@@ -211,7 +217,7 @@ pub fn relinked_from(root: &Path, paths: &[PathBuf], state: &Mutex<crate::AppSta
     let prints = s.mod_fingerprints.get(&root_key(root));
     paths
         .iter()
-        .map(|p| prints?.get(&crate::xtra_dupes::key(root, p))?.from.as_ref().map(|(old, _)| root.join(old)))
+        .map(|p| prints?.get(&crate::xtra_dupes::key(root, p))?.from.as_ref().map(|(old, _)| at(root, old)))
         .collect()
 }
 
@@ -242,7 +248,7 @@ fn fill(root: PathBuf, state: Arc<Mutex<crate::AppState>>) {
         };
         let mut done = 0;
         for (k, p) in todo {
-            let file = root.join(&p.path);
+            let file = at(&root, &p.path);
             let Some(h) = hash(&file).filter(|_| stamp(&file) == p.stamp) else {
                 UNREADABLE.lock().unwrap_or_else(|e| e.into_inner()).get_or_insert_with(Default::default).insert((p.path.clone(), p.stamp.clone()));
                 continue;

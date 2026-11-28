@@ -243,8 +243,10 @@ export function syncLoadoutKeys(mods: Mod[]) {
   const found = new Map<string, string>()
   for (const m of held ? [] : mods) {
     const from = (m as { relinked_from?: string }).relinked_from
-    if (from && !installed.has(modKey(from))) found.set(modKey(from), modKey(m.path))
+    // one old key two mods name (renamed twice within the 7 days): neither
+    if (from && !installed.has(modKey(from))) found.set(modKey(from), found.has(modKey(from)) ? '' : modKey(m.path))
   }
+  for (const [from, to] of [...found]) if (!to) found.delete(from)
   const ends = new Set(found.values())
   for (const [from, to] of [...moved]) if (ends.has(to) || found.has(from)) moved.delete(from)
   for (const [from, to] of found) moved.set(from, to)
@@ -259,7 +261,7 @@ export function syncLoadoutKeys(mods: Mod[]) {
     const relinked = held || !items ? undefined : new Set<string>()
     // only records that can come back (not expired, whole): the rest are swept and never restored
     const now = Date.now(), restorable = (r: DeletedLoadout) => r.expires > now && Array.isArray(r.loadout.scope)
-    const opts = { relinked, legacy: !held, contested: contestedTargets([...list, ...(items ?? []).filter(restorable).map(r => r.loadout)], byName, moved) }
+    const opts = { relinked, legacy: !held, contested: new Set([...contestedTargets([...list, ...(items ?? []).filter(restorable).map(r => r.loadout)], byName, moved), ...ends]) } // a mod Rust relinked is taken: no gone member renames onto it
     const next = list.map(l => resolveKeys(l, byName, moved, opts))
     if (next.some((l, i) => l !== list[i])) {
       if (list.some(hasLegacy) && !localStorage.getItem(BACKUP)) localStorage.setItem(BACKUP, JSON.stringify(list.map(l => ({ ...l, image: undefined }))))

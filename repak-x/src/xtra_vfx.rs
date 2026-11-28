@@ -931,18 +931,11 @@ pub async fn xtra_vfx_place(source: String, staged_base: String, turn_off_origin
     let trash_original = trash_original.unwrap_or(false);
     let (placed, from, to) = place(Path::new(&source), Path::new(&staged_base), turn_off_original, keep_name.unwrap_or(true), trash_original, partial.unwrap_or(false), &crate::xtra_trash::trash_dir())?;
     let mut s = state.lock().unwrap();
-    let key = |stem: &str| crate::get_mod_key(Path::new(&format!("{stem}.pak")));
-    if let Some(tags) = s.mod_tags.get(&key(&from)).cloned() {
-        for t in &to {
-            s.mod_tags.entry(key(t)).or_insert_with(|| tags.clone());
-        }
-        let _ = crate::save_state(&s);
-    }
-    // repakxtra: and the tags by folder + name (xtra_tags.rs)
+    // the tags by folder + name, the old map mirrored (xtra_tags.rs)
     let dir = Path::new(&source).parent().unwrap_or(Path::new("")).to_path_buf();
     let mut copied = false;
     for t in &to {
-        copied |= crate::xtra_tags::moved(&mut s, &dir.join(format!("{from}.pak")), &dir.join(format!("{t}.pak")), true);
+        copied |= crate::xtra_tags::renamed(&mut s, &dir.join(format!("{from}.pak")), &dir.join(format!("{t}.pak")), true);
     }
     if copied {
         let _ = crate::save_state(&s);
